@@ -10,15 +10,15 @@ return [
     'url' => './quimicos-produccion/index.php',
     'enabled' => true,
   ],
-  /*[
-    'slug' => 'enzima-produccion',
-    'title' => 'ENZIMA / Producción',
-    'description' => 'Consumo semanal de enzimas vs kilos producidos, con semáforos, comparativa anual, tabla y gráfico.',
+  [
+    'slug' => 'empaques-produccion',
+    'title' => 'EMPAQUES / Producción',
+    'description' => 'Consumo semanal de empaques vs kilos producidos, con semáforos, comparativa anual, tabla y gráfico.',
     'icon' => 'fa-chart-line',
     'color' => '#10b981',
-    'url' => './enzima-produccion/index.php',
+    'url' => './empaques-produccion/index.php',
     'enabled' => true,
-  ],*/
+  ],
 
   // Ejemplos futuros:
   // [
