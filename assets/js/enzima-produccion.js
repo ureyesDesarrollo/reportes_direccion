@@ -560,11 +560,16 @@
                 }
 
                 if (modo === 'impacto') {
-                  return `${label}: $ ${value.toFixed(2)}`;
+                  return `${label}: $ ${value.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
                 }
 
                 const formatted =
-                  modo === 'costo' ? `$ ${value.toFixed(2)}` : value.toFixed(2);
+                  modo === 'costo'
+                    ? `$ ${value.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                    : value.toLocaleString('es-MX', {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      });
 
                 return `${label}: ${formatted}`;
               },

@@ -257,14 +257,20 @@ $startIndex = max(0, $totalSemanas - $windowSize);
 
               const spanAnterior = celdaAnterior.querySelector('.valor-anterior');
               if (spanAnterior && !isNaN(consumoAnterior)) {
-                spanAnterior.textContent = consumoAnterior.toFixed(2);
+                spanAnterior.textContent = consumoAnterior.toLocaleString('es-MX', {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2
+                });
               }
 
               const spanActual = celdaActual.querySelector('.valor-actual');
               const spanVariacion = celdaActual.querySelector('.variacion-texto');
 
               if (spanActual && !isNaN(consumoActual)) {
-                spanActual.textContent = consumoActual.toFixed(2);
+                spanActual.textContent = consumoActual.toLocaleString('es-MX', {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2
+                });
               }
               if (spanVariacion && !isNaN(variacion)) {
                 spanVariacion.style.color = color;

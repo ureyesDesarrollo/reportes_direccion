@@ -500,7 +500,10 @@ $productosEmpaques = [
             // Modo cantidad - mostrar ratio
             const ratio = parseFloat(celda.getAttribute('data-ratio'));
             if (!isNaN(ratio) && ratio !== null) {
-              ratioValue.textContent = ratio.toFixed(2);
+              ratioValue.textContent = ratio.toLocaleString('es-MX', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+              });
               ratioBase.style.display = 'block';
             } else {
               ratioValue.textContent = '-';
@@ -562,13 +565,19 @@ $productosEmpaques = [
 
               const spanAnterior = celdaAnterior.querySelector('.valor-anterior');
               if (spanAnterior && !isNaN(cantidadAnterior)) {
-                spanAnterior.textContent = cantidadAnterior.toFixed(2);
+                spanAnterior.textContent = cantidadAnterior.toLocaleString('es-MX', {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2
+                });
               }
 
               const spanActual = celdaActual.querySelector('.valor-actual');
               const spanVariacion = celdaActual.querySelector('.variacion-texto');
               if (spanActual && !isNaN(cantidadActual)) {
-                spanActual.textContent = cantidadActual.toFixed(2);
+                spanActual.textContent = cantidadActual.toLocaleString('es-MX', {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2
+                });
               }
               if (spanVariacion && !isNaN(variacionCantidad)) {
                 spanVariacion.style.color = color;
