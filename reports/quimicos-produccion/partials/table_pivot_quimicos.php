@@ -5,7 +5,16 @@
 /** @var array $quimicosCatalogo */
 /** @var array $quimicosEtiquetas */
 /** @var array $matrizRatioQuimicos */
+/** @var array $matrizImpactoEconomicoQuimicos */
 /** @var array $ratioBasePorQuimico */
+/** @var array $consumoQuimicoAnioAnterior */
+/** @var array $consumoQuimicoAnioActual */
+/** @var array $variacionConsumoQuimico */
+/** @var array $costoPromedioAnioAnterior */
+/** @var array $costoPromedioAnioActual */
+/** @var array $variacionCostoQuimico */
+/** @var array $impactoEconomicoAnioAnterior */
+/** @var array $impactoEconomicoAnioActual */
 /** @var array $totalesPorSemana */
 /** @var array $produccionPorSemana */
 /** @var array $ratioPorSemana */
@@ -17,13 +26,7 @@ $toleranciaPct = (float)($meta['toleranciaPct'] ?? 10);
 $totalSemanas = count($semanasCatalogo);
 $windowSize = 5;
 $startIndex = max(0, $totalSemanas - $windowSize);
-
-$productosEnzimas = [
-  'DETERZYME1',
-  'BUZ78',
-  'BUZ77',
-  'COROLASE',
-];
+$grupoEstructura = $meta['grupo_estructura'] ?? [];
 ?>
 <div class="cards-section">
   <div class="pivot-header">
@@ -38,6 +41,16 @@ $productosEnzimas = [
     </div>
 
     <div class="pivot-controls">
+      <div class="sort-buttons">
+        <button type="button" class="sort-btn active" id="sortByConsumo" data-sort="consumo" title="Ordenar por mayor consumo">
+          <i class="fas fa-droplet"></i>
+          Consumo
+        </button>
+        <button type="button" class="sort-btn" id="sortByCosto" data-sort="costo" title="Ordenar por mayor impacto económico">
+          <i class="fas fa-dollar-sign"></i>
+          Costo
+        </button>
+      </div>
       <label class="toggle-semaforo">
         <input type="checkbox" id="toggleSummaryRows" checked>
         <span>Mostrar resumen</span>
@@ -85,6 +98,12 @@ $productosEnzimas = [
       <thead>
         <tr>
           <th class="sticky-col sticky-header-col">QUIMICOS</th>
+          <th class="sticky-col sticky-header-col" style="width: 70px; text-align: center;">
+            <div style="font-size: 0.85em; font-weight: 600;">Anterior</div>
+          </th>
+          <th class="sticky-col sticky-header-col" style="width: 90px; text-align: center;">
+            <div style="font-size: 0.85em; font-weight: 600;">Actual | Var%</div>
+          </th>
 
           <?php foreach ($semanasCatalogo as $index => $semana): ?>
             <th
@@ -113,22 +132,13 @@ $productosEnzimas = [
         <?php else: ?>
 
           <?php foreach ($quimicosCatalogo as $quimico): ?>
-            <tr>
+            <tr data-quimico="<?= htmlspecialchars($quimico) ?>">
               <td class="sticky-col pivot-product-col">
                 <?php
                 $etiqueta = $quimicosEtiquetas[$quimico] ?? $quimico;
 
-                $mapaGrupos = [
-                  'DETERZYME1' => 'enzimas_preparacion',
-                  'COROLASE'   => 'enzimas_preparacion',
-                  'BUZ78'      => 'enzimas_pelambre',
-                  'BUZ77'      => 'enzimas_pelambre',
-                ];
-
-                $grupoDestino = $mapaGrupos[$quimico] ?? null;
-
-                if ($grupoDestino !== null) {
-                  $urlDetalle = '../enzima-produccion/index.php?grupo=' . urlencode($grupoDestino) . '&producto=' . urlencode($quimico);
+                if (isset($grupoEstructura[$quimico])) {
+                  $urlDetalle = '../enzima-produccion/index.php?grupo=' . urlencode($quimico);
                   $tituloLink = 'Ver detalle del grupo';
                 } else {
                   $urlDetalle = '../quimico-detalle/index.php?producto=' . urlencode($quimico) . '&productoLabel=' . urlencode($etiqueta);
@@ -147,13 +157,44 @@ $productosEnzimas = [
                 </a>
               </td>
 
+              <?php
+              $anterior = (float)($consumoQuimicoAnioAnterior[$quimico] ?? 0);
+              $actual = (float)($consumoQuimicoAnioActual[$quimico] ?? 0);
+              $variacion = $variacionConsumoQuimico[$quimico] ?? 0;
+              $costoAnterior = (float)($impactoEconomicoAnioAnterior[$quimico] ?? 0);
+              $costoActual = (float)($impactoEconomicoAnioActual[$quimico] ?? 0);
+              $variacionCosto = $variacionCostoQuimico[$quimico] ?? 0;
+
+              if ($variacion > 10) {
+                $colorSemaforo = '#ef4444';
+              } elseif ($variacion > 0) {
+                $colorSemaforo = '#f59e0b';
+              } else {
+                $colorSemaforo = '#10b981';
+              }
+              ?>
+
+              <td class="sticky-col" style="text-align: center; font-weight: 600; background: #f8fafc;" data-valor-anterior="<?= $anterior ?>" data-valor-costo-anterior="<?= $costoAnterior ?>">
+                <span class="valor-anterior"><?= n($anterior, 2) ?></span>
+              </td>
+
+              <td class="sticky-col" style="text-align: center; background: #f8fafc; border-left: 4px solid <?= htmlspecialchars($colorSemaforo) ?>;" data-valor-actual="<?= $actual ?>" data-valor-costo-actual="<?= $costoActual ?>" data-variacion="<?= $variacion ?>" data-variacion-costo="<?= $variacionCosto ?>">
+                <div style="font-weight: 600;">
+                  <span class="valor-actual"><?= n($actual, 2) ?></span><br>
+                  <span style="font-size: 0.85em; color: <?= htmlspecialchars($colorSemaforo) ?>;" class="variacion-texto">
+                    <?= $variacion >= 0 ? '+' : '' ?><?= n($variacion, 1) ?>%
+                  </span>
+                </div>
+              </td>
+
               <?php foreach ($semanasCatalogo as $index => $semana): ?>
                 <?php
                 $ratioQuimico = $matrizRatioQuimicos[$quimico][$semana] ?? null;
                 $baseQuimico = $ratioBasePorQuimico[$quimico] ?? null;
+                $impactoEconomico = $matrizImpactoEconomicoQuimicos[$quimico][$semana] ?? null;
                 [$estadoCelda, $colorCelda, $colorHexCelda] = semaforo($ratioQuimico, $baseQuimico, $toleranciaPct);
                 ?>
-                <td class="week-col cell-ratio-semaforo" data-week-index="<?= $index ?>">
+                <td class="week-col cell-ratio-semaforo" data-week-index="<?= $index ?>" data-ratio="<?= $ratioQuimico !== null ? (float)$ratioQuimico : 'null' ?>" data-costo="<?= $impactoEconomico !== null ? (float)$impactoEconomico : 'null' ?>">
                   <div class="ratio-semaforo-wrap">
                     <div class="ratio-value">
                       <strong><?= $ratioQuimico !== null ? n((float)$ratioQuimico, 2) : '-' ?></strong>
@@ -178,6 +219,8 @@ $productosEnzimas = [
 
           <tr class="row-total summary-row">
             <td class="sticky-col pivot-summary-col"><strong>TOTAL QUIMICOS</strong></td>
+            <td class="sticky-col" style="background: #f8fafc;"></td>
+            <td class="sticky-col" style="background: #f8fafc;"></td>
             <?php foreach ($semanasCatalogo as $index => $semana): ?>
               <td class="week-col" data-week-index="<?= $index ?>">
                 <strong><?= n((float)($totalesPorSemana[$semana] ?? 0), 2) ?></strong>
@@ -187,6 +230,8 @@ $productosEnzimas = [
 
           <tr class="row-total summary-row">
             <td class="sticky-col pivot-summary-col"><strong>PRODUCCION</strong></td>
+            <td class="sticky-col" style="background: #f8fafc;"></td>
+            <td class="sticky-col" style="background: #f8fafc;"></td>
             <?php foreach ($semanasCatalogo as $index => $semana): ?>
               <td class="week-col" data-week-index="<?= $index ?>">
                 <strong><?= n((float)($produccionPorSemana[$semana] ?? 0), 2) ?></strong>
@@ -196,6 +241,8 @@ $productosEnzimas = [
 
           <tr class="row-total summary-row row-ratio-semaforo">
             <td class="sticky-col pivot-summary-col"><strong>RATIO</strong></td>
+            <td class="sticky-col" style="background: #f8fafc;"></td>
+            <td class="sticky-col" style="background: #f8fafc;"></td>
             <?php foreach ($semanasCatalogo as $index => $semana): ?>
               <?php
               $ratio = $ratioPorSemana[$semana] ?? null;
@@ -286,6 +333,167 @@ $productosEnzimas = [
           row.style.display = this.checked ? '' : 'none';
         });
       });
+    }
+
+    // Ordenamiento dinámico por consumo/costo
+    const sortByConsumo = document.getElementById('sortByConsumo');
+    const sortByCosto = document.getElementById('sortByCosto');
+    const table = document.getElementById('pivotTable');
+
+    if (sortByConsumo && sortByCosto && table) {
+      const totalesConsumo = <?= json_encode($totalesConsumoQuimico, JSON_UNESCAPED_UNICODE) ?>;
+      const totalesCosto = <?= json_encode($totalesCostoQuimico, JSON_UNESCAPED_UNICODE) ?>;
+
+      function semaforoColor(variacion) {
+        if (variacion > 10) return '#ef4444';
+        if (variacion > 0) return '#f59e0b';
+        return '#10b981';
+      }
+
+      function sortTable(modo) {
+        const tbody = table.querySelector('tbody');
+        if (!tbody) return;
+
+        // Guardar referencia a todas las filas de totales (summary-row)
+        const summaryRows = Array.from(tbody.querySelectorAll('tr.summary-row'));
+
+        // Ordenar solo las filas de producto (que NO tienen summary-row)
+        const productRows = Array.from(tbody.querySelectorAll('tr[data-quimico]'));
+
+        productRows.sort((rowA, rowB) => {
+          const keyA = rowA.getAttribute('data-quimico');
+          const keyB = rowB.getAttribute('data-quimico');
+
+          if (!keyA || !keyB) return 0;
+
+          const valorA = modo === 'consumo' ? (totalesConsumo[keyA] || 0) : (totalesCosto[keyA] || 0);
+          const valorB = modo === 'consumo' ? (totalesConsumo[keyB] || 0) : (totalesCosto[keyB] || 0);
+
+          return valorB - valorA; // Mayor a menor
+        });
+
+        // Reinsertar filas ordenadas
+        productRows.forEach(row => tbody.appendChild(row));
+
+        // Reinsertar todas las filas de resumen al final
+        summaryRows.forEach(row => tbody.appendChild(row));
+      }
+
+      // Función para cambiar los valores mostrados en las celdas
+      function cambiarModoVisualizacion(modo) {
+        // Cambiar valores en celdas de semanas
+        const celdas = table.querySelectorAll('td.cell-ratio-semaforo');
+        celdas.forEach(celda => {
+          const ratioValue = celda.querySelector('.ratio-value strong');
+          const ratioBase = celda.querySelector('.ratio-base-cell');
+
+          if (modo === 'costo') {
+            const costo = parseFloat(celda.getAttribute('data-costo'));
+            if (!isNaN(costo) && costo !== null) {
+              // Mostrar en dinero con símbolo de pesos y separador de miles
+              ratioValue.textContent = '$' + costo.toLocaleString('es-MX', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+              });
+              ratioBase.style.display = 'none';
+            } else {
+              ratioValue.textContent = '-';
+              ratioBase.style.display = 'none';
+            }
+          } else {
+            // Modo consumo - mostrar ratio
+            const ratio = parseFloat(celda.getAttribute('data-ratio'));
+            if (!isNaN(ratio) && ratio !== null) {
+              ratioValue.textContent = ratio.toFixed(2);
+              ratioBase.style.display = 'block';
+            } else {
+              ratioValue.textContent = '-';
+              ratioBase.style.display = 'block';
+            }
+          }
+        });
+
+        // Cambiar valores en columnas adhesivas (Anterior y Actual)
+        const rowsProducto = table.querySelectorAll('tbody tr[data-quimico]');
+        rowsProducto.forEach(row => {
+          const celdaAnterior = row.querySelector('td.sticky-col[data-valor-anterior]');
+          const celdaActual = row.querySelector('td.sticky-col[data-variacion]');
+
+          if (celdaAnterior && celdaActual) {
+            if (modo === 'costo') {
+              const costoAnterior = parseFloat(celdaAnterior.getAttribute('data-valor-costo-anterior'));
+              const costoActual = parseFloat(celdaActual.getAttribute('data-valor-costo-actual'));
+              const variacionCosto = parseFloat(celdaActual.getAttribute('data-variacion-costo'));
+              const color = semaforoColor(variacionCosto);
+
+              celdaActual.style.borderLeftColor = color;
+
+              // Actualizar Anterior
+              const spanAnterior = celdaAnterior.querySelector('.valor-anterior');
+              if (spanAnterior && !isNaN(costoAnterior)) {
+                spanAnterior.textContent = '$' + costoAnterior.toLocaleString('es-MX', {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2
+                });
+              }
+
+              // Actualizar Actual y Variación
+              const spanActual = celdaActual.querySelector('.valor-actual');
+              const spanVariacion = celdaActual.querySelector('.variacion-texto');
+              if (spanActual && !isNaN(costoActual)) {
+                spanActual.textContent = '$' + costoActual.toLocaleString('es-MX', {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2
+                });
+              }
+              if (spanVariacion && !isNaN(variacionCosto)) {
+                spanVariacion.style.color = color;
+                spanVariacion.textContent = (variacionCosto >= 0 ? '+' : '') + variacionCosto.toFixed(1) + '%';
+              }
+            } else {
+              // Modo consumo - mostrar consumo y variacion original
+              const consumoAnterior = parseFloat(celdaAnterior.getAttribute('data-valor-anterior'));
+              const consumoActual = parseFloat(celdaActual.getAttribute('data-valor-actual'));
+              const variacionConsumo = parseFloat(celdaActual.getAttribute('data-variacion'));
+              const color = semaforoColor(variacionConsumo);
+
+              celdaActual.style.borderLeftColor = color;
+
+              const spanAnterior = celdaAnterior.querySelector('.valor-anterior');
+              if (spanAnterior && !isNaN(consumoAnterior)) {
+                spanAnterior.textContent = consumoAnterior.toFixed(2);
+              }
+
+              const spanActual = celdaActual.querySelector('.valor-actual');
+              const spanVariacion = celdaActual.querySelector('.variacion-texto');
+              if (spanActual && !isNaN(consumoActual)) {
+                spanActual.textContent = consumoActual.toFixed(2);
+              }
+              if (spanVariacion && !isNaN(variacionConsumo)) {
+                spanVariacion.style.color = color;
+                spanVariacion.textContent = (variacionConsumo >= 0 ? '+' : '') + variacionConsumo.toFixed(1) + '%';
+              }
+            }
+          }
+        });
+      }
+
+      sortByConsumo.addEventListener('click', function() {
+        sortByConsumo.classList.add('active');
+        sortByCosto.classList.remove('active');
+        sortTable('consumo');
+        cambiarModoVisualizacion('consumo');
+      });
+
+      sortByCosto.addEventListener('click', function() {
+        sortByCosto.classList.add('active');
+        sortByConsumo.classList.remove('active');
+        sortTable('costo');
+        cambiarModoVisualizacion('costo');
+      });
+
+      // Aplicar ordenamiento inicial por consumo (mayor a menor)
+      sortTable('consumo');
     }
 
     renderWindow();

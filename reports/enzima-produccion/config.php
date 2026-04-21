@@ -3,6 +3,16 @@
 declare(strict_types=1);
 
 $grupos = [
+  'enzimas' => [
+    'titulo' => 'ENZIMAS Producción (Todos)',
+    'productos' => [
+      'DETERZYME1',
+      'COROLASE',
+      'BUZ78',
+      'BUZ77',
+    ],
+  ],
+
   'enzimas_preparacion' => [
     'titulo' => 'ENZIMA Preparación / Producción',
     'productos' => [
@@ -20,10 +30,10 @@ $grupos = [
   ],
 ];
 
-$grupoSolicitado = isset($_GET['grupo']) ? trim((string)$_GET['grupo']) : 'enzimas_preparacion';
+$grupoSolicitado = isset($_GET['grupo']) ? trim((string)$_GET['grupo']) : 'enzimas';
 
 if (!isset($grupos[$grupoSolicitado])) {
-  $grupoSolicitado = 'enzimas_preparacion';
+  $grupoSolicitado = 'enzimas';
 }
 
 $productoSeleccionado = isset($_GET['producto']) ? trim((string)$_GET['producto']) : null;
@@ -62,6 +72,16 @@ return [
 
   'productos' => $grupos[$grupoSolicitado]['productos'],
   'grupos' => $grupos,
+  'grupo_estructura' => [
+    'enzimas_preparacion' => [
+      'titulo' => 'ENZIMA Preparación / Producción',
+      'productos' => ['DETERZYME1', 'COROLASE'],
+    ],
+    'enzimas_pelambre' => [
+      'titulo' => 'ENZIMA Pelambre / Producción',
+      'productos' => ['BUZ78', 'BUZ77'],
+    ],
+  ],
 
   'tolerancia_pct' => $tolerancia_pct,
   'cve_mov' => '17',

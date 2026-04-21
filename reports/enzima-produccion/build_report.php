@@ -29,6 +29,7 @@ $cacheKey = 'report_' . md5(serialize([
   $config,
   $appConfig['cards_por_pagina'] ?? 9,
   $appConfig['filas_por_pagina'] ?? 15,
+  filemtime(__FILE__),
   date('Y-m-d'), // Cache diario
 ]));
 
@@ -436,6 +437,147 @@ $version = time();
 
 /*
 |--------------------------------------------------------------------------
+| 7B) DATOS DESGLOSADOS POR GRUPO (Para tabla pivote)
+|--------------------------------------------------------------------------
+*/
+$consumoEnzimaAnioAnterior = [];
+$consumoEnzimaAnioActual = [];
+$variacionConsumoEnzima = [];
+$costoPromedioAnioAnterior = [];
+$costoPromedioAnioActual = [];
+$variacionCostoEnzima = [];
+$impactoEconomicoAnioAnterior = [];
+$impactoEconomicoAnioActual = [];
+
+// Extraer estructura de grupos del config
+$grupoEstructura = $config['grupo_estructura'] ?? [];
+
+// Iterar sobre los grupos en lugar de productos individuales
+foreach ($grupoEstructura as $grupoKey => $grupoInfo) {
+  $grupoTitulo = $grupoInfo['titulo'] ?? $grupoKey;
+  $productosEnGrupo = $grupoInfo['productos'] ?? [];
+  $placeholdersGrupoActual = implode(',', array_fill(0, count($productosEnGrupo), '?'));
+
+  // Sumar consumo año anterior para todos los productos del grupo
+  $sqlConsumoAnioAnterior = "
+    SELECT SUM($campoCantidadSql) AS consumo_kg
+    FROM movs m
+    WHERE CAST(DATE_FORMAT($campoFechaMovsSql, '%x') AS UNSIGNED) = ?
+      AND TRIM(m.TIPO_MOV) = 'S'
+      AND TRIM(m.CVE_PROD) IN ($placeholdersGrupoActual)
+  ";
+  $paramsConsumoAnterior = [$anioAnterior, ...$productosEnGrupo];
+
+  if ($cveMov !== null && $cveMov !== '') {
+    $sqlConsumoAnioAnterior .= " AND m.CVE_MOV = ? ";
+    $paramsConsumoAnterior[] = $cveMov;
+  }
+
+  $stmtConsumoAnioAnterior = $pdoMovs->prepare($sqlConsumoAnioAnterior);
+  $stmtConsumoAnioAnterior->execute($paramsConsumoAnterior);
+  $rowConsumoAnioAnterior = $stmtConsumoAnioAnterior->fetch();
+  $consumoEnzimaAnioAnterior[$grupoTitulo] = (float)($rowConsumoAnioAnterior['consumo_kg'] ?? 0);
+
+  // Sumar consumo año actual para todos los productos del grupo
+  $sqlConsumoAnioActual = "
+    SELECT SUM($campoCantidadSql) AS consumo_kg
+    FROM movs m
+    WHERE CAST(DATE_FORMAT($campoFechaMovsSql, '%x') AS UNSIGNED) = ?
+      AND TRIM(m.TIPO_MOV) = 'S'
+      AND TRIM(m.CVE_PROD) IN ($placeholdersGrupoActual)
+  ";
+  $paramsConsumoActual = [$anioActual, ...$productosEnGrupo];
+
+  if ($cveMov !== null && $cveMov !== '') {
+    $sqlConsumoAnioActual .= " AND m.CVE_MOV = ? ";
+    $paramsConsumoActual[] = $cveMov;
+  }
+
+  $stmtConsumoAnioActual = $pdoMovs->prepare($sqlConsumoAnioActual);
+  $stmtConsumoAnioActual->execute($paramsConsumoActual);
+  $rowConsumoAnioActual = $stmtConsumoAnioActual->fetch();
+  $consumoEnzimaAnioActual[$grupoTitulo] = (float)($rowConsumoAnioActual['consumo_kg'] ?? 0);
+
+  // Costo ponderado año anterior para todos los productos del grupo
+  $sqlCostoPromedioAnioAnterior = "
+    SELECT
+      CASE WHEN SUM($campoCantidadSql) > 0
+           THEN SUM($campoCostoSql * $campoCantidadSql) / SUM($campoCantidadSql)
+           ELSE 0 END AS costo_promedio
+    FROM movs m
+    WHERE CAST(DATE_FORMAT($campoFechaMovsSql, '%x') AS UNSIGNED) = ?
+      AND TRIM(m.TIPO_MOV) = 'S'
+      AND TRIM(m.CVE_PROD) IN ($placeholdersGrupoActual)
+  ";
+  $paramsCostoAnterior = [$anioAnterior, ...$productosEnGrupo];
+
+  if ($cveMov !== null && $cveMov !== '') {
+    $sqlCostoPromedioAnioAnterior .= " AND m.CVE_MOV = ? ";
+    $paramsCostoAnterior[] = $cveMov;
+  }
+
+  $stmtCostoPromedioAnioAnterior = $pdoMovs->prepare($sqlCostoPromedioAnioAnterior);
+  $stmtCostoPromedioAnioAnterior->execute($paramsCostoAnterior);
+  $rowCostoPromedioAnioAnterior = $stmtCostoPromedioAnioAnterior->fetch();
+  $costoPromedioAnioAnterior[$grupoTitulo] = (float)($rowCostoPromedioAnioAnterior['costo_promedio'] ?? 0);
+
+  // Costo ponderado año actual para todos los productos del grupo
+  $sqlCostoPromedioAnioActual = "
+    SELECT
+      CASE WHEN SUM($campoCantidadSql) > 0
+           THEN SUM($campoCostoSql * $campoCantidadSql) / SUM($campoCantidadSql)
+           ELSE 0 END AS costo_promedio
+    FROM movs m
+    WHERE CAST(DATE_FORMAT($campoFechaMovsSql, '%x') AS UNSIGNED) = ?
+      AND TRIM(m.TIPO_MOV) = 'S'
+      AND TRIM(m.CVE_PROD) IN ($placeholdersGrupoActual)
+  ";
+  $paramsCostoActual = [$anioActual, ...$productosEnGrupo];
+
+  if ($cveMov !== null && $cveMov !== '') {
+    $sqlCostoPromedioAnioActual .= " AND m.CVE_MOV = ? ";
+    $paramsCostoActual[] = $cveMov;
+  }
+
+  $stmtCostoPromedioAnioActual = $pdoMovs->prepare($sqlCostoPromedioAnioActual);
+  $stmtCostoPromedioAnioActual->execute($paramsCostoActual);
+  $rowCostoPromedioAnioActual = $stmtCostoPromedioAnioActual->fetch();
+  $costoPromedioAnioActual[$grupoTitulo] = (float)($rowCostoPromedioAnioActual['costo_promedio'] ?? 0);
+
+  // Impacto económico año anterior (consumo * costo promedio)
+  $impactoEconomicoAnioAnterior[$grupoTitulo] = $consumoEnzimaAnioAnterior[$grupoTitulo] * $costoPromedioAnioAnterior[$grupoTitulo];
+
+  // Impacto económico año actual (consumo * costo promedio)
+  $impactoEconomicoAnioActual[$grupoTitulo] = $consumoEnzimaAnioActual[$grupoTitulo] * $costoPromedioAnioActual[$grupoTitulo];
+
+  // Variación de consumo
+  $variacionConsumo = $consumoEnzimaAnioAnterior[$grupoTitulo] > 0
+    ? (($consumoEnzimaAnioActual[$grupoTitulo] - $consumoEnzimaAnioAnterior[$grupoTitulo]) / $consumoEnzimaAnioAnterior[$grupoTitulo]) * 100
+    : 0;
+  $variacionConsumoEnzima[$grupoTitulo] = $variacionConsumo;
+
+  // Variación de costo (precio unitario promedio)
+  $variacionCosto = $costoPromedioAnioAnterior[$grupoTitulo] > 0
+    ? (($costoPromedioAnioActual[$grupoTitulo] - $costoPromedioAnioAnterior[$grupoTitulo]) / $costoPromedioAnioAnterior[$grupoTitulo]) * 100
+    : 0;
+  $variacionCostoEnzima[$grupoTitulo] = $variacionCosto;
+}
+
+// Crear catálogos y matrices para tabla pivote
+$quimicosCatalogo = array_keys($grupoEstructura);
+$quimicosEtiquetas = array_combine($quimicosCatalogo, array_map(fn($g) => $g['titulo'] ?? $g, $grupoEstructura));
+$totalesConsumoQuimico = $consumoEnzimaAnioActual;
+$totalesCostoQuimico = $impactoEconomicoAnioActual;
+$anioPivot = $anioActual;
+
+// Matrices vacías para compatibilidad con tabla pivote
+$semanasCatalogo = [];
+$matrizRatioQuimicos = [];
+$matrizImpactoEconomicoQuimicos = [];
+$ratioBasePorQuimico = [];
+
+/*
+|--------------------------------------------------------------------------
 | 8) CHART DATA
 |--------------------------------------------------------------------------
 */
@@ -511,6 +653,24 @@ $result = [
     'metricaTitulo' => $metricaTitulo,
     'metricaUnidad' => $metricaUnidad,
     'badgeRatio' => $badgeRatio,
+    'grupo_estructura' => $config['grupo_estructura'] ?? [],
+    'consumoEnzimaAnioAnterior' => $consumoEnzimaAnioAnterior,
+    'consumoEnzimaAnioActual' => $consumoEnzimaAnioActual,
+    'variacionConsumoEnzima' => $variacionConsumoEnzima,
+    'costoPromedioAnioAnterior' => $costoPromedioAnioAnterior,
+    'costoPromedioAnioActual' => $costoPromedioAnioActual,
+    'variacionCostoEnzima' => $variacionCostoEnzima,
+    'impactoEconomicoAnioAnterior' => $impactoEconomicoAnioAnterior,
+    'impactoEconomicoAnioActual' => $impactoEconomicoAnioActual,
+    'quimicosCatalogo' => $quimicosCatalogo,
+    'quimicosEtiquetas' => $quimicosEtiquetas,
+    'totalesConsumoQuimico' => $totalesConsumoQuimico,
+    'totalesCostoQuimico' => $totalesCostoQuimico,
+    'anioPivot' => $anioPivot,
+    'semanasCatalogo' => $semanasCatalogo,
+    'matrizRatioQuimicos' => $matrizRatioQuimicos,
+    'matrizImpactoEconomicoQuimicos' => $matrizImpactoEconomicoQuimicos,
+    'ratioBasePorQuimico' => $ratioBasePorQuimico,
   ],
 ];
 

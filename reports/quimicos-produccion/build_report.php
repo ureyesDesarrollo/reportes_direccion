@@ -45,6 +45,17 @@ $pdoMovs = $state['pdoMovs'];
 $pdoProd = $state['pdoProd'];
 $campoFechaMovsSql = $state['campoFechaMovsSql'];
 $weekFields = $state['weekFields'];
+$grupoEstructura = $config['grupo_estructura'] ?? [];
+$grupoPorProducto = [];
+$grupoTitulos = [];
+
+foreach ($grupoEstructura as $grupoKey => $grupoInfo) {
+  $grupoTitulos[$grupoKey] = (string)($grupoInfo['titulo'] ?? $grupoKey);
+
+  foreach (($grupoInfo['productos'] ?? []) as $productoGrupo) {
+    $grupoPorProducto[(string)$productoGrupo] = $grupoKey;
+  }
+}
 
 /*
 |--------------------------------------------------------------------------
@@ -66,13 +77,15 @@ $sqlPivot = "
                 WHEN UPPER(TRIM(m.UNIUSU)) IN ('G','GR','GRAMO','GRAMOS') THEN m.CANT_PROD / 1000
                 ELSE m.CANT_PROD
             END
-        ) AS quimicos_kg
+        ) AS quimicos_kg,
+        AVG(m.COSTO_ENT) AS costo_promedio
     FROM movs m
     LEFT JOIN producto p
         ON TRIM(p.CVE_PROD) = TRIM(m.CVE_PROD)
     WHERE $campoFechaMovsSql >= ?
       AND TRIM(m.TIPO_MOV) = 'S'
       AND m.LUGAR = 'QUIMICOS'
+
       AND m.CVE_PROD <> 'DIES01'
 ";
 
@@ -171,6 +184,8 @@ $semanasCatalogo = [];
 $quimicosCatalogo = [];
 $quimicosEtiquetas = [];
 $matrizQuimicos = [];
+$matrizCostos = [];
+$matrizImpactoAcumulado = [];
 
 foreach ($rowsPivot as $row) {
   $semanaIso = (string)$row['semana_iso'];
@@ -184,9 +199,10 @@ foreach ($rowsPivot as $row) {
   $cveProd = trim((string)$row['cve_prod']);
   $descProd = trim((string)$row['desc_prod']);
   $kg = (float)$row['quimicos_kg'];
+  $costo = (float)($row['costo_promedio'] ?? 0.0);
 
-  $quimicoKey = $cveProd;
-  $quimicoLabel = $descProd !== '' ? $descProd : $cveProd;
+  $quimicoKey = $grupoPorProducto[$cveProd] ?? $cveProd;
+  $quimicoLabel = $grupoTitulos[$quimicoKey] ?? ($descProd !== '' ? $descProd : $cveProd);
 
   $quimicosEtiquetas[$quimicoKey] = $quimicoLabel;
 
@@ -200,9 +216,18 @@ foreach ($rowsPivot as $row) {
 
   if (!isset($matrizQuimicos[$quimicoKey])) {
     $matrizQuimicos[$quimicoKey] = [];
+    $matrizCostos[$quimicoKey] = [];
+    $matrizImpactoAcumulado[$quimicoKey] = [];
   }
 
-  $matrizQuimicos[$quimicoKey][$semanaLabel] = $kg;
+  if (!isset($matrizQuimicos[$quimicoKey][$semanaLabel])) {
+    $matrizQuimicos[$quimicoKey][$semanaLabel] = 0.0;
+    $matrizCostos[$quimicoKey][$semanaLabel] = 0.0;
+    $matrizImpactoAcumulado[$quimicoKey][$semanaLabel] = 0.0;
+  }
+
+  $matrizQuimicos[$quimicoKey][$semanaLabel] += $kg;
+  $matrizImpactoAcumulado[$quimicoKey][$semanaLabel] += $kg * $costo;
 }
 
 // si existe producción en una semana del año pivot, asegúrala como columna
@@ -227,15 +252,29 @@ sort($quimicosCatalogo);
 foreach ($quimicosCatalogo as $quimicoKey) {
   if (!isset($matrizQuimicos[$quimicoKey])) {
     $matrizQuimicos[$quimicoKey] = [];
+    $matrizCostos[$quimicoKey] = [];
+    $matrizImpactoAcumulado[$quimicoKey] = [];
+  }
+
+  if (!isset($matrizCostos[$quimicoKey])) {
+    $matrizCostos[$quimicoKey] = [];
   }
 
   foreach ($semanasCatalogo as $semanaLabel) {
     if (!isset($matrizQuimicos[$quimicoKey][$semanaLabel])) {
       $matrizQuimicos[$quimicoKey][$semanaLabel] = 0.0;
     }
+    if (!isset($matrizImpactoAcumulado[$quimicoKey][$semanaLabel])) {
+      $matrizImpactoAcumulado[$quimicoKey][$semanaLabel] = 0.0;
+    }
+
+    $matrizCostos[$quimicoKey][$semanaLabel] = $matrizQuimicos[$quimicoKey][$semanaLabel] > 0
+      ? ($matrizImpactoAcumulado[$quimicoKey][$semanaLabel] / $matrizQuimicos[$quimicoKey][$semanaLabel])
+      : 0.0;
   }
 
   ksort($matrizQuimicos[$quimicoKey]);
+  ksort($matrizCostos[$quimicoKey]);
 }
 
 /*
@@ -281,7 +320,8 @@ foreach ($rowsPivot as $row) {
     continue;
   }
 
-  $quimicoKey = trim((string)$row['cve_prod']);
+  $cveProd = trim((string)$row['cve_prod']);
+  $quimicoKey = $grupoPorProducto[$cveProd] ?? $cveProd;
   $kg = (float)$row['quimicos_kg'];
 
   if (!isset($consumoBasePorQuimico[$quimicoKey])) {
@@ -342,6 +382,25 @@ foreach ($quimicosCatalogo as $quimicoKey) {
     if ($ratioQuimico !== null) {
       $maxRatio = max($maxRatio, $ratioQuimico);
     }
+  }
+}
+
+/*
+|--------------------------------------------------------------------------
+| 7b) MATRIZ DE IMPACTO ECONÓMICO (KG × COSTO)
+|--------------------------------------------------------------------------
+*/
+$matrizImpactoEconomicoQuimicos = [];
+
+foreach ($quimicosCatalogo as $quimicoKey) {
+  $matrizImpactoEconomicoQuimicos[$quimicoKey] = [];
+
+  foreach ($semanasCatalogo as $semanaLabel) {
+    $kgQuimico = (float)($matrizQuimicos[$quimicoKey][$semanaLabel] ?? 0.0);
+    $costoPromedio = (float)($matrizCostos[$quimicoKey][$semanaLabel] ?? 0.0);
+
+    $impactoEconomico = $kgQuimico * $costoPromedio;
+    $matrizImpactoEconomicoQuimicos[$quimicoKey][$semanaLabel] = $impactoEconomico;
   }
 }
 
@@ -478,6 +537,347 @@ $version = time();
 
 /*
 |--------------------------------------------------------------------------
+| 9a) CONSUMO POR QUÍMICO DEL AÑO ANTERIOR (para ordenamiento)
+|--------------------------------------------------------------------------
+*/
+$consumoQuimicoAnioAnterior = [];
+
+$sqlConsumoAnioAnterior = "
+    SELECT
+        TRIM(m.CVE_PROD) as cve_prod,
+        SUM(
+            CASE
+                WHEN UPPER(TRIM(m.UNIUSU)) IN ('KG','KGS','KILO','KILOS') THEN m.CANT_PROD
+                WHEN UPPER(TRIM(m.UNIUSU)) IN ('G','GR','GRAMO','GRAMOS') THEN m.CANT_PROD / 1000
+                ELSE m.CANT_PROD
+            END
+        ) AS consumo_kg
+    FROM movs m
+    WHERE CAST(DATE_FORMAT(" . $campoFechaMovsSql . ", '%x') AS UNSIGNED) = ?
+      AND TRIM(m.TIPO_MOV) = 'S'
+      AND m.LUGAR = 'QUIMICOS'
+      AND m.CVE_PROD <> 'DIES01'
+";
+
+$paramsAnioAnterior = [$anioAnterior];
+
+if (!$usarTodosLosProductos && !empty($productosQuimicos)) {
+  $placeholders = createPlaceholders($productosQuimicos);
+  $sqlConsumoAnioAnterior .= " AND TRIM(m.CVE_PROD) IN ($placeholders) ";
+  $paramsAnioAnterior = array_merge($paramsAnioAnterior, $productosQuimicos);
+}
+
+if ($cveMov !== null && $cveMov !== '') {
+  $sqlConsumoAnioAnterior .= " AND m.CVE_MOV = ? ";
+  $paramsAnioAnterior[] = $cveMov;
+}
+
+$sqlConsumoAnioAnterior .= " GROUP BY TRIM(m.CVE_PROD) ORDER BY consumo_kg DESC ";
+
+$stmtConsumoAnioAnterior = $pdoMovs->prepare($sqlConsumoAnioAnterior);
+$stmtConsumoAnioAnterior->execute($paramsAnioAnterior);
+
+while ($row = $stmtConsumoAnioAnterior->fetch()) {
+  $consumoQuimicoAnioAnterior[$row['cve_prod']] = (float)$row['consumo_kg'];
+}
+
+/*
+|--------------------------------------------------------------------------
+| 9a2) CONSUMO POR QUÍMICO DEL AÑO ACTUAL
+|--------------------------------------------------------------------------
+*/
+$consumoQuimicoAnioActual = [];
+
+$sqlConsumoAnioActual = "
+    SELECT
+        TRIM(m.CVE_PROD) as cve_prod,
+        SUM(
+            CASE
+                WHEN UPPER(TRIM(m.UNIUSU)) IN ('KG','KGS','KILO','KILOS') THEN m.CANT_PROD
+                WHEN UPPER(TRIM(m.UNIUSU)) IN ('G','GR','GRAMO','GRAMOS') THEN m.CANT_PROD / 1000
+                ELSE m.CANT_PROD
+            END
+        ) AS consumo_kg
+    FROM movs m
+    WHERE CAST(DATE_FORMAT(" . $campoFechaMovsSql . ", '%x') AS UNSIGNED) = ?
+      AND TRIM(m.TIPO_MOV) = 'S'
+      AND m.LUGAR = 'QUIMICOS'
+      AND m.CVE_PROD <> 'DIES01'
+";
+
+$paramsAnioActual = [$anioActual];
+
+if (!$usarTodosLosProductos && !empty($productosQuimicos)) {
+  $placeholders = createPlaceholders($productosQuimicos);
+  $sqlConsumoAnioActual .= " AND TRIM(m.CVE_PROD) IN ($placeholders) ";
+  $paramsAnioActual = array_merge($paramsAnioActual, $productosQuimicos);
+}
+
+if ($cveMov !== null && $cveMov !== '') {
+  $sqlConsumoAnioActual .= " AND m.CVE_MOV = ? ";
+  $paramsAnioActual[] = $cveMov;
+}
+
+$sqlConsumoAnioActual .= " GROUP BY TRIM(m.CVE_PROD) ORDER BY consumo_kg DESC ";
+
+$stmtConsumoAnioActual = $pdoMovs->prepare($sqlConsumoAnioActual);
+$stmtConsumoAnioActual->execute($paramsAnioActual);
+
+while ($row = $stmtConsumoAnioActual->fetch()) {
+  $consumoQuimicoAnioActual[$row['cve_prod']] = (float)$row['consumo_kg'];
+}
+
+/*
+|--------------------------------------------------------------------------
+| 9a3) PRECIO PROMEDIO POR QUÍMICO DEL AÑO ANTERIOR
+|--------------------------------------------------------------------------
+*/
+$costoPromedioAnioAnterior = [];
+
+$sqlCostoPromedioAnioAnterior = "
+    SELECT
+        TRIM(m.CVE_PROD) as cve_prod,
+        AVG(m.COSTO_ENT) AS costo_promedio
+    FROM movs m
+    WHERE CAST(DATE_FORMAT(" . $campoFechaMovsSql . ", '%x') AS UNSIGNED) = ?
+      AND TRIM(m.TIPO_MOV) = 'S'
+      AND m.LUGAR = 'QUIMICOS'
+      AND m.CVE_PROD <> 'DIES01'
+";
+
+$paramsCostoPromedioAnioAnterior = [$anioAnterior];
+
+if (!$usarTodosLosProductos && !empty($productosQuimicos)) {
+  $placeholders = createPlaceholders($productosQuimicos);
+  $sqlCostoPromedioAnioAnterior .= " AND TRIM(m.CVE_PROD) IN ($placeholders) ";
+  $paramsCostoPromedioAnioAnterior = array_merge($paramsCostoPromedioAnioAnterior, $productosQuimicos);
+}
+
+if ($cveMov !== null && $cveMov !== '') {
+  $sqlCostoPromedioAnioAnterior .= " AND m.CVE_MOV = ? ";
+  $paramsCostoPromedioAnioAnterior[] = $cveMov;
+}
+
+$sqlCostoPromedioAnioAnterior .= " GROUP BY TRIM(m.CVE_PROD) ";
+
+$stmtCostoPromedioAnioAnterior = $pdoMovs->prepare($sqlCostoPromedioAnioAnterior);
+$stmtCostoPromedioAnioAnterior->execute($paramsCostoPromedioAnioAnterior);
+
+while ($row = $stmtCostoPromedioAnioAnterior->fetch()) {
+  $costoPromedioAnioAnterior[$row['cve_prod']] = (float)$row['costo_promedio'];
+}
+
+/*
+|--------------------------------------------------------------------------
+| 9a3.5) PRECIO PROMEDIO POR QUÍMICO DEL AÑO ACTUAL
+|--------------------------------------------------------------------------
+*/
+$costoPromedioAnioActual = [];
+
+$sqlCostoPromedioAnioActual = "
+    SELECT
+        TRIM(m.CVE_PROD) as cve_prod,
+        AVG(m.COSTO_ENT) AS costo_promedio
+    FROM movs m
+    WHERE CAST(DATE_FORMAT(" . $campoFechaMovsSql . ", '%x') AS UNSIGNED) = ?
+      AND TRIM(m.TIPO_MOV) = 'S'
+      AND m.LUGAR = 'QUIMICOS'
+      AND m.CVE_PROD <> 'DIES01'
+";
+
+$paramsCostoPromedioAnioActual = [$anioActual];
+
+if (!$usarTodosLosProductos && !empty($productosQuimicos)) {
+  $placeholders = createPlaceholders($productosQuimicos);
+  $sqlCostoPromedioAnioActual .= " AND TRIM(m.CVE_PROD) IN ($placeholders) ";
+  $paramsCostoPromedioAnioActual = array_merge($paramsCostoPromedioAnioActual, $productosQuimicos);
+}
+
+if ($cveMov !== null && $cveMov !== '') {
+  $sqlCostoPromedioAnioActual .= " AND m.CVE_MOV = ? ";
+  $paramsCostoPromedioAnioActual[] = $cveMov;
+}
+
+$sqlCostoPromedioAnioActual .= " GROUP BY TRIM(m.CVE_PROD) ";
+
+$stmtCostoPromedioAnioActual = $pdoMovs->prepare($sqlCostoPromedioAnioActual);
+$stmtCostoPromedioAnioActual->execute($paramsCostoPromedioAnioActual);
+
+while ($row = $stmtCostoPromedioAnioActual->fetch()) {
+  $costoPromedioAnioActual[$row['cve_prod']] = (float)$row['costo_promedio'];
+}
+
+/*
+|--------------------------------------------------------------------------
+| 9a4) IMPACTO ECONÓMICO POR QUÍMICO DEL AÑO ANTERIOR (consumo * costo)
+|--------------------------------------------------------------------------
+*/
+$impactoEconomicoAnioAnterior = [];
+
+$sqlImpactoAnioAnterior = "
+    SELECT
+        TRIM(m.CVE_PROD) as cve_prod,
+        SUM(
+            CASE
+                WHEN UPPER(TRIM(m.UNIUSU)) IN ('KG','KGS','KILO','KILOS') THEN m.CANT_PROD
+                WHEN UPPER(TRIM(m.UNIUSU)) IN ('G','GR','GRAMO','GRAMOS') THEN m.CANT_PROD / 1000
+                ELSE m.CANT_PROD
+            END
+        ) AS consumo_kg,
+        AVG(m.COSTO_ENT) AS costo_promedio
+    FROM movs m
+    WHERE CAST(DATE_FORMAT(" . $campoFechaMovsSql . ", '%x') AS UNSIGNED) = ?
+      AND TRIM(m.TIPO_MOV) = 'S'
+      AND m.LUGAR = 'QUIMICOS'
+      AND m.CVE_PROD <> 'DIES01'
+";
+
+$paramsImpactoAnioAnterior = [$anioAnterior];
+
+if (!$usarTodosLosProductos && !empty($productosQuimicos)) {
+  $placeholders = createPlaceholders($productosQuimicos);
+  $sqlImpactoAnioAnterior .= " AND TRIM(m.CVE_PROD) IN ($placeholders) ";
+  $paramsImpactoAnioAnterior = array_merge($paramsImpactoAnioAnterior, $productosQuimicos);
+}
+
+if ($cveMov !== null && $cveMov !== '') {
+  $sqlImpactoAnioAnterior .= " AND m.CVE_MOV = ? ";
+  $paramsImpactoAnioAnterior[] = $cveMov;
+}
+
+$sqlImpactoAnioAnterior .= " GROUP BY TRIM(m.CVE_PROD) ";
+
+$stmtImpactoAnioAnterior = $pdoMovs->prepare($sqlImpactoAnioAnterior);
+$stmtImpactoAnioAnterior->execute($paramsImpactoAnioAnterior);
+
+while ($row = $stmtImpactoAnioAnterior->fetch()) {
+  $consumo = (float)$row['consumo_kg'];
+  $costo = (float)$row['costo_promedio'];
+  $impactoEconomicoAnioAnterior[$row['cve_prod']] = $consumo * $costo;
+}
+
+/*
+|--------------------------------------------------------------------------
+| 9a5) IMPACTO ECONÓMICO POR QUÍMICO DEL AÑO ACTUAL (consumo * costo)
+|--------------------------------------------------------------------------
+*/
+$impactoEconomicoAnioActual = [];
+
+$sqlImpactoAnioActual = "
+    SELECT
+        TRIM(m.CVE_PROD) as cve_prod,
+        SUM(
+            CASE
+                WHEN UPPER(TRIM(m.UNIUSU)) IN ('KG','KGS','KILO','KILOS') THEN m.CANT_PROD
+                WHEN UPPER(TRIM(m.UNIUSU)) IN ('G','GR','GRAMO','GRAMOS') THEN m.CANT_PROD / 1000
+                ELSE m.CANT_PROD
+            END
+        ) AS consumo_kg,
+        AVG(m.COSTO_ENT) AS costo_promedio
+    FROM movs m
+    WHERE CAST(DATE_FORMAT(" . $campoFechaMovsSql . ", '%x') AS UNSIGNED) = ?
+      AND TRIM(m.TIPO_MOV) = 'S'
+      AND m.LUGAR = 'QUIMICOS'
+      AND m.CVE_PROD <> 'DIES01'
+";
+
+$paramsImpactoAnioActual = [$anioActual];
+
+if (!$usarTodosLosProductos && !empty($productosQuimicos)) {
+  $placeholders = createPlaceholders($productosQuimicos);
+  $sqlImpactoAnioActual .= " AND TRIM(m.CVE_PROD) IN ($placeholders) ";
+  $paramsImpactoAnioActual = array_merge($paramsImpactoAnioActual, $productosQuimicos);
+}
+
+if ($cveMov !== null && $cveMov !== '') {
+  $sqlImpactoAnioActual .= " AND m.CVE_MOV = ? ";
+  $paramsImpactoAnioActual[] = $cveMov;
+}
+
+$sqlImpactoAnioActual .= " GROUP BY TRIM(m.CVE_PROD) ";
+
+$stmtImpactoAnioActual = $pdoMovs->prepare($sqlImpactoAnioActual);
+$stmtImpactoAnioActual->execute($paramsImpactoAnioActual);
+
+while ($row = $stmtImpactoAnioActual->fetch()) {
+  $consumo = (float)$row['consumo_kg'];
+  $costo = (float)$row['costo_promedio'];
+  $impactoEconomicoAnioActual[$row['cve_prod']] = $consumo * $costo;
+}
+
+$agruparPorClaveVisible = static function (array $valores) use ($grupoPorProducto): array {
+  $agrupados = [];
+
+  foreach ($valores as $clave => $valor) {
+    $claveVisible = $grupoPorProducto[$clave] ?? $clave;
+
+    if (!isset($agrupados[$claveVisible])) {
+      $agrupados[$claveVisible] = 0.0;
+    }
+
+    $agrupados[$claveVisible] += (float)$valor;
+  }
+
+  return $agrupados;
+};
+
+$consumoQuimicoAnioAnterior = $agruparPorClaveVisible($consumoQuimicoAnioAnterior);
+$consumoQuimicoAnioActual = $agruparPorClaveVisible($consumoQuimicoAnioActual);
+$impactoEconomicoAnioAnterior = $agruparPorClaveVisible($impactoEconomicoAnioAnterior);
+$impactoEconomicoAnioActual = $agruparPorClaveVisible($impactoEconomicoAnioActual);
+
+$costoPromedioAnioAnteriorAgrupado = [];
+$costoPromedioAnioActualAgrupado = [];
+
+foreach ($quimicosCatalogo as $quimicoKey) {
+  $consumoAnteriorAgrupado = (float)($consumoQuimicoAnioAnterior[$quimicoKey] ?? 0.0);
+  $consumoActualAgrupado = (float)($consumoQuimicoAnioActual[$quimicoKey] ?? 0.0);
+  $impactoAnteriorAgrupado = (float)($impactoEconomicoAnioAnterior[$quimicoKey] ?? 0.0);
+  $impactoActualAgrupado = (float)($impactoEconomicoAnioActual[$quimicoKey] ?? 0.0);
+
+  $costoPromedioAnioAnteriorAgrupado[$quimicoKey] = $consumoAnteriorAgrupado > 0
+    ? ($impactoAnteriorAgrupado / $consumoAnteriorAgrupado)
+    : 0.0;
+  $costoPromedioAnioActualAgrupado[$quimicoKey] = $consumoActualAgrupado > 0
+    ? ($impactoActualAgrupado / $consumoActualAgrupado)
+    : 0.0;
+}
+
+$costoPromedioAnioAnterior = $costoPromedioAnioAnteriorAgrupado;
+$costoPromedioAnioActual = $costoPromedioAnioActualAgrupado;
+
+/*
+|--------------------------------------------------------------------------
+| 9b) TOTALES DE CONSUMO Y COSTO POR QUÍMICO (VARIACIÓN ACTUAL VS ANTERIOR)
+|--------------------------------------------------------------------------
+*/
+$totalesConsumoQuimico = [];
+$totalesCostoQuimico = [];
+$variacionConsumoQuimico = []; // Para semáforo
+$variacionCostoQuimico = []; // Para semáforo en modo costo
+
+foreach ($quimicosCatalogo as $quimico) {
+  // Consumo
+  $consumoActual = (float)($consumoQuimicoAnioActual[$quimico] ?? 0.0);
+  $consumoAnterior = (float)($consumoQuimicoAnioAnterior[$quimico] ?? 0.0);
+  $variacionConsumo = $consumoAnterior > 0 ? (($consumoActual - $consumoAnterior) / $consumoAnterior) * 100 : 0;
+
+  // Costo (precio promedio unitario)
+  $costoPromActual = (float)($costoPromedioAnioActual[$quimico] ?? 0.0);
+  $costoPromAnterior = (float)($costoPromedioAnioAnterior[$quimico] ?? 0.0);
+  $variacionCosto = $costoPromAnterior > 0 ? (($costoPromActual - $costoPromAnterior) / $costoPromAnterior) * 100 : 0;
+
+  // Para ordenamiento, usar impacto económico total
+  $costoActual = (float)($impactoEconomicoAnioActual[$quimico] ?? 0.0);
+
+  $totalesConsumoQuimico[$quimico] = $consumoActual;
+  $totalesCostoQuimico[$quimico] = $costoActual;
+  $variacionConsumoQuimico[$quimico] = $variacionConsumo;
+  $variacionCostoQuimico[$quimico] = $variacionCosto;
+}
+
+/*
+|--------------------------------------------------------------------------
 | 10) RESÚMENES POR SEMANA PARA LA MATRIZ
 |--------------------------------------------------------------------------
 */
@@ -556,12 +956,24 @@ return [
   'quimicosCatalogo' => $quimicosCatalogo,
   'quimicosEtiquetas' => $quimicosEtiquetas,
   'matrizQuimicos' => $matrizQuimicos,
+  'matrizCostos' => $matrizCostos,
   'produccionPivotPorSemana' => $produccionPivotPorSemana,
   'matrizRatioQuimicos' => $matrizRatioQuimicos,
+  'matrizImpactoEconomicoQuimicos' => $matrizImpactoEconomicoQuimicos,
   'ratioBasePorQuimico' => $ratioBasePorQuimico,
   'totalesPorSemana' => $totalesPorSemana,
   'produccionPorSemana' => $produccionPorSemana,
   'ratioPorSemana' => $ratioPorSemana,
+  'totalesConsumoQuimico' => $totalesConsumoQuimico,
+  'totalesCostoQuimico' => $totalesCostoQuimico,
+  'consumoQuimicoAnioAnterior' => $consumoQuimicoAnioAnterior,
+  'consumoQuimicoAnioActual' => $consumoQuimicoAnioActual,
+  'variacionConsumoQuimico' => $variacionConsumoQuimico,
+  'costoPromedioAnioAnterior' => $costoPromedioAnioAnterior,
+  'costoPromedioAnioActual' => $costoPromedioAnioActual,
+  'variacionCostoQuimico' => $variacionCostoQuimico,
+  'impactoEconomicoAnioAnterior' => $impactoEconomicoAnioAnterior,
+  'impactoEconomicoAnioActual' => $impactoEconomicoAnioActual,
 
   'maxRatio' => $maxRatio,
   'version' => $version,
@@ -576,5 +988,6 @@ return [
     'toleranciaPct' => $toleranciaPct,
     'intervaloActualizacion' => $intervaloActualizacion,
     'cveMov' => $cveMov,
+    'grupo_estructura' => $grupoEstructura,
   ],
 ];

@@ -99,12 +99,15 @@ $showModeTabs = false;
       empaquessCatalogo: <?= json_encode($empaquessCatalogo, JSON_UNESCAPED_UNICODE) ?>,
       empaquesEtiquetas: <?= json_encode($empaquesEtiquetas, JSON_UNESCAPED_UNICODE) ?>,
       matrizEmpaques: <?= json_encode($matrizEmpaques, JSON_UNESCAPED_UNICODE) ?>,
+      matrizCostos: <?= json_encode($matrizCostos, JSON_UNESCAPED_UNICODE) ?>,
       produccionPivotPorSemana: <?= json_encode($produccionPivotPorSemana, JSON_UNESCAPED_UNICODE) ?>,
       matrizRatioEmpaques: <?= json_encode($matrizRatioEmpaques, JSON_UNESCAPED_UNICODE) ?>,
       ratioBasePorEmpaque: <?= json_encode($ratioBasePorEmpaque, JSON_UNESCAPED_UNICODE) ?>,
       totalesPorSemana: <?= json_encode($totalesPorSemana, JSON_UNESCAPED_UNICODE) ?>,
       produccionPorSemana: <?= json_encode($produccionPorSemana, JSON_UNESCAPED_UNICODE) ?>,
       ratioPorSemana: <?= json_encode($ratioPorSemana, JSON_UNESCAPED_UNICODE) ?>,
+      totalesCantidadEmpaque: <?= json_encode($totalesCantidadEmpaque, JSON_UNESCAPED_UNICODE) ?>,
+      totalesCostoEmpaque: <?= json_encode($totalesCostoEmpaque, JSON_UNESCAPED_UNICODE) ?>,
 
       kpis: {
         totalQuimicosAnioAnterior: <?= json_encode($totalQuimicosAnioAnterior) ?>,

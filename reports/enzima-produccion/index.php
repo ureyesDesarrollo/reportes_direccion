@@ -143,9 +143,7 @@ $productoLabel = null; // no aplica para grupos
   </div>
 
   <?php require __DIR__ . '/../../shared/partials/header.php'; ?>
-  <?php if ($modo !== 'impacto'): ?>
-    <?php require __DIR__ . '/../../shared/partials/kpis.php'; ?>
-  <?php endif; ?>
+  <?php require __DIR__ . '/../../shared/partials/kpis.php'; ?>
 
   <?php if ($mostrarGrafica): ?>
     <?php require __DIR__ . '/../../shared/partials/chart.php'; ?>
@@ -160,7 +158,7 @@ $productoLabel = null; // no aplica para grupos
   <?php endif; ?>
 
   <?php require __DIR__ . '/../../shared/partials/filters.php'; ?>
-  <?php require __DIR__ . '/../../shared/partials/table.php'; ?>
+  <?php require __DIR__ . '/partials/table_pivot_enzimas.php'; ?>
   <?php require __DIR__ . '/../../shared/partials/footer.php'; ?>
 
   <script>

@@ -9,4 +9,14 @@ return [
   'cve_mov' => '17',
   'usar_todos_los_productos' => true,
   'anio_pivot' => (int)date('Y'),
+  'grupo_estructura' => [
+    'enzimas_preparacion' => [
+      'titulo' => 'ENZIMA Preparación / Producción',
+      'productos' => ['DETERZYME1', 'COROLASE'],
+    ],
+    'enzimas_pelambre' => [
+      'titulo' => 'ENZIMA Pelambre / Producción',
+      'productos' => ['BUZ78', 'BUZ77'],
+    ],
+  ],
 ];

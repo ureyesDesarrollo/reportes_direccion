@@ -339,14 +339,16 @@
     datosAnioAnterior.forEach((item) => {
       const numSemana = getWeekNumber(item.semana_iso);
       if (numSemana && numSemana >= 1 && numSemana <= 53) {
-        datosPorSemana[numSemana].ratioAnioAnterior = item.ratio;
+        datosPorSemana[numSemana].ratioAnioAnterior =
+          modo === 'impacto' ? item.impacto_total || 0 : item.ratio;
       }
     });
 
     datosAnioActual.forEach((item) => {
       const numSemana = getWeekNumber(item.semana_iso);
       if (numSemana && numSemana >= 1 && numSemana <= 53) {
-        datosPorSemana[numSemana].ratioAnioActual = item.ratio;
+        datosPorSemana[numSemana].ratioAnioActual =
+          modo === 'impacto' ? item.impacto_total || 0 : item.ratio;
         datosPorSemana[numSemana].colorAnioActual = item.colorHex;
       }
     });
@@ -558,7 +560,7 @@
                 }
 
                 if (modo === 'impacto') {
-                  return `${label}: ${(value * 100).toFixed(2)}%`;
+                  return `${label}: $ ${value.toFixed(2)}`;
                 }
 
                 const formatted =
@@ -581,7 +583,7 @@
                 modo === 'costo'
                   ? 'Promedio de costo'
                   : modo === 'impacto'
-                    ? 'Impacto (%)'
+                    ? 'Impacto ($)'
                     : 'Ratio (kg químico / kg producción)',
               color: '#64748b',
             },

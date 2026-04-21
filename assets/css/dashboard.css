@@ -978,6 +978,41 @@ tbody tr:hover {
   color: #475569;
 }
 
+.sort-buttons {
+  display: flex;
+  gap: 8px;
+  border-radius: 999px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  padding: 6px;
+}
+
+.sort-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.sort-btn:hover {
+  background: #e2e8f0;
+  color: #475569;
+}
+
+.sort-btn.active {
+  background: #10b981;
+  color: white;
+  border-color: #10b981;
+}
+
 .pivot-legend {
   display: flex;
   gap: 14px;

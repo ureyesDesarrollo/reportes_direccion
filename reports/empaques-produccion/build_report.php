@@ -105,7 +105,8 @@ $sqlPivot = "
             WHEN UPPER(TRIM(m.UNIUSU)) IN ('MILLA','MILL','MILLES','MILLARES') THEN 'MILLA'
             ELSE UPPER(TRIM(m.UNIUSU))
         END AS unidad_normalizada,
-        SUM(m.CANT_PROD) AS cantidad
+        SUM(m.CANT_PROD) AS cantidad,
+        AVG(m.COSTO_ENT) AS costo_promedio
     FROM movs m
     LEFT JOIN producto p
         ON TRIM(p.CVE_PROD) = TRIM(m.CVE_PROD)
@@ -290,6 +291,7 @@ $empaquessCatalogo = [];
 $empaquesEtiquetas = [];
 $unidadesCatalogo = [];
 $matrizEmpaques = [];
+$matrizCostos = [];
 
 foreach ($rowsPivot as $row) {
   $semanaIso = (string)$row['semana_iso'];
@@ -303,13 +305,13 @@ foreach ($rowsPivot as $row) {
   $cveProd = trim((string)$row['cve_prod']);
   $descProd = trim((string)$row['desc_prod']);
   $unidad = trim((string)$row['unidad_normalizada']);
+  $cantidad = (float)$row['cantidad'];
+  $costo = (float)($row['costo_promedio'] ?? 0.0);
 
   // Saltar si la unidad está vacía
   if (empty($unidad)) {
     continue;
   }
-
-  $cantidad = (float)$row['cantidad'];
 
   $empaquesKey = $cveProd . '|' . $unidad;
   $empaquesLabel = $descProd !== '' ? $descProd : $cveProd;
@@ -331,9 +333,11 @@ foreach ($rowsPivot as $row) {
 
   if (!isset($matrizEmpaques[$empaquesKey])) {
     $matrizEmpaques[$empaquesKey] = [];
+    $matrizCostos[$empaquesKey] = [];
   }
 
   $matrizEmpaques[$empaquesKey][$semanaLabel] = $cantidad;
+  $matrizCostos[$empaquesKey][$semanaLabel] = $costo;
 }
 
 // si existe producción en una semana del año pivot, asegúrala como columna
@@ -358,15 +362,24 @@ sort($empaquessCatalogo);
 foreach ($empaquessCatalogo as $empaquesKey) {
   if (!isset($matrizEmpaques[$empaquesKey])) {
     $matrizEmpaques[$empaquesKey] = [];
+    $matrizCostos[$empaquesKey] = [];
+  }
+
+  if (!isset($matrizCostos[$empaquesKey])) {
+    $matrizCostos[$empaquesKey] = [];
   }
 
   foreach ($semanasCatalogo as $semanaLabel) {
     if (!isset($matrizEmpaques[$empaquesKey][$semanaLabel])) {
       $matrizEmpaques[$empaquesKey][$semanaLabel] = 0.0;
     }
+    if (!isset($matrizCostos[$empaquesKey][$semanaLabel])) {
+      $matrizCostos[$empaquesKey][$semanaLabel] = 0.0;
+    }
   }
 
   ksort($matrizEmpaques[$empaquesKey]);
+  ksort($matrizCostos[$empaquesKey]);
 }
 
 /*
@@ -480,6 +493,25 @@ foreach ($empaquessCatalogo as $empaquesKey) {
     if ($ratioEmpaque !== null) {
       $maxRatio = max($maxRatio, $ratioEmpaque);
     }
+  }
+}
+
+/*
+|--------------------------------------------------------------------------
+| 7b) MATRIZ DE IMPACTO ECONÓMICO (CANTIDAD × COSTO)
+|--------------------------------------------------------------------------
+*/
+$matrizImpactoEconomicoEmpaques = [];
+
+foreach ($empaquessCatalogo as $empaqueKey) {
+  $matrizImpactoEconomicoEmpaques[$empaqueKey] = [];
+
+  foreach ($semanasCatalogo as $semanaLabel) {
+    $cantidadEmpaque = (float)($matrizEmpaques[$empaqueKey][$semanaLabel] ?? 0.0);
+    $costoPromedio = (float)($matrizCostos[$empaqueKey][$semanaLabel] ?? 0.0);
+
+    $impactoEconomico = $cantidadEmpaque * $costoPromedio;
+    $matrizImpactoEconomicoEmpaques[$empaqueKey][$semanaLabel] = $impactoEconomico;
   }
 }
 
@@ -617,6 +649,252 @@ $version = time();
 
 /*
 |--------------------------------------------------------------------------
+| 9a) CANTIDAD POR EMPAQUE DEL AÑO ANTERIOR (para ordenamiento)
+|--------------------------------------------------------------------------
+*/
+$cantidadEmpaqueAnioAnterior = [];
+
+$sqlCantidadAnioAnterior = "
+    SELECT
+        CONCAT(TRIM(m.CVE_PROD), '|', TRIM(m.UNIUSU)) as clave_empaque,
+        SUM(m.CANT_PROD) AS cantidad
+    FROM movs m
+    WHERE YEAR(" . $campoFechaMovsSql . ") = ?
+      AND TRIM(m.TIPO_MOV) = 'S'
+      AND m.LUGAR = ?
+      AND TRIM(m.UNIUSU) <> ''
+";
+
+$paramsCantidadAnioAnterior = [$anioAnterior, $lugarEmpaques];
+
+if (!$usarTodosLosProductos && !empty($productosEmpaques)) {
+  $placeholders = createPlaceholders($productosEmpaques);
+  $sqlCantidadAnioAnterior .= " AND TRIM(m.CVE_PROD) IN ($placeholders) ";
+  $paramsCantidadAnioAnterior = array_merge($paramsCantidadAnioAnterior, $productosEmpaques);
+}
+
+$sqlCantidadAnioAnterior .= " GROUP BY TRIM(m.CVE_PROD), TRIM(m.UNIUSU) ORDER BY cantidad DESC ";
+
+$stmtCantidadAnioAnterior = $pdoMovs->prepare($sqlCantidadAnioAnterior);
+$stmtCantidadAnioAnterior->execute($paramsCantidadAnioAnterior);
+
+while ($row = $stmtCantidadAnioAnterior->fetch()) {
+  $cantidadEmpaqueAnioAnterior[$row['clave_empaque']] = (float)$row['cantidad'];
+}
+
+/*
+|--------------------------------------------------------------------------
+| 9a2) CANTIDAD POR EMPAQUE DEL AÑO ACTUAL
+|--------------------------------------------------------------------------
+*/
+$cantidadEmpaqueAnioActual = [];
+
+$sqlCantidadAnioActual = "
+    SELECT
+        CONCAT(TRIM(m.CVE_PROD), '|', TRIM(m.UNIUSU)) as clave_empaque,
+        SUM(m.CANT_PROD) AS cantidad
+    FROM movs m
+    WHERE YEAR(" . $campoFechaMovsSql . ") = ?
+      AND TRIM(m.TIPO_MOV) = 'S'
+      AND m.LUGAR = ?
+      AND TRIM(m.UNIUSU) <> ''
+";
+
+$paramsCantidadAnioActual = [$anioActual, $lugarEmpaques];
+
+if (!$usarTodosLosProductos && !empty($productosEmpaques)) {
+  $placeholders = createPlaceholders($productosEmpaques);
+  $sqlCantidadAnioActual .= " AND TRIM(m.CVE_PROD) IN ($placeholders) ";
+  $paramsCantidadAnioActual = array_merge($paramsCantidadAnioActual, $productosEmpaques);
+}
+
+$sqlCantidadAnioActual .= " GROUP BY TRIM(m.CVE_PROD), TRIM(m.UNIUSU) ORDER BY cantidad DESC ";
+
+$stmtCantidadAnioActual = $pdoMovs->prepare($sqlCantidadAnioActual);
+$stmtCantidadAnioActual->execute($paramsCantidadAnioActual);
+
+while ($row = $stmtCantidadAnioActual->fetch()) {
+  $cantidadEmpaqueAnioActual[$row['clave_empaque']] = (float)$row['cantidad'];
+}
+
+/*
+|--------------------------------------------------------------------------
+| 9a3) PRECIO PROMEDIO POR EMPAQUE DEL AÑO ANTERIOR
+|--------------------------------------------------------------------------
+*/
+$costoPromedioEmpaqueAnioAnterior = [];
+
+$sqlCostoPromedioEmpaqueAnioAnterior = "
+    SELECT
+        CONCAT(TRIM(m.CVE_PROD), '|', TRIM(m.UNIUSU)) as clave_empaque,
+        AVG(m.COSTO_ENT) AS costo_promedio
+    FROM movs m
+    WHERE YEAR(" . $campoFechaMovsSql . ") = ?
+      AND TRIM(m.TIPO_MOV) = 'S'
+      AND m.LUGAR = ?
+      AND TRIM(m.UNIUSU) <> ''
+";
+
+$paramsCostoPromedioEmpaqueAnioAnterior = [$anioAnterior, $lugarEmpaques];
+
+if (!$usarTodosLosProductos && !empty($productosEmpaques)) {
+  $placeholders = createPlaceholders($productosEmpaques);
+  $sqlCostoPromedioEmpaqueAnioAnterior .= " AND TRIM(m.CVE_PROD) IN ($placeholders) ";
+  $paramsCostoPromedioEmpaqueAnioAnterior = array_merge($paramsCostoPromedioEmpaqueAnioAnterior, $productosEmpaques);
+}
+
+$sqlCostoPromedioEmpaqueAnioAnterior .= " GROUP BY TRIM(m.CVE_PROD), TRIM(m.UNIUSU) ";
+
+$stmtCostoPromedioEmpaqueAnioAnterior = $pdoMovs->prepare($sqlCostoPromedioEmpaqueAnioAnterior);
+$stmtCostoPromedioEmpaqueAnioAnterior->execute($paramsCostoPromedioEmpaqueAnioAnterior);
+
+while ($row = $stmtCostoPromedioEmpaqueAnioAnterior->fetch()) {
+  $costoPromedioEmpaqueAnioAnterior[$row['clave_empaque']] = (float)$row['costo_promedio'];
+}
+
+/*
+|--------------------------------------------------------------------------
+| 9a3.5) PRECIO PROMEDIO POR EMPAQUE DEL AÑO ACTUAL
+|--------------------------------------------------------------------------
+*/
+$costoPromedioEmpaqueAnioActual = [];
+
+$sqlCostoPromedioEmpaqueAnioActual = "
+    SELECT
+        CONCAT(TRIM(m.CVE_PROD), '|', TRIM(m.UNIUSU)) as clave_empaque,
+        AVG(m.COSTO_ENT) AS costo_promedio
+    FROM movs m
+    WHERE YEAR(" . $campoFechaMovsSql . ") = ?
+      AND TRIM(m.TIPO_MOV) = 'S'
+      AND m.LUGAR = ?
+      AND TRIM(m.UNIUSU) <> ''
+";
+
+$paramsCostoPromedioEmpaqueAnioActual = [$anioActual, $lugarEmpaques];
+
+if (!$usarTodosLosProductos && !empty($productosEmpaques)) {
+  $placeholders = createPlaceholders($productosEmpaques);
+  $sqlCostoPromedioEmpaqueAnioActual .= " AND TRIM(m.CVE_PROD) IN ($placeholders) ";
+  $paramsCostoPromedioEmpaqueAnioActual = array_merge($paramsCostoPromedioEmpaqueAnioActual, $productosEmpaques);
+}
+
+$sqlCostoPromedioEmpaqueAnioActual .= " GROUP BY TRIM(m.CVE_PROD), TRIM(m.UNIUSU) ";
+
+$stmtCostoPromedioEmpaqueAnioActual = $pdoMovs->prepare($sqlCostoPromedioEmpaqueAnioActual);
+$stmtCostoPromedioEmpaqueAnioActual->execute($paramsCostoPromedioEmpaqueAnioActual);
+
+while ($row = $stmtCostoPromedioEmpaqueAnioActual->fetch()) {
+  $costoPromedioEmpaqueAnioActual[$row['clave_empaque']] = (float)$row['costo_promedio'];
+}
+
+/*
+|--------------------------------------------------------------------------
+| 9a4) IMPACTO ECONÓMICO POR EMPAQUE DEL AÑO ANTERIOR (cantidad * costo)
+|--------------------------------------------------------------------------
+*/
+$impactoEconomicoEmpaqueAnioAnterior = [];
+
+$sqlImpactoEmpaqueAnioAnterior = "
+    SELECT
+        CONCAT(TRIM(m.CVE_PROD), '|', TRIM(m.UNIUSU)) as clave_empaque,
+        SUM(m.CANT_PROD) AS cantidad,
+        AVG(m.COSTO_ENT) AS costo_promedio
+    FROM movs m
+    WHERE YEAR(" . $campoFechaMovsSql . ") = ?
+      AND TRIM(m.TIPO_MOV) = 'S'
+      AND m.LUGAR = ?
+      AND TRIM(m.UNIUSU) <> ''
+";
+
+$paramsImpactoEmpaqueAnioAnterior = [$anioAnterior, $lugarEmpaques];
+
+if (!$usarTodosLosProductos && !empty($productosEmpaques)) {
+  $placeholders = createPlaceholders($productosEmpaques);
+  $sqlImpactoEmpaqueAnioAnterior .= " AND TRIM(m.CVE_PROD) IN ($placeholders) ";
+  $paramsImpactoEmpaqueAnioAnterior = array_merge($paramsImpactoEmpaqueAnioAnterior, $productosEmpaques);
+}
+
+$sqlImpactoEmpaqueAnioAnterior .= " GROUP BY TRIM(m.CVE_PROD), TRIM(m.UNIUSU) ";
+
+$stmtImpactoEmpaqueAnioAnterior = $pdoMovs->prepare($sqlImpactoEmpaqueAnioAnterior);
+$stmtImpactoEmpaqueAnioAnterior->execute($paramsImpactoEmpaqueAnioAnterior);
+
+while ($row = $stmtImpactoEmpaqueAnioAnterior->fetch()) {
+  $cantidad = (float)$row['cantidad'];
+  $costo = (float)$row['costo_promedio'];
+  $impactoEconomicoEmpaqueAnioAnterior[$row['clave_empaque']] = $cantidad * $costo;
+}
+
+/*
+|--------------------------------------------------------------------------
+| 9a5) IMPACTO ECONÓMICO POR EMPAQUE DEL AÑO ACTUAL (cantidad * costo)
+|--------------------------------------------------------------------------
+*/
+$impactoEconomicoEmpaqueAnioActual = [];
+
+$sqlImpactoEmpaqueAnioActual = "
+    SELECT
+        CONCAT(TRIM(m.CVE_PROD), '|', TRIM(m.UNIUSU)) as clave_empaque,
+        SUM(m.CANT_PROD) AS cantidad,
+        AVG(m.COSTO_ENT) AS costo_promedio
+    FROM movs m
+    WHERE YEAR(" . $campoFechaMovsSql . ") = ?
+      AND TRIM(m.TIPO_MOV) = 'S'
+      AND m.LUGAR = ?
+      AND TRIM(m.UNIUSU) <> ''
+";
+
+$paramsImpactoEmpaqueAnioActual = [$anioActual, $lugarEmpaques];
+
+if (!$usarTodosLosProductos && !empty($productosEmpaques)) {
+  $placeholders = createPlaceholders($productosEmpaques);
+  $sqlImpactoEmpaqueAnioActual .= " AND TRIM(m.CVE_PROD) IN ($placeholders) ";
+  $paramsImpactoEmpaqueAnioActual = array_merge($paramsImpactoEmpaqueAnioActual, $productosEmpaques);
+}
+
+$sqlImpactoEmpaqueAnioActual .= " GROUP BY TRIM(m.CVE_PROD), TRIM(m.UNIUSU) ";
+
+$stmtImpactoEmpaqueAnioActual = $pdoMovs->prepare($sqlImpactoEmpaqueAnioActual);
+$stmtImpactoEmpaqueAnioActual->execute($paramsImpactoEmpaqueAnioActual);
+
+while ($row = $stmtImpactoEmpaqueAnioActual->fetch()) {
+  $cantidad = (float)$row['cantidad'];
+  $costo = (float)$row['costo_promedio'];
+  $impactoEconomicoEmpaqueAnioActual[$row['clave_empaque']] = $cantidad * $costo;
+}
+
+/*
+|--------------------------------------------------------------------------
+| 9b) TOTALES DE CANTIDAD Y COSTO POR EMPAQUE/UNIDAD (VARIACIÓN ACTUAL VS ANTERIOR)
+|--------------------------------------------------------------------------
+*/
+$totalesCantidadEmpaque = [];
+$totalesCostoEmpaque = [];
+$variacionCantidadEmpaque = []; // Para semáforo
+$variacionCostoEmpaque = []; // Para semáforo en modo costo
+
+foreach ($empaquessCatalogo as $empaque) {
+  // Cantidad
+  $cantidadActual = (float)($cantidadEmpaqueAnioActual[$empaque] ?? 0.0);
+  $cantidadAnterior = (float)($cantidadEmpaqueAnioAnterior[$empaque] ?? 0.0);
+  $variacionCantidad = $cantidadAnterior > 0 ? (($cantidadActual - $cantidadAnterior) / $cantidadAnterior) * 100 : 0;
+
+  // Costo (precio promedio unitario)
+  $costoPromActual = (float)($costoPromedioEmpaqueAnioActual[$empaque] ?? 0.0);
+  $costoPromAnterior = (float)($costoPromedioEmpaqueAnioAnterior[$empaque] ?? 0.0);
+  $variacionCosto = $costoPromAnterior > 0 ? (($costoPromActual - $costoPromAnterior) / $costoPromAnterior) * 100 : 0;
+
+  // Para ordenamiento, usar impacto económico total
+  $costoActual = (float)($impactoEconomicoEmpaqueAnioActual[$empaque] ?? 0.0);
+
+  $totalesCantidadEmpaque[$empaque] = $cantidadActual;
+  $totalesCostoEmpaque[$empaque] = $costoActual;
+  $variacionCantidadEmpaque[$empaque] = $variacionCantidad;
+  $variacionCostoEmpaque[$empaque] = $variacionCosto;
+}
+
+/*
+|--------------------------------------------------------------------------
 | 10) RESÚMENES POR SEMANA PARA LA MATRIZ
 |--------------------------------------------------------------------------
 */
@@ -696,12 +974,24 @@ return [
   'empaquesEtiquetas' => $empaquesEtiquetas,
   'unidadesCatalogo' => $unidadesCatalogo,
   'matrizEmpaques' => $matrizEmpaques,
+  'matrizCostos' => $matrizCostos,
   'produccionPivotPorSemana' => $produccionPivotPorSemana,
   'matrizRatioEmpaques' => $matrizRatioEmpaques,
+  'matrizImpactoEconomicoEmpaques' => $matrizImpactoEconomicoEmpaques,
   'ratioBasePorEmpaque' => $ratioBasePorEmpaque,
   'totalesPorSemana' => $totalesPorSemana,
   'produccionPorSemana' => $produccionPorSemana,
   'ratioPorSemana' => $ratioPorSemana,
+  'totalesCantidadEmpaque' => $totalesCantidadEmpaque,
+  'totalesCostoEmpaque' => $totalesCostoEmpaque,
+  'cantidadEmpaqueAnioAnterior' => $cantidadEmpaqueAnioAnterior,
+  'cantidadEmpaqueAnioActual' => $cantidadEmpaqueAnioActual,
+  'variacionCantidadEmpaque' => $variacionCantidadEmpaque,
+  'costoPromedioEmpaqueAnioAnterior' => $costoPromedioEmpaqueAnioAnterior,
+  'costoPromedioEmpaqueAnioActual' => $costoPromedioEmpaqueAnioActual,
+  'variacionCostoEmpaque' => $variacionCostoEmpaque,
+  'impactoEconomicoEmpaqueAnioAnterior' => $impactoEconomicoEmpaqueAnioAnterior,
+  'impactoEconomicoEmpaqueAnioActual' => $impactoEconomicoEmpaqueAnioActual,
 
   'maxRatio' => $maxRatio,
   'version' => $version,

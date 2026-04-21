@@ -118,9 +118,7 @@ $grupoActual = null; // no aplica para productos individuales
 
 <body>
   <?php require __DIR__ . '/../../shared/partials/header.php'; ?>
-  <?php if ($modo !== 'impacto'): ?>
-    <?php require __DIR__ . '/../../shared/partials/kpis.php'; ?>
-  <?php endif; ?>
+  <?php require __DIR__ . '/../../shared/partials/kpis.php'; ?>
 
   <?php if ($mostrarGrafica): ?>
     <?php require __DIR__ . '/../../shared/partials/chart.php'; ?>
