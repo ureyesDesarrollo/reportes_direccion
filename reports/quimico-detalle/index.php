@@ -93,7 +93,8 @@ $datosAnioActual = $normalizarFilas($datosAnioActual ?? []);
 |--------------------------------------------------------------------------
 */
 $isGrupo = false;
-$urlVolverIndex = '../index.php';
+$urlVolverIndex = '../quimicos-produccion/index.php';
+$urlVolverLabel = 'Regresar al general';
 $grupoActual = null; // no aplica para productos individuales
 ?>
 <!DOCTYPE html>

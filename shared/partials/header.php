@@ -6,6 +6,7 @@
 /** @var array $meta */
 /** @var string $modo */
 /** @var string $urlVolverIndex */
+/** @var string $urlVolverLabel */
 /** @var bool $isGrupo */
 /** @var string $grupoActual */
 /** @var string $productoSeleccionado */
@@ -101,7 +102,7 @@ $urlImpacto = $basePath . '?' . http_build_query(array_merge($queryBase, ['modo'
             color:#334155;
           ">
           <i class="fas fa-arrow-left"></i>
-          Regresar al index
+          <?= htmlspecialchars($urlVolverLabel ?? 'Regresar al inicio') ?>
         </a>
       </div>
 

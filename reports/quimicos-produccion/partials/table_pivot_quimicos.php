@@ -15,6 +15,7 @@
 /** @var array $variacionCostoQuimico */
 /** @var array $impactoEconomicoAnioAnterior */
 /** @var array $impactoEconomicoAnioActual */
+/** @var array $matrizCostos */
 /** @var array $totalesPorSemana */
 /** @var array $produccionPorSemana */
 /** @var array $ratioPorSemana */
@@ -104,6 +105,9 @@ $grupoEstructura = $meta['grupo_estructura'] ?? [];
           <th class="sticky-col sticky-header-col" style="width: 90px; text-align: center;">
             <div style="font-size: 0.85em; font-weight: 600;">Actual | Var%</div>
           </th>
+          <th class="sticky-col sticky-header-col col-costo-unit" style="width: 80px; text-align: center; display: none;">
+            <div style="font-size: 0.85em; font-weight: 600;">Costo Unit.<br><small style="font-weight:400;"><?= $anioAnterior ?></small></div>
+          </th>
 
           <?php foreach ($semanasCatalogo as $index => $semana): ?>
             <th
@@ -132,7 +136,7 @@ $grupoEstructura = $meta['grupo_estructura'] ?? [];
         <?php else: ?>
 
           <?php foreach ($quimicosCatalogo as $quimico): ?>
-            <tr data-quimico="<?= htmlspecialchars($quimico) ?>">
+            <tr data-quimico="<?= htmlspecialchars($quimico) ?>" data-costo-unit-anterior="<?= (float)($costoPromedioAnioAnterior[$quimico] ?? 0) ?>">
               <td class="sticky-col pivot-product-col">
                 <?php
                 $etiqueta = $quimicosEtiquetas[$quimico] ?? $quimico;
@@ -187,6 +191,11 @@ $grupoEstructura = $meta['grupo_estructura'] ?? [];
                 </div>
               </td>
 
+              <?php $costoUnitAnterior = (float)($costoPromedioAnioAnterior[$quimico] ?? 0); ?>
+              <td class="sticky-col col-costo-unit" style="text-align: center; background: #f8fafc; display: none;">
+                <span style="font-size: 0.85em; font-weight: 600;"><?= $costoUnitAnterior > 0 ? '$' . n($costoUnitAnterior, 2) : '-' ?></span>
+              </td>
+
               <?php foreach ($semanasCatalogo as $index => $semana): ?>
                 <?php
                 $ratioQuimico = $matrizRatioQuimicos[$quimico][$semana] ?? null;
@@ -194,7 +203,8 @@ $grupoEstructura = $meta['grupo_estructura'] ?? [];
                 $impactoEconomico = $matrizImpactoEconomicoQuimicos[$quimico][$semana] ?? null;
                 [$estadoCelda, $colorCelda, $colorHexCelda] = semaforo($ratioQuimico, $baseQuimico, $toleranciaPct);
                 ?>
-                <td class="week-col cell-ratio-semaforo" data-week-index="<?= $index ?>" data-ratio="<?= $ratioQuimico !== null ? (float)$ratioQuimico : 'null' ?>" data-costo="<?= $impactoEconomico !== null ? (float)$impactoEconomico : 'null' ?>">
+                <?php $costoUnitSemana = (float)($matrizCostos[$quimico][$semana] ?? 0); ?>
+                <td class="week-col cell-ratio-semaforo" data-week-index="<?= $index ?>" data-ratio="<?= $ratioQuimico !== null ? (float)$ratioQuimico : 'null' ?>" data-costo="<?= $impactoEconomico !== null ? (float)$impactoEconomico : 'null' ?>" data-costo-unitario="<?= $costoUnitSemana ?>">
                   <div class="ratio-semaforo-wrap">
                     <div class="ratio-value">
                       <strong><?= $ratioQuimico !== null ? n((float)$ratioQuimico, 2) : '-' ?></strong>
@@ -221,6 +231,7 @@ $grupoEstructura = $meta['grupo_estructura'] ?? [];
             <td class="sticky-col pivot-summary-col"><strong>TOTAL QUIMICOS</strong></td>
             <td class="sticky-col" style="background: #f8fafc;"></td>
             <td class="sticky-col" style="background: #f8fafc;"></td>
+            <td class="sticky-col col-costo-unit" style="background: #f8fafc; display: none;"></td>
             <?php foreach ($semanasCatalogo as $index => $semana): ?>
               <td class="week-col" data-week-index="<?= $index ?>">
                 <strong><?= n((float)($totalesPorSemana[$semana] ?? 0), 2) ?></strong>
@@ -232,6 +243,7 @@ $grupoEstructura = $meta['grupo_estructura'] ?? [];
             <td class="sticky-col pivot-summary-col"><strong>PRODUCCION</strong></td>
             <td class="sticky-col" style="background: #f8fafc;"></td>
             <td class="sticky-col" style="background: #f8fafc;"></td>
+            <td class="sticky-col col-costo-unit" style="background: #f8fafc; display: none;"></td>
             <?php foreach ($semanasCatalogo as $index => $semana): ?>
               <td class="week-col" data-week-index="<?= $index ?>">
                 <strong><?= n((float)($produccionPorSemana[$semana] ?? 0), 2) ?></strong>
@@ -243,6 +255,7 @@ $grupoEstructura = $meta['grupo_estructura'] ?? [];
             <td class="sticky-col pivot-summary-col"><strong>RATIO</strong></td>
             <td class="sticky-col" style="background: #f8fafc;"></td>
             <td class="sticky-col" style="background: #f8fafc;"></td>
+            <td class="sticky-col col-costo-unit" style="background: #f8fafc; display: none;"></td>
             <?php foreach ($semanasCatalogo as $index => $semana): ?>
               <?php
               $ratio = $ratioPorSemana[$semana] ?? null;
@@ -381,17 +394,56 @@ $grupoEstructura = $meta['grupo_estructura'] ?? [];
 
       // Función para cambiar los valores mostrados en las celdas
       function cambiarModoVisualizacion(modo) {
+        // Mostrar/ocultar columna de costo unitario anterior
+        document.querySelectorAll('#pivotTable .col-costo-unit').forEach(el => {
+          el.style.display = modo === 'costo' ? '' : 'none';
+        });
+
+        // Ampliar/restaurar la tabla al activar modo costo
+        // Rompe el padding del cards-section para ganar espacio extra
+        const cardsSection = table.closest('.cards-section');
+        const wrapper = table.closest('.table-wrapper-pivot');
+        if (modo === 'costo') {
+          if (cardsSection) {
+            cardsSection.style.marginLeft = '-80                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      px';
+            cardsSection.style.marginRight = '-80px';
+            cardsSection.style.borderRadius = '0';
+          }
+          if (wrapper) {
+            wrapper.style.marginLeft = '0';
+            wrapper.style.marginRight = '0';
+          }
+          table.style.minWidth = '';
+        } else {
+          if (cardsSection) {
+            cardsSection.style.marginLeft = '';
+            cardsSection.style.marginRight = '';
+            cardsSection.style.borderRadius = '';
+          }
+          if (wrapper) {
+            wrapper.style.marginLeft = '';
+            wrapper.style.marginRight = '';
+          }
+          table.style.minWidth = '';
+        }
         // Cambiar valores en celdas de semanas
         const celdas = table.querySelectorAll('td.cell-ratio-semaforo');
         celdas.forEach(celda => {
           const ratioValue = celda.querySelector('.ratio-value strong');
           const ratioBase = celda.querySelector('.ratio-base-cell');
+          const badge = celda.querySelector('.status-badge.status-badge-ratio');
+
+          // Guardar HTML original del badge antes de la primera modificación
+          if (badge && !celda.hasAttribute('data-badge-original')) {
+            celda.setAttribute('data-badge-original', badge.innerHTML);
+            celda.setAttribute('data-badge-style-original', badge.getAttribute('style') || '');
+            celda.setAttribute('data-badge-title-original', badge.getAttribute('title') || '');
+          }
 
           if (modo === 'costo') {
-            const costo = parseFloat(celda.getAttribute('data-costo'));
-            if (!isNaN(costo) && costo !== null) {
-              // Mostrar en dinero con símbolo de pesos y separador de miles
-              ratioValue.textContent = '$' + costo.toLocaleString('es-MX', {
+            const costoUnit = parseFloat(celda.getAttribute('data-costo-unitario'));
+            if (!isNaN(costoUnit) && costoUnit > 0) {
+              ratioValue.textContent = '$' + costoUnit.toLocaleString('es-MX', {
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2
               });
@@ -399,6 +451,32 @@ $grupoEstructura = $meta['grupo_estructura'] ?? [];
             } else {
               ratioValue.textContent = '-';
               ratioBase.style.display = 'none';
+            }
+
+            // Actualizar badge según costo unitario semanal vs año anterior
+            if (badge) {
+              const row = celda.closest('tr[data-quimico]');
+              const costoUnitAnterior = row ? parseFloat(row.getAttribute('data-costo-unit-anterior')) : NaN;
+              let badgeColor, badgeLabel;
+              if (!isNaN(costoUnit) && costoUnit > 0 && !isNaN(costoUnitAnterior) && costoUnitAnterior > 0) {
+                const variacionUnit = (costoUnit - costoUnitAnterior) / costoUnitAnterior * 100;
+                badgeColor = variacionUnit > 6 ? '#ef4444' : (variacionUnit > 0 ? '#f59e0b' : '#10b981');
+                badgeLabel = variacionUnit > 6 ? 'Alto' : (variacionUnit > 0 ? 'Cuidado' : 'Óptimo');
+              } else {
+                badgeColor = '#94a3b8';
+                badgeLabel = 'Sin dato';
+              }
+              const dot = badge.querySelector('.status-dot');
+              if (dot) dot.style.background = badgeColor;
+              badge.style.background = badgeColor + '15';
+              badge.style.color = badgeColor;
+              badge.style.border = '1px solid ' + badgeColor + '30';
+              badge.title = badgeLabel;
+              badge.childNodes.forEach(node => {
+                if (node.nodeType === Node.TEXT_NODE && node.textContent.trim() !== '') {
+                  node.textContent = ' ' + badgeLabel;
+                }
+              });
             }
           } else {
             // Modo consumo - mostrar ratio
@@ -409,6 +487,13 @@ $grupoEstructura = $meta['grupo_estructura'] ?? [];
             } else {
               ratioValue.textContent = '-';
               ratioBase.style.display = 'block';
+            }
+
+            // Restaurar badge original
+            if (badge && celda.hasAttribute('data-badge-original')) {
+              badge.innerHTML = celda.getAttribute('data-badge-original');
+              badge.setAttribute('style', celda.getAttribute('data-badge-style-original'));
+              badge.setAttribute('title', celda.getAttribute('data-badge-title-original'));
             }
           }
         });

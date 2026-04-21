@@ -1066,7 +1066,7 @@ tbody tr:hover {
 }
 
 .table-pivot-quimicos {
-  min-width: 1200px;
+  width: 100%;
   white-space: nowrap;
 }
 
@@ -1107,7 +1107,8 @@ tbody tr:hover {
 }
 
 .week-col-header {
-  min-width: 92px;
+  min-width: 72px;
+  max-width: 90px;
   background: #f8fafc;
 }
 

@@ -42,6 +42,18 @@ $anioAnterior = $anioActual - 1;
 
 validateReportColumns($campoFechaMovs);
 
+$cacheKey = 'report_' . md5(serialize([
+  $config,
+  $appConfig['cards_por_pagina'] ?? 9,
+  $appConfig['filas_por_pagina'] ?? 15,
+  filemtime(__FILE__),
+  date('Y-m-d'),
+]));
+$cached = getCache($cacheKey);
+if ($cached !== null) {
+  return $cached;
+}
+
 $state = ReportEngine::createContext($config, $appConfig, $dbConfig);
 $pdoMovs = $state['pdoMovs'];
 $pdoProd = $state['pdoProd'];
@@ -160,7 +172,7 @@ if (empty($rowsPivot) && $cveMov !== null && $cveMov !== '') {
 
 /*
 |--------------------------------------------------------------------------
-| 2) TOTAL DE EMPAQUES POR SEMANA
+| 2) TOTAL DE EMPAQUES POR SEMANA (kg normalizados + cantidad bruta, query unificada)
 |--------------------------------------------------------------------------
 */
 $sqlEmpaques = "
@@ -172,68 +184,7 @@ $sqlEmpaques = "
                 WHEN UPPER(TRIM(m.UNIUSU)) IN ('G','GR','GRAMO','GRAMOS') THEN m.CANT_PROD / 1000
                 ELSE m.CANT_PROD
             END
-        ) AS empaques_kg
-    FROM movs m
-    WHERE $campoFechaMovsSql >= ?
-      AND TRIM(m.TIPO_MOV) = 'S'
-      AND m.LUGAR = ?
-";
-
-$paramsEmpaques = [$fechaDesde, $lugarEmpaques];
-
-// Agregar productos a ignorar
-if (!empty($productosAIgnorar)) {
-  $placeholdersIgnorar = createPlaceholders($productosAIgnorar);
-  $sqlEmpaques .= " AND m.CVE_PROD NOT IN ($placeholdersIgnorar) ";
-  $paramsEmpaques = array_merge($paramsEmpaques, $productosAIgnorar);
-}
-
-if (!$usarTodosLosProductos && !empty($productosEmpaques)) {
-  $placeholders = createPlaceholders($productosEmpaques);
-  $sqlEmpaques .= " AND TRIM(m.CVE_PROD) IN ($placeholders) ";
-  $paramsEmpaques = array_merge($paramsEmpaques, $productosEmpaques);
-}
-
-if ($cveMov !== null && $cveMov !== '') {
-  $sqlEmpaques .= " AND m.CVE_MOV = ? ";
-  $paramsEmpaques[] = $cveMov;
-}
-
-$sqlEmpaques .= "
-    GROUP BY YEARWEEK($campoFechaMovsSql, 3)
-    ORDER BY periodo
-";
-
-$stmtE = $pdoMovs->prepare($sqlEmpaques);
-$stmtE->execute($paramsEmpaques);
-
-$empaquesPorPeriodo = [];
-while ($row = $stmtE->fetch()) {
-  $periodo = (int)$row['periodo'];
-  $empaquesPorPeriodo[$periodo] = [
-    'periodo' => $periodo,
-    'semana_iso' => $row['semana_iso'],
-    'semana_inicio' => $row['semana_inicio'],
-    'semana_fin' => $row['semana_fin'],
-    'empaques_kg' => (float)$row['empaques_kg'],
-  ];
-}
-
-/*
-|--------------------------------------------------------------------------
-| 3) PRODUCCIÓN POR SEMANA
-|--------------------------------------------------------------------------
-*/
-$produccionPorPeriodo = ReportEngine::fetchProductionSeries($pdoProd, $fechaDesde);
-
-/*
-|--------------------------------------------------------------------------
-| 3.5) TOTAL DE EMPAQUES POR SEMANA
-|--------------------------------------------------------------------------
-*/
-$sqlEmpaques = "
-    SELECT
-        " . $weekFields . ",
+        ) AS empaques_kg,
         SUM(m.CANT_PROD) AS empaques_cantidad
     FROM movs m
     WHERE $campoFechaMovsSql >= ?
@@ -269,9 +220,17 @@ $sqlEmpaques .= "
 $stmtE = $pdoMovs->prepare($sqlEmpaques);
 $stmtE->execute($paramsEmpaques);
 
+$empaquesPorPeriodo = [];
 $empaquessPorPeriodo = [];
 while ($row = $stmtE->fetch()) {
   $periodo = (int)$row['periodo'];
+  $empaquesPorPeriodo[$periodo] = [
+    'periodo' => $periodo,
+    'semana_iso' => $row['semana_iso'],
+    'semana_inicio' => $row['semana_inicio'],
+    'semana_fin' => $row['semana_fin'],
+    'empaques_kg' => (float)$row['empaques_kg'],
+  ];
   $empaquessPorPeriodo[$periodo] = [
     'periodo' => $periodo,
     'semana_iso' => $row['semana_iso'],
@@ -280,6 +239,13 @@ while ($row = $stmtE->fetch()) {
     'empaques_cantidad' => (float)$row['empaques_cantidad'],
   ];
 }
+
+/*
+|--------------------------------------------------------------------------
+| 3) PRODUCCIÓN POR SEMANA
+|--------------------------------------------------------------------------
+*/
+$produccionPorPeriodo = ReportEngine::fetchProductionSeries($pdoProd, $fechaDesde);
 
 /*
 |--------------------------------------------------------------------------
@@ -649,218 +615,71 @@ $version = time();
 
 /*
 |--------------------------------------------------------------------------
-| 9a) CANTIDAD POR EMPAQUE DEL AÑO ANTERIOR (para ordenamiento)
+| 9a) CANTIDAD Y COSTO POR EMPAQUE — AMBOS AÑOS (query unificada)
 |--------------------------------------------------------------------------
 */
-$cantidadEmpaqueAnioAnterior = [];
-
-$sqlCantidadAnioAnterior = "
-    SELECT
-        CONCAT(TRIM(m.CVE_PROD), '|', TRIM(m.UNIUSU)) as clave_empaque,
-        SUM(m.CANT_PROD) AS cantidad
-    FROM movs m
-    WHERE YEAR(" . $campoFechaMovsSql . ") = ?
-      AND TRIM(m.TIPO_MOV) = 'S'
-      AND m.LUGAR = ?
-      AND TRIM(m.UNIUSU) <> ''
-";
-
-$paramsCantidadAnioAnterior = [$anioAnterior, $lugarEmpaques];
-
-if (!$usarTodosLosProductos && !empty($productosEmpaques)) {
-  $placeholders = createPlaceholders($productosEmpaques);
-  $sqlCantidadAnioAnterior .= " AND TRIM(m.CVE_PROD) IN ($placeholders) ";
-  $paramsCantidadAnioAnterior = array_merge($paramsCantidadAnioAnterior, $productosEmpaques);
-}
-
-$sqlCantidadAnioAnterior .= " GROUP BY TRIM(m.CVE_PROD), TRIM(m.UNIUSU) ORDER BY cantidad DESC ";
-
-$stmtCantidadAnioAnterior = $pdoMovs->prepare($sqlCantidadAnioAnterior);
-$stmtCantidadAnioAnterior->execute($paramsCantidadAnioAnterior);
-
-while ($row = $stmtCantidadAnioAnterior->fetch()) {
-  $cantidadEmpaqueAnioAnterior[$row['clave_empaque']] = (float)$row['cantidad'];
-}
-
-/*
-|--------------------------------------------------------------------------
-| 9a2) CANTIDAD POR EMPAQUE DEL AÑO ACTUAL
-|--------------------------------------------------------------------------
-*/
-$cantidadEmpaqueAnioActual = [];
-
-$sqlCantidadAnioActual = "
-    SELECT
-        CONCAT(TRIM(m.CVE_PROD), '|', TRIM(m.UNIUSU)) as clave_empaque,
-        SUM(m.CANT_PROD) AS cantidad
-    FROM movs m
-    WHERE YEAR(" . $campoFechaMovsSql . ") = ?
-      AND TRIM(m.TIPO_MOV) = 'S'
-      AND m.LUGAR = ?
-      AND TRIM(m.UNIUSU) <> ''
-";
-
-$paramsCantidadAnioActual = [$anioActual, $lugarEmpaques];
-
-if (!$usarTodosLosProductos && !empty($productosEmpaques)) {
-  $placeholders = createPlaceholders($productosEmpaques);
-  $sqlCantidadAnioActual .= " AND TRIM(m.CVE_PROD) IN ($placeholders) ";
-  $paramsCantidadAnioActual = array_merge($paramsCantidadAnioActual, $productosEmpaques);
-}
-
-$sqlCantidadAnioActual .= " GROUP BY TRIM(m.CVE_PROD), TRIM(m.UNIUSU) ORDER BY cantidad DESC ";
-
-$stmtCantidadAnioActual = $pdoMovs->prepare($sqlCantidadAnioActual);
-$stmtCantidadAnioActual->execute($paramsCantidadAnioActual);
-
-while ($row = $stmtCantidadAnioActual->fetch()) {
-  $cantidadEmpaqueAnioActual[$row['clave_empaque']] = (float)$row['cantidad'];
-}
-
-/*
-|--------------------------------------------------------------------------
-| 9a3) PRECIO PROMEDIO POR EMPAQUE DEL AÑO ANTERIOR
-|--------------------------------------------------------------------------
-*/
+$cantidadEmpaqueAnioAnterior      = [];
+$cantidadEmpaqueAnioActual        = [];
 $costoPromedioEmpaqueAnioAnterior = [];
-
-$sqlCostoPromedioEmpaqueAnioAnterior = "
-    SELECT
-        CONCAT(TRIM(m.CVE_PROD), '|', TRIM(m.UNIUSU)) as clave_empaque,
-        AVG(m.COSTO_ENT) AS costo_promedio
-    FROM movs m
-    WHERE YEAR(" . $campoFechaMovsSql . ") = ?
-      AND TRIM(m.TIPO_MOV) = 'S'
-      AND m.LUGAR = ?
-      AND TRIM(m.UNIUSU) <> ''
-";
-
-$paramsCostoPromedioEmpaqueAnioAnterior = [$anioAnterior, $lugarEmpaques];
-
-if (!$usarTodosLosProductos && !empty($productosEmpaques)) {
-  $placeholders = createPlaceholders($productosEmpaques);
-  $sqlCostoPromedioEmpaqueAnioAnterior .= " AND TRIM(m.CVE_PROD) IN ($placeholders) ";
-  $paramsCostoPromedioEmpaqueAnioAnterior = array_merge($paramsCostoPromedioEmpaqueAnioAnterior, $productosEmpaques);
-}
-
-$sqlCostoPromedioEmpaqueAnioAnterior .= " GROUP BY TRIM(m.CVE_PROD), TRIM(m.UNIUSU) ";
-
-$stmtCostoPromedioEmpaqueAnioAnterior = $pdoMovs->prepare($sqlCostoPromedioEmpaqueAnioAnterior);
-$stmtCostoPromedioEmpaqueAnioAnterior->execute($paramsCostoPromedioEmpaqueAnioAnterior);
-
-while ($row = $stmtCostoPromedioEmpaqueAnioAnterior->fetch()) {
-  $costoPromedioEmpaqueAnioAnterior[$row['clave_empaque']] = (float)$row['costo_promedio'];
-}
-
-/*
-|--------------------------------------------------------------------------
-| 9a3.5) PRECIO PROMEDIO POR EMPAQUE DEL AÑO ACTUAL
-|--------------------------------------------------------------------------
-*/
-$costoPromedioEmpaqueAnioActual = [];
-
-$sqlCostoPromedioEmpaqueAnioActual = "
-    SELECT
-        CONCAT(TRIM(m.CVE_PROD), '|', TRIM(m.UNIUSU)) as clave_empaque,
-        AVG(m.COSTO_ENT) AS costo_promedio
-    FROM movs m
-    WHERE YEAR(" . $campoFechaMovsSql . ") = ?
-      AND TRIM(m.TIPO_MOV) = 'S'
-      AND m.LUGAR = ?
-      AND TRIM(m.UNIUSU) <> ''
-";
-
-$paramsCostoPromedioEmpaqueAnioActual = [$anioActual, $lugarEmpaques];
-
-if (!$usarTodosLosProductos && !empty($productosEmpaques)) {
-  $placeholders = createPlaceholders($productosEmpaques);
-  $sqlCostoPromedioEmpaqueAnioActual .= " AND TRIM(m.CVE_PROD) IN ($placeholders) ";
-  $paramsCostoPromedioEmpaqueAnioActual = array_merge($paramsCostoPromedioEmpaqueAnioActual, $productosEmpaques);
-}
-
-$sqlCostoPromedioEmpaqueAnioActual .= " GROUP BY TRIM(m.CVE_PROD), TRIM(m.UNIUSU) ";
-
-$stmtCostoPromedioEmpaqueAnioActual = $pdoMovs->prepare($sqlCostoPromedioEmpaqueAnioActual);
-$stmtCostoPromedioEmpaqueAnioActual->execute($paramsCostoPromedioEmpaqueAnioActual);
-
-while ($row = $stmtCostoPromedioEmpaqueAnioActual->fetch()) {
-  $costoPromedioEmpaqueAnioActual[$row['clave_empaque']] = (float)$row['costo_promedio'];
-}
-
-/*
-|--------------------------------------------------------------------------
-| 9a4) IMPACTO ECONÓMICO POR EMPAQUE DEL AÑO ANTERIOR (cantidad * costo)
-|--------------------------------------------------------------------------
-*/
+$costoPromedioEmpaqueAnioActual   = [];
 $impactoEconomicoEmpaqueAnioAnterior = [];
+$impactoEconomicoEmpaqueAnioActual   = [];
 
-$sqlImpactoEmpaqueAnioAnterior = "
+$sqlAnual = "
     SELECT
-        CONCAT(TRIM(m.CVE_PROD), '|', TRIM(m.UNIUSU)) as clave_empaque,
+        CAST(DATE_FORMAT(" . $campoFechaMovsSql . ", '%x') AS UNSIGNED) AS anio_iso,
+        CONCAT(TRIM(m.CVE_PROD), '|', TRIM(m.UNIUSU)) AS clave_empaque,
         SUM(m.CANT_PROD) AS cantidad,
-        AVG(m.COSTO_ENT) AS costo_promedio
+        CASE WHEN SUM(m.CANT_PROD) > 0
+             THEN SUM(m.COSTO_ENT * m.CANT_PROD) / SUM(m.CANT_PROD)
+             ELSE 0 END AS costo_ponderado
     FROM movs m
-    WHERE YEAR(" . $campoFechaMovsSql . ") = ?
+    WHERE CAST(DATE_FORMAT(" . $campoFechaMovsSql . ", '%x') AS UNSIGNED) IN (?, ?)
       AND TRIM(m.TIPO_MOV) = 'S'
       AND m.LUGAR = ?
       AND TRIM(m.UNIUSU) <> ''
 ";
 
-$paramsImpactoEmpaqueAnioAnterior = [$anioAnterior, $lugarEmpaques];
+$paramsAnual = [$anioAnterior, $anioActual, $lugarEmpaques];
+
+if (!empty($productosAIgnorar)) {
+  $placeholdersIgn = createPlaceholders($productosAIgnorar);
+  $sqlAnual .= " AND m.CVE_PROD NOT IN ($placeholdersIgn) ";
+  $paramsAnual = array_merge($paramsAnual, $productosAIgnorar);
+}
 
 if (!$usarTodosLosProductos && !empty($productosEmpaques)) {
   $placeholders = createPlaceholders($productosEmpaques);
-  $sqlImpactoEmpaqueAnioAnterior .= " AND TRIM(m.CVE_PROD) IN ($placeholders) ";
-  $paramsImpactoEmpaqueAnioAnterior = array_merge($paramsImpactoEmpaqueAnioAnterior, $productosEmpaques);
+  $sqlAnual .= " AND TRIM(m.CVE_PROD) IN ($placeholders) ";
+  $paramsAnual = array_merge($paramsAnual, $productosEmpaques);
 }
 
-$sqlImpactoEmpaqueAnioAnterior .= " GROUP BY TRIM(m.CVE_PROD), TRIM(m.UNIUSU) ";
+if ($cveMov !== null && $cveMov !== '') {
+  $sqlAnual .= " AND m.CVE_MOV = ? ";
+  $paramsAnual[] = $cveMov;
+}
 
-$stmtImpactoEmpaqueAnioAnterior = $pdoMovs->prepare($sqlImpactoEmpaqueAnioAnterior);
-$stmtImpactoEmpaqueAnioAnterior->execute($paramsImpactoEmpaqueAnioAnterior);
+$sqlAnual .= " GROUP BY CAST(DATE_FORMAT(" . $campoFechaMovsSql . ", '%x') AS UNSIGNED), TRIM(m.CVE_PROD), TRIM(m.UNIUSU) ";
 
-while ($row = $stmtImpactoEmpaqueAnioAnterior->fetch()) {
+$stmtAnual = $pdoMovs->prepare($sqlAnual);
+$stmtAnual->execute($paramsAnual);
+
+while ($row = $stmtAnual->fetch()) {
+  $clave    = $row['clave_empaque'];
+  $anio     = (int)$row['anio_iso'];
   $cantidad = (float)$row['cantidad'];
-  $costo = (float)$row['costo_promedio'];
-  $impactoEconomicoEmpaqueAnioAnterior[$row['clave_empaque']] = $cantidad * $costo;
-}
+  $costo    = (float)$row['costo_ponderado'];
+  $impacto  = $cantidad * $costo;
 
-/*
-|--------------------------------------------------------------------------
-| 9a5) IMPACTO ECONÓMICO POR EMPAQUE DEL AÑO ACTUAL (cantidad * costo)
-|--------------------------------------------------------------------------
-*/
-$impactoEconomicoEmpaqueAnioActual = [];
-
-$sqlImpactoEmpaqueAnioActual = "
-    SELECT
-        CONCAT(TRIM(m.CVE_PROD), '|', TRIM(m.UNIUSU)) as clave_empaque,
-        SUM(m.CANT_PROD) AS cantidad,
-        AVG(m.COSTO_ENT) AS costo_promedio
-    FROM movs m
-    WHERE YEAR(" . $campoFechaMovsSql . ") = ?
-      AND TRIM(m.TIPO_MOV) = 'S'
-      AND m.LUGAR = ?
-      AND TRIM(m.UNIUSU) <> ''
-";
-
-$paramsImpactoEmpaqueAnioActual = [$anioActual, $lugarEmpaques];
-
-if (!$usarTodosLosProductos && !empty($productosEmpaques)) {
-  $placeholders = createPlaceholders($productosEmpaques);
-  $sqlImpactoEmpaqueAnioActual .= " AND TRIM(m.CVE_PROD) IN ($placeholders) ";
-  $paramsImpactoEmpaqueAnioActual = array_merge($paramsImpactoEmpaqueAnioActual, $productosEmpaques);
-}
-
-$sqlImpactoEmpaqueAnioActual .= " GROUP BY TRIM(m.CVE_PROD), TRIM(m.UNIUSU) ";
-
-$stmtImpactoEmpaqueAnioActual = $pdoMovs->prepare($sqlImpactoEmpaqueAnioActual);
-$stmtImpactoEmpaqueAnioActual->execute($paramsImpactoEmpaqueAnioActual);
-
-while ($row = $stmtImpactoEmpaqueAnioActual->fetch()) {
-  $cantidad = (float)$row['cantidad'];
-  $costo = (float)$row['costo_promedio'];
-  $impactoEconomicoEmpaqueAnioActual[$row['clave_empaque']] = $cantidad * $costo;
+  if ($anio === $anioAnterior) {
+    $cantidadEmpaqueAnioAnterior[$clave]        = $cantidad;
+    $costoPromedioEmpaqueAnioAnterior[$clave]   = $costo;
+    $impactoEconomicoEmpaqueAnioAnterior[$clave] = $impacto;
+  } else {
+    $cantidadEmpaqueAnioActual[$clave]          = $cantidad;
+    $costoPromedioEmpaqueAnioActual[$clave]     = $costo;
+    $impactoEconomicoEmpaqueAnioActual[$clave]  = $impacto;
+  }
 }
 
 /*
@@ -932,7 +751,7 @@ $chartData = buildChartData($datosAnioActual, $datosAnioAnterior, $anioAnterior,
 | 12) RESPUESTA FINAL
 |--------------------------------------------------------------------------
 */
-return [
+$result = [
   'titulo' => $config['titulo'] ?? 'Empaques en General / Producción',
 
   'anioAnterior' => $anioAnterior,
@@ -1008,3 +827,6 @@ return [
     'cveMov' => $cveMov,
   ],
 ];
+
+setCache($cacheKey, $result, 3600);
+return $result;

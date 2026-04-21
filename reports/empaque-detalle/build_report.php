@@ -43,6 +43,18 @@ if (strpos($productoSeleccionado, '|') !== false) {
   $productoSeleccionado = explode('|', $productoSeleccionado)[0];
 }
 
+$cacheKey = 'report_' . md5(serialize([
+  $config,
+  $appConfig['cards_por_pagina'] ?? 9,
+  $appConfig['filas_por_pagina'] ?? 15,
+  filemtime(__FILE__),
+  date('Y-m-d'),
+]));
+$cached = getCache($cacheKey);
+if ($cached !== null) {
+  return $cached;
+}
+
 $state = ReportEngine::createContext($config, $appConfig, $dbConfig);
 $pdoMovs = $state['pdoMovs'];
 $pdoProd = $state['pdoProd'];
@@ -395,7 +407,7 @@ $chartData = buildChartData($datosAnioActual, $datosAnioAnterior, $anioAnterior,
 | 8) RESPUESTA FINAL
 |--------------------------------------------------------------------------
 */
-return [
+$result = [
   'titulo' => $config['titulo'] ?? 'Empaque / Producción',
   'productoSeleccionado' => $productoSeleccionado,
   'modo' => $modo,
@@ -459,3 +471,6 @@ return [
     'badgeRatio' => $badgeRatio,
   ],
 ];
+
+setCache($cacheKey, $result, 3600);
+return $result;

@@ -15,6 +15,8 @@
 /** @var array $variacionCostoEmpaque */
 /** @var array $impactoEconomicoEmpaqueAnioAnterior */
 /** @var array $impactoEconomicoEmpaqueAnioActual */
+/** @var array $matrizCostos */
+/** @var int $anioAnterior */
 /** @var array $totalesPorSemana */
 /** @var array $produccionPorSemana */
 /** @var array $ratioPorSemana */
@@ -110,6 +112,9 @@ $productosEmpaques = [
           <th class="sticky-col sticky-header-col" style="width: 90px; text-align: center;">
             <div style="font-size: 0.85em; font-weight: 600;">Actual | Var%</div>
           </th>
+          <th class="sticky-col sticky-header-col col-costo-unit" style="width: 80px; text-align: center; display: none;">
+            <div style="font-size: 0.85em; font-weight: 600;">Costo Unit.<br><small style="font-weight:400;"><?= $anioAnterior ?></small></div>
+          </th>
 
           <?php foreach ($semanasCatalogo as $index => $semana): ?>
             <th
@@ -138,7 +143,7 @@ $productosEmpaques = [
         <?php else: ?>
 
           <?php foreach ($empaquessCatalogo as $empaque): ?>
-            <tr>
+            <tr data-empaque="<?= htmlspecialchars($empaque) ?>" data-costo-unit-anterior="<?= (float)($costoPromedioEmpaqueAnioAnterior[$empaque] ?? 0) ?>">
               <td class="sticky-col pivot-product-col">
                 <?php
                 $etiqueta = $empaquesEtiquetas[$empaque] ?? $empaque;
@@ -206,6 +211,11 @@ $productosEmpaques = [
                 </div>
               </td>
 
+              <?php $costoUnitAnterior = (float)($costoPromedioEmpaqueAnioAnterior[$empaque] ?? 0); ?>
+              <td class="sticky-col col-costo-unit" style="text-align: center; background: #f8fafc; display: none;">
+                <span style="font-size: 0.85em; font-weight: 600;"><?= $costoUnitAnterior > 0 ? '$' . n($costoUnitAnterior, 2) : '-' ?></span>
+              </td>
+
               <?php foreach ($semanasCatalogo as $index => $semana): ?>
                 <?php
                 $ratioEmpaque = $matrizRatioEmpaques[$empaque][$semana] ?? null;
@@ -213,7 +223,8 @@ $productosEmpaques = [
                 $impactoEconomico = $matrizImpactoEconomicoEmpaques[$empaque][$semana] ?? null;
                 [$estadoCelda, $colorCelda, $colorHexCelda] = semaforo($ratioEmpaque, $baseEmpaque, $toleranciaPct);
                 ?>
-                <td class="week-col cell-ratio-semaforo" data-week-index="<?= $index ?>" data-ratio="<?= $ratioEmpaque !== null ? (float)$ratioEmpaque : 'null' ?>" data-costo="<?= $impactoEconomico !== null ? (float)$impactoEconomico : 'null' ?>">
+                <?php $costoUnitSemana = (float)($matrizCostos[$empaque][$semana] ?? 0); ?>
+                <td class="week-col cell-ratio-semaforo" data-week-index="<?= $index ?>" data-ratio="<?= $ratioEmpaque !== null ? (float)$ratioEmpaque : 'null' ?>" data-costo="<?= $impactoEconomico !== null ? (float)$impactoEconomico : 'null' ?>" data-costo-unitario="<?= $costoUnitSemana ?>">
                   <div class="ratio-semaforo-wrap">
                     <div class="ratio-value">
                       <strong><?= $ratioEmpaque !== null ? n((float)$ratioEmpaque, 2) : '-' ?></strong>
@@ -240,6 +251,7 @@ $productosEmpaques = [
             <td class="sticky-col pivot-summary-col"><strong>TOTAL EMPAQUES</strong></td>
             <td class="sticky-col" style="background: #f8fafc;"></td>
             <td class="sticky-col" style="background: #f8fafc;"></td>
+            <td class="sticky-col col-costo-unit" style="background: #f8fafc; display: none;"></td>
             <?php foreach ($semanasCatalogo as $index => $semana): ?>
               <td class="week-col" data-week-index="<?= $index ?>">
                 <strong><?= n((float)($totalesPorSemana[$semana] ?? 0), 2) ?></strong>
@@ -251,6 +263,7 @@ $productosEmpaques = [
             <td class="sticky-col pivot-summary-col"><strong>PRODUCCION</strong></td>
             <td class="sticky-col" style="background: #f8fafc;"></td>
             <td class="sticky-col" style="background: #f8fafc;"></td>
+            <td class="sticky-col col-costo-unit" style="background: #f8fafc; display: none;"></td>
             <?php foreach ($semanasCatalogo as $index => $semana): ?>
               <td class="week-col" data-week-index="<?= $index ?>">
                 <strong><?= n((float)($produccionPorSemana[$semana] ?? 0), 2) ?></strong>
@@ -262,6 +275,7 @@ $productosEmpaques = [
             <td class="sticky-col pivot-summary-col"><strong>RATIO</strong></td>
             <td class="sticky-col" style="background: #f8fafc;"></td>
             <td class="sticky-col" style="background: #f8fafc;"></td>
+            <td class="sticky-col col-costo-unit" style="background: #f8fafc; display: none;"></td>
             <?php foreach ($semanasCatalogo as $index => $semana): ?>
               <?php
               $ratio = $ratioPorSemana[$semana] ?? null;
@@ -363,6 +377,12 @@ $productosEmpaques = [
       const totalesCantidad = <?= json_encode($totalesCantidadEmpaque, JSON_UNESCAPED_UNICODE) ?>;
       const totalesCosto = <?= json_encode($totalesCostoEmpaque, JSON_UNESCAPED_UNICODE) ?>;
 
+      function semaforoColor(variacion) {
+        if (variacion > 10) return '#ef4444';
+        if (variacion > 0) return '#f59e0b';
+        return '#10b981';
+      }
+
       function sortTable(modo) {
         const tbody = table.querySelector('tbody');
         if (!tbody) return;
@@ -370,25 +390,12 @@ $productosEmpaques = [
         // Guardar referencia a todas las filas de totales (summary-row)
         const summaryRows = Array.from(tbody.querySelectorAll('tr.summary-row'));
 
-        // Ordenar solo las filas de producto (que NO tienen summary-row)
-        const productRows = Array.from(tbody.querySelectorAll('tr:not(.summary-row)'));
+        // Ordenar solo las filas de producto
+        const productRows = Array.from(tbody.querySelectorAll('tr[data-empaque]'));
 
         productRows.sort((rowA, rowB) => {
-          const linkA = rowA.querySelector('.pivot-link-detail strong');
-          const linkB = rowB.querySelector('.pivot-link-detail strong');
-
-          if (!linkA || !linkB) return 0;
-
-          const etiquetaA = linkA.textContent.trim();
-          const etiquetaB = linkB.textContent.trim();
-
-          // Buscar la clave del empaque en los totales
-          const etiquetas = <?= json_encode($empaquesEtiquetas, JSON_UNESCAPED_UNICODE) ?>;
-          let keyA, keyB;
-          for (const [key, etiqueta] of Object.entries(etiquetas)) {
-            if (etiqueta === etiquetaA) keyA = key;
-            if (etiqueta === etiquetaB) keyB = key;
-          }
+          const keyA = rowA.getAttribute('data-empaque');
+          const keyB = rowB.getAttribute('data-empaque');
 
           if (!keyA || !keyB) return 0;
 
@@ -407,17 +414,54 @@ $productosEmpaques = [
 
       // Función para cambiar los valores mostrados en las celdas
       function cambiarModoVisualizacion(modo) {
+        // Mostrar/ocultar columna de costo unitario anterior
+        document.querySelectorAll('#pivotTable .col-costo-unit').forEach(el => {
+          el.style.display = modo === 'costo' ? '' : 'none';
+        });
+
+        // Ampliar/restaurar la tabla al activar modo costo
+        const cardsSection = table.closest('.cards-section');
+        const wrapper = table.closest('.table-wrapper-pivot');
+        if (modo === 'costo') {
+          if (cardsSection) {
+            cardsSection.style.marginLeft = '-56px';
+            cardsSection.style.marginRight = '-56px';
+            cardsSection.style.borderRadius = '0';
+          }
+          if (wrapper) {
+            wrapper.style.marginLeft = '0';
+            wrapper.style.marginRight = '0';
+          }
+        } else {
+          if (cardsSection) {
+            cardsSection.style.marginLeft = '';
+            cardsSection.style.marginRight = '';
+            cardsSection.style.borderRadius = '';
+          }
+          if (wrapper) {
+            wrapper.style.marginLeft = '';
+            wrapper.style.marginRight = '';
+          }
+        }
+
         // Cambiar valores en celdas de semanas
         const celdas = table.querySelectorAll('td.cell-ratio-semaforo');
         celdas.forEach(celda => {
           const ratioValue = celda.querySelector('.ratio-value strong');
           const ratioBase = celda.querySelector('.ratio-base-cell');
+          const badge = celda.querySelector('.status-badge.status-badge-ratio');
+
+          // Guardar HTML original del badge antes de la primera modificación
+          if (badge && !celda.hasAttribute('data-badge-original')) {
+            celda.setAttribute('data-badge-original', badge.innerHTML);
+            celda.setAttribute('data-badge-style-original', badge.getAttribute('style') || '');
+            celda.setAttribute('data-badge-title-original', badge.getAttribute('title') || '');
+          }
 
           if (modo === 'costo') {
-            const costo = parseFloat(celda.getAttribute('data-costo'));
-            if (!isNaN(costo) && costo !== null) {
-              // Mostrar en dinero con símbolo de pesos y separador de miles
-              ratioValue.textContent = '$' + costo.toLocaleString('es-MX', {
+            const costoUnit = parseFloat(celda.getAttribute('data-costo-unitario'));
+            if (!isNaN(costoUnit) && costoUnit > 0) {
+              ratioValue.textContent = '$' + costoUnit.toLocaleString('es-MX', {
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2
               });
@@ -425,6 +469,32 @@ $productosEmpaques = [
             } else {
               ratioValue.textContent = '-';
               ratioBase.style.display = 'none';
+            }
+
+            // Actualizar badge según costo unitario semanal vs año anterior
+            if (badge) {
+              const row = celda.closest('tr[data-empaque]');
+              const costoUnitAnterior = row ? parseFloat(row.getAttribute('data-costo-unit-anterior')) : NaN;
+              let badgeColor, badgeLabel;
+              if (!isNaN(costoUnit) && costoUnit > 0 && !isNaN(costoUnitAnterior) && costoUnitAnterior > 0) {
+                const variacionUnit = (costoUnit - costoUnitAnterior) / costoUnitAnterior * 100;
+                badgeColor = variacionUnit > 6 ? '#ef4444' : (variacionUnit > 0 ? '#f59e0b' : '#10b981');
+                badgeLabel = variacionUnit > 6 ? 'Alto' : (variacionUnit > 0 ? 'Cuidado' : 'Óptimo');
+              } else {
+                badgeColor = '#94a3b8';
+                badgeLabel = 'Sin dato';
+              }
+              const dot = badge.querySelector('.status-dot');
+              if (dot) dot.style.background = badgeColor;
+              badge.style.background = badgeColor + '15';
+              badge.style.color = badgeColor;
+              badge.style.border = '1px solid ' + badgeColor + '30';
+              badge.title = badgeLabel;
+              badge.childNodes.forEach(node => {
+                if (node.nodeType === Node.TEXT_NODE && node.textContent.trim() !== '') {
+                  node.textContent = ' ' + badgeLabel;
+                }
+              });
             }
           } else {
             // Modo cantidad - mostrar ratio
@@ -436,11 +506,18 @@ $productosEmpaques = [
               ratioValue.textContent = '-';
               ratioBase.style.display = 'block';
             }
+
+            // Restaurar badge original
+            if (badge && celda.hasAttribute('data-badge-original')) {
+              badge.innerHTML = celda.getAttribute('data-badge-original');
+              badge.setAttribute('style', celda.getAttribute('data-badge-style-original'));
+              badge.setAttribute('title', celda.getAttribute('data-badge-title-original'));
+            }
           }
         });
 
         // Cambiar valores en columnas adhesivas (Anterior y Actual)
-        const rowsProducto = table.querySelectorAll('tbody tr:not(.summary-row)');
+        const rowsProducto = table.querySelectorAll('tbody tr[data-empaque]');
         rowsProducto.forEach(row => {
           const celdaAnterior = row.querySelector('td.sticky-col[data-valor-anterior]');
           const celdaActual = row.querySelector('td.sticky-col[data-variacion]');
@@ -450,8 +527,10 @@ $productosEmpaques = [
               const costoAnterior = parseFloat(celdaAnterior.getAttribute('data-valor-costo-anterior'));
               const costoActual = parseFloat(celdaActual.getAttribute('data-valor-costo-actual'));
               const variacionCosto = parseFloat(celdaActual.getAttribute('data-variacion-costo'));
+              const color = semaforoColor(variacionCosto);
 
-              // Actualizar Anterior
+              celdaActual.style.borderLeftColor = color;
+
               const spanAnterior = celdaAnterior.querySelector('.valor-anterior');
               if (spanAnterior && !isNaN(costoAnterior)) {
                 spanAnterior.textContent = '$' + costoAnterior.toLocaleString('es-MX', {
@@ -460,7 +539,6 @@ $productosEmpaques = [
                 });
               }
 
-              // Actualizar Actual y Variación
               const spanActual = celdaActual.querySelector('.valor-actual');
               const spanVariacion = celdaActual.querySelector('.variacion-texto');
               if (spanActual && !isNaN(costoActual)) {
@@ -470,6 +548,7 @@ $productosEmpaques = [
                 });
               }
               if (spanVariacion && !isNaN(variacionCosto)) {
+                spanVariacion.style.color = color;
                 spanVariacion.textContent = (variacionCosto >= 0 ? '+' : '') + variacionCosto.toFixed(1) + '%';
               }
             } else {
@@ -477,6 +556,9 @@ $productosEmpaques = [
               const cantidadAnterior = parseFloat(celdaAnterior.getAttribute('data-valor-anterior'));
               const cantidadActual = parseFloat(celdaActual.getAttribute('data-valor-actual'));
               const variacionCantidad = parseFloat(celdaActual.getAttribute('data-variacion'));
+              const color = semaforoColor(variacionCantidad);
+
+              celdaActual.style.borderLeftColor = color;
 
               const spanAnterior = celdaAnterior.querySelector('.valor-anterior');
               if (spanAnterior && !isNaN(cantidadAnterior)) {
@@ -489,6 +571,7 @@ $productosEmpaques = [
                 spanActual.textContent = cantidadActual.toFixed(2);
               }
               if (spanVariacion && !isNaN(variacionCantidad)) {
+                spanVariacion.style.color = color;
                 spanVariacion.textContent = (variacionCantidad >= 0 ? '+' : '') + variacionCantidad.toFixed(1) + '%';
               }
             }
