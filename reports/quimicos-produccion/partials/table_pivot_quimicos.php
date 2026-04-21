@@ -405,7 +405,7 @@ $grupoEstructura = $meta['grupo_estructura'] ?? [];
         const wrapper = table.closest('.table-wrapper-pivot');
         if (modo === 'costo') {
           if (cardsSection) {
-            cardsSection.style.marginLeft = '-80                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      px';
+            cardsSection.style.marginLeft = '-80px';
             cardsSection.style.marginRight = '-80px';
             cardsSection.style.borderRadius = '0';
           }
