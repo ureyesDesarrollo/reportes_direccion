@@ -60,6 +60,7 @@ class ReportEngine
                 SUM(tar_kilos) AS kilos_producidos
             FROM rev_tarimas
             WHERE tar_fecha >= ?
+            AND tar_count_etiquetado > 0
             GROUP BY YEARWEEK(tar_fecha, 3)
             ORDER BY periodo
         ";

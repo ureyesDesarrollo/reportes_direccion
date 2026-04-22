@@ -16,6 +16,7 @@
 
 $modoActual = $modo ?? ($meta['modo'] ?? ($_GET['modo'] ?? 'consumo'));
 $showModeTabs = $showModeTabs ?? true;
+$showImpactoTab = $showImpactoTab ?? true;
 
 $modoActual = $modo ?? ($meta['modo'] ?? ($_GET['modo'] ?? 'consumo'));
 
@@ -192,10 +193,11 @@ $urlImpacto = $basePath . '?' . http_build_query(array_merge($queryBase, ['modo'
             Costo
           </a>
 
-          <a
-            href="<?= htmlspecialchars($urlImpacto) ?>"
-            class="mode-tab <?= $modoActual === 'impacto' ? 'active' : '' ?>"
-            style="
+          <?php if ($showImpactoTab): ?>
+            <a
+              href="<?= htmlspecialchars($urlImpacto) ?>"
+              class="mode-tab <?= $modoActual === 'impacto' ? 'active' : '' ?>"
+              style="
             display:inline-flex;
             align-items:center;
             gap:8px;
@@ -207,9 +209,10 @@ $urlImpacto = $basePath . '?' . http_build_query(array_merge($queryBase, ['modo'
             background:<?= $modoActual === 'impacto' ? 'rgba(245,158,11,0.10)' : '#ffffff' ?>;
             color:<?= $modoActual === 'impacto' ? '#b45309' : '#334155' ?>;
           ">
-            <i class="fas fa-sack-dollar"></i>
-            Impacto
-          </a>
+              <i class="fas fa-sack-dollar"></i>
+              Impacto
+            </a>
+          <?php endif; ?>
         </div>
       <?php endif; ?>
     </div>

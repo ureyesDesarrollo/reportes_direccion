@@ -18,6 +18,7 @@
   const metricaTitulo = reportConfig.metricaTitulo || 'Consumo';
   const metricaUnidad = reportConfig.metricaUnidad || 'kg';
   const modo = reportConfig.modo || 'consumo';
+  const mostrarProduccion = reportConfig.mostrarProduccion !== false;
 
   let currentCardsAnioAnteriorPage = 0;
   let currentCardsAnioActualPage = 0;
@@ -251,7 +252,8 @@
     if (!tbody) return;
 
     if (paginatedRows.length === 0) {
-      const colspanVal = modo === 'impacto' ? '9' : '8';
+      const colspanVal =
+        modo === 'impacto' ? '9' : mostrarProduccion ? '8' : '7';
       tbody.innerHTML = `<tr><td colspan="${colspanVal}"><div class="empty-state"><i class="fas fa-inbox"></i><p>No hay datos para mostrar</p></div></td></tr>`;
     } else {
       tbody.innerHTML = paginatedRows
@@ -293,8 +295,8 @@
             <td><strong>${escapeHtml(row.semana_iso)}</strong></td>
             <td>${escapeHtml(row.semana_inicio)}</td>
             <td>${escapeHtml(row.semana_fin)}</td>
-            <td>${modo === 'costo' ? '$ ' + formatNumber(row.quimicos, 2) : formatNumber(row.quimicos, 2) + ' ' + metricaUnidad}</td>
-            <td>${formatProductionValue(row.produccion, 2)}</td>
+            <td>${modo === 'costo' ? '$ ' + formatNumber(row.quimicos, 2) : formatNumber(row.quimicos, 2) + (metricaUnidad ? ' ' + metricaUnidad : '')}</td>
+            ${mostrarProduccion ? `<td>${formatProductionValue(row.produccion, 2)}</td>` : ''}
             <td>${row.ratio !== null ? formatNumber(row.ratio, 2) : '-'}</td>
             <td>
               <span class="status-badge" style="background: ${row.colorHex}15; color: ${row.colorHex};">

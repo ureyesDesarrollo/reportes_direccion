@@ -9,7 +9,9 @@ $metricaHeader = $modo === 'costo'
   ? $metricaTitulo . ' ($)'
   : $metricaTitulo . ' (' . $metricaUnidad . ')';
 
-$ratioHeader = $modo === 'costo' ? 'Ratio ($/kg)' : 'Ratio (kg/kg)';
+$mostrarProduccion = $meta['mostrarProduccion'] ?? true;
+$ratioHeaderOverride = $meta['ratioHeader'] ?? null;
+$ratioHeader = $ratioHeaderOverride ?? ($modo === 'costo' ? 'Ratio ($/kg)' : 'Ratio (kg/kg)');
 if ($modo === 'impacto') {
   $ratioHeader = 'Impacto ($/kg)';
 }
@@ -30,7 +32,7 @@ if ($modo === 'impacto') {
           <th data-sort="consumo_kg">Kilos Utilizados <i class="fas fa-sort"></i></th>
         <?php endif; ?>
         <th data-sort="quimicos"><?= htmlspecialchars($metricaHeader) ?> <i class="fas fa-sort"></i></th>
-        <?php if ($modo !== 'impacto'): ?>
+        <?php if ($modo !== 'impacto' && ($mostrarProduccion ?? true)): ?>
           <th data-sort="produccion">Producción (kg) <i class="fas fa-sort"></i></th>
         <?php endif; ?>
         <th data-sort="ratio"><?= htmlspecialchars($ratioHeader) ?> <i class="fas fa-sort"></i></th>

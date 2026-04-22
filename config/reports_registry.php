@@ -19,6 +19,24 @@ return [
     'url' => './empaques-produccion/index.php',
     'enabled' => true,
   ],
+  [
+    'slug' => 'refacciones-criticas',
+    'title' => 'REFACCIONES CRÍTICAS',
+    'description' => 'Consumo semanal de refacciones críticas con semáforos, comparativa anual y desglose por refacción.',
+    'icon' => 'fa-wrench',
+    'color' => '#10b981',
+    'url' => './refacciones-criticas/index.php',
+    'enabled' => true,
+  ],
+  [
+    'slug' => 'refacciones-generales',
+    'title' => 'REFACCIONES GENERALES',
+    'description' => 'Consumo semanal de refacciones generales con semáforos, comparativa anual y desglose por refacción.',
+    'icon' => 'fa-toolbox',
+    'color' => '#10b981',
+    'url' => './refacciones-generales/index.php',
+    'enabled' => true,
+  ],
 
   // Ejemplos futuros:
   // [

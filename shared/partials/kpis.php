@@ -36,7 +36,7 @@ if ($modo === 'impacto') {
   $kpi2Value = $formatMetrica($totalQuimicosAnioActual);
   $kpi2Trend = '(Actual)';
 
-  $kpi3Label = 'Impacto promedio por kg ' . $anioActual;
+  $kpi3Label = $meta['kpi3LabelImpacto'] ?? ('Impacto promedio por kg ' . $anioActual);
   $kpi3Value = $ratioPromedioAnioActual !== null ? '$ ' . n($ratioPromedioAnioActual, 2) : '-';
   $kpi3Trend = 'Base ' . $anioAnterior . ': ' . ($ratioBase !== null ? '$ ' . n($ratioBase, 2) : '-');
 
@@ -48,6 +48,8 @@ if ($modo === 'impacto') {
   $kpi1Label = 'Total ' . $metricaTitulo . ' ' . $anioAnterior . ' (Base)';
   $kpi1Value = $formatMetrica($totalQuimicosAnioAnterior);
   $kpi1Trend = 'vs ' . $anioActual . ': ' . $formatMetrica($totalQuimicosAnioActual);
+
+  $mostrarProduccion = $meta['mostrarProduccion'] ?? true;
 
   $kpi2Label = 'Total Producción ' . $anioAnterior . ' (Base)';
   $kpi2Value = n($totalProduccionAnioAnterior, 2) . ' kg';
@@ -102,7 +104,7 @@ if ($modo === 'impacto') {
       <div class="kpi-trend"><?= htmlspecialchars($kpi1Trend) ?></div>
     </div>
 
-    <?php if ($modo === 'consumo'): ?>
+    <?php if ($modo === 'consumo' && ($mostrarProduccion ?? true)): ?>
       <div class="kpi-card">
         <div class="kpi-icon">
           <i class="fas fa-industry" style="color: #3b82f6;"></i>
