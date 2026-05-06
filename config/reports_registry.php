@@ -37,6 +37,33 @@ return [
     'url' => './refacciones-generales/index.php',
     'enabled' => true,
   ],
+  [
+    'slug' => 'ventas-por-cliente',
+    'title' => 'VENTAS / Por Cliente',
+    'description' => 'Análisis de ventas y comportamiento de compra por cliente, con semáforos comparativos año anterior vs actual. Clasificación industrial/comercial.',
+    'icon' => 'fa-cart-shopping',
+    'color' => '#f59e0b',
+    'url' => './ventas-por-cliente/index.php',
+    'enabled' => true,
+  ],
+  [
+    'slug' => 'secadores',
+    'title' => 'SECADORES / Temperaturas',
+    'description' => 'Monitoreo histórico en tiempo casi real de temperaturas por túnel, con semáforos configurables por variable y actualización automática.',
+    'icon' => 'fa-fan',
+    'color' => '#0f766e',
+    'url' => './secadores/index.php',
+    'enabled' => true,
+  ],
+  [
+    'slug' => 'biotime-administrativos',
+    'title' => 'BIOTIME / Administrativos',
+    'description' => 'Semáforo de asistencia administrativa desde BioTime con resumen por empleado y detalle diario de incidencias.',
+    'icon' => 'fa-id-badge',
+    'color' => '#0f766e',
+    'url' => './biotime-administrativos/index.php',
+    'enabled' => true,
+  ],
 
   // Ejemplos futuros:
   // [

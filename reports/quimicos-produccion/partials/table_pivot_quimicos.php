@@ -13,9 +13,13 @@
 /** @var array $costoPromedioAnioAnterior */
 /** @var array $costoPromedioAnioActual */
 /** @var array $variacionCostoQuimico */
+/** @var array $costoPorProduccionAnioAnterior */
+/** @var array $costoPorProduccionAnioActual */
+/** @var array $variacionCostoPorProduccionQuimico */
 /** @var array $impactoEconomicoAnioAnterior */
 /** @var array $impactoEconomicoAnioActual */
 /** @var array $matrizCostos */
+/** @var array $matrizCostoProduccionQuimicos */
 /** @var array $totalesPorSemana */
 /** @var array $produccionPorSemana */
 /** @var array $ratioPorSemana */
@@ -47,7 +51,7 @@ $grupoEstructura = $meta['grupo_estructura'] ?? [];
           <i class="fas fa-droplet"></i>
           Consumo
         </button>
-        <button type="button" class="sort-btn" id="sortByCosto" data-sort="costo" title="Ordenar por mayor impacto económico">
+        <button type="button" class="sort-btn" id="sortByCosto" data-sort="costo" title="Ordenar por mayor costo por producción">
           <i class="fas fa-dollar-sign"></i>
           Costo
         </button>
@@ -136,7 +140,10 @@ $grupoEstructura = $meta['grupo_estructura'] ?? [];
         <?php else: ?>
 
           <?php foreach ($quimicosCatalogo as $quimico): ?>
-            <tr data-quimico="<?= htmlspecialchars($quimico) ?>" data-costo-unit-anterior="<?= (float)($costoPromedioAnioAnterior[$quimico] ?? 0) ?>">
+            <tr
+              data-quimico="<?= htmlspecialchars($quimico) ?>"
+              data-costo-unit-anterior="<?= (float)($costoPromedioAnioAnterior[$quimico] ?? 0) ?>"
+              data-costo-produccion-anterior="<?= (float)($costoPorProduccionAnioAnterior[$quimico] ?? 0) ?>">
               <td class="sticky-col pivot-product-col">
                 <?php
                 $etiqueta = $quimicosEtiquetas[$quimico] ?? $quimico;
@@ -165,9 +172,9 @@ $grupoEstructura = $meta['grupo_estructura'] ?? [];
               $anterior = (float)($consumoQuimicoAnioAnterior[$quimico] ?? 0);
               $actual = (float)($consumoQuimicoAnioActual[$quimico] ?? 0);
               $variacion = $variacionConsumoQuimico[$quimico] ?? 0;
-              $costoAnterior = (float)($impactoEconomicoAnioAnterior[$quimico] ?? 0);
-              $costoActual = (float)($impactoEconomicoAnioActual[$quimico] ?? 0);
-              $variacionCosto = $variacionCostoQuimico[$quimico] ?? 0;
+              $costoAnterior = (float)($costoPorProduccionAnioAnterior[$quimico] ?? 0);
+              $costoActual = (float)($costoPorProduccionAnioActual[$quimico] ?? 0);
+              $variacionCosto = $variacionCostoPorProduccionQuimico[$quimico] ?? 0;
 
               if ($variacion > 10) {
                 $colorSemaforo = '#ef4444';
@@ -204,7 +211,13 @@ $grupoEstructura = $meta['grupo_estructura'] ?? [];
                 [$estadoCelda, $colorCelda, $colorHexCelda] = semaforo($ratioQuimico, $baseQuimico, $toleranciaPct);
                 ?>
                 <?php $costoUnitSemana = (float)($matrizCostos[$quimico][$semana] ?? 0); ?>
-                <td class="week-col cell-ratio-semaforo" data-week-index="<?= $index ?>" data-ratio="<?= $ratioQuimico !== null ? (float)$ratioQuimico : 'null' ?>" data-costo="<?= $impactoEconomico !== null ? (float)$impactoEconomico : 'null' ?>" data-costo-unitario="<?= $costoUnitSemana ?>">
+                <td
+                  class="week-col cell-ratio-semaforo"
+                  data-week-index="<?= $index ?>"
+                  data-ratio="<?= $ratioQuimico !== null ? (float)$ratioQuimico : 'null' ?>"
+                  data-costo="<?= $impactoEconomico !== null ? (float)$impactoEconomico : 'null' ?>"
+                  data-costo-unitario="<?= $costoUnitSemana ?>"
+                  data-costo-produccion="<?= ($matrizCostoProduccionQuimicos[$quimico][$semana] ?? null) !== null ? (float)$matrizCostoProduccionQuimicos[$quimico][$semana] : 'null' ?>">
                   <div class="ratio-semaforo-wrap">
                     <div class="ratio-value">
                       <strong><?= $ratioQuimico !== null ? n((float)$ratioQuimico, 2) : '-' ?></strong>
@@ -355,12 +368,83 @@ $grupoEstructura = $meta['grupo_estructura'] ?? [];
 
     if (sortByConsumo && sortByCosto && table) {
       const totalesConsumo = <?= json_encode($totalesConsumoQuimico, JSON_UNESCAPED_UNICODE) ?>;
-      const totalesCosto = <?= json_encode($totalesCostoQuimico, JSON_UNESCAPED_UNICODE) ?>;
+      const totalesCosto = <?= json_encode($costoPorProduccionAnioActual, JSON_UNESCAPED_UNICODE) ?>;
+      const resumenKpis = {
+        consumo: {
+          kpi1Label: 'Total Consumo Grupo <?= htmlspecialchars((string)$anioAnterior) ?> (Base)',
+          kpi1Value: '<?= n((float)$totalQuimicosAnioAnterior, 2) ?> kg',
+          kpi1Trend: 'vs <?= htmlspecialchars((string)$anioActual) ?>: <?= n((float)$totalQuimicosAnioActual, 2) ?> kg',
+          kpi2Label: 'Total Producción <?= htmlspecialchars((string)$anioAnterior) ?> (Base)',
+          kpi2Value: '<?= n((float)$totalProduccionAnioAnterior, 2) ?> kg',
+          kpi2Trend: 'vs <?= htmlspecialchars((string)$anioActual) ?>: <?= n((float)$totalProduccionAnioActual, 2) ?> kg',
+          kpi3Label: 'Ratio Base (<?= htmlspecialchars((string)$anioAnterior) ?>)',
+          kpi3Value: '<?= $ratioBase !== null ? n((float)$ratioBase, 2) : '-' ?>',
+          kpi3Trend: '<?= htmlspecialchars((string)$anioActual) ?>: <?= $ratioPromedioAnioActual !== null ? n((float)$ratioPromedioAnioActual, 2) : '-' ?>',
+          kpi4Value: '<?= $variacionRatio !== null ? (($variacionRatio > 0 ? '+' : '') . n((float)$variacionRatio, 2) . '%') : '-' ?>',
+          kpi4Class: 'kpi-value <?= ($variacionRatio ?? 0) < 0 ? 'trend-down' : (($variacionRatio ?? 0) > 0 ? 'trend-up' : '') ?>',
+          kpi4Trend: '<?= ($variacionRatio ?? 0) < 0 ? 'Mejora' : (($variacionRatio ?? 0) > 0 ? 'Deterioro' : 'Estable') ?>',
+          kpi4Icon: 'fa-arrow-<?= ($variacionRatio ?? 0) < 0 ? 'down' : (($variacionRatio ?? 0) > 0 ? 'up' : 'right') ?>'
+        },
+        costo: {
+          kpi1Label: 'Costo por producción <?= htmlspecialchars((string)$anioAnterior) ?> (Base)',
+          kpi1Value: '<?= $costoPromedioPorProduccionAnioAnterior !== null ? '$ ' . n((float)$costoPromedioPorProduccionAnioAnterior, 2) : '-' ?>',
+          kpi1Trend: 'vs <?= htmlspecialchars((string)$anioActual) ?>: <?= $costoPromedioPorProduccionAnioActual !== null ? '$ ' . n((float)$costoPromedioPorProduccionAnioActual, 2) : '-' ?>',
+          kpi2Label: 'Total Producción <?= htmlspecialchars((string)$anioAnterior) ?> (Base)',
+          kpi2Value: '<?= n((float)$totalProduccionAnioAnterior, 2) ?> kg',
+          kpi2Trend: 'vs <?= htmlspecialchars((string)$anioActual) ?>: <?= n((float)$totalProduccionAnioActual, 2) ?> kg',
+          kpi3Label: 'Costo prom. por producción <?= htmlspecialchars((string)$anioActual) ?>',
+          kpi3Value: '<?= $costoPromedioPorProduccionAnioActual !== null ? '$ ' . n((float)$costoPromedioPorProduccionAnioActual, 2) : '-' ?>',
+          kpi3Trend: 'Base <?= htmlspecialchars((string)$anioAnterior) ?>: <?= $costoPromedioPorProduccionAnioAnterior !== null ? '$ ' . n((float)$costoPromedioPorProduccionAnioAnterior, 2) : '-' ?>',
+          kpi4Value: '<?= $variacionCostoProduccion !== null ? (($variacionCostoProduccion > 0 ? '+' : '') . n((float)$variacionCostoProduccion, 2) . '%') : '-' ?>',
+          kpi4Class: 'kpi-value <?= ($variacionCostoProduccion ?? 0) < 0 ? 'trend-down' : (($variacionCostoProduccion ?? 0) > 0 ? 'trend-up' : '') ?>',
+          kpi4Trend: '<?= ($variacionCostoProduccion ?? 0) < 0 ? 'Mejora' : (($variacionCostoProduccion ?? 0) > 0 ? 'Deterioro' : 'Estable') ?>',
+          kpi4Icon: 'fa-arrow-<?= ($variacionCostoProduccion ?? 0) < 0 ? 'down' : (($variacionCostoProduccion ?? 0) > 0 ? 'up' : 'right') ?>'
+        }
+      };
 
       function semaforoColor(variacion) {
         if (variacion > 10) return '#ef4444';
         if (variacion > 0) return '#f59e0b';
         return '#10b981';
+      }
+
+      function actualizarKpisGenerales(modo) {
+        const datos = resumenKpis[modo] || resumenKpis.consumo;
+        const cards = document.querySelectorAll('.kpi-grid .kpi-card');
+        if (cards.length < 4) return;
+
+        const kpi1 = cards[0];
+        const kpi2 = cards[1];
+        const kpi3 = cards[2];
+        const kpi4 = cards[3];
+
+        const setText = function(card, label, value, trend) {
+          const labelEl = card.querySelector('.kpi-label');
+          const valueEl = card.querySelector('.kpi-value');
+          const trendEl = card.querySelector('.kpi-trend');
+          if (labelEl) labelEl.textContent = label;
+          if (valueEl) valueEl.textContent = value;
+          if (trendEl) trendEl.textContent = trend;
+        };
+
+        setText(kpi1, datos.kpi1Label, datos.kpi1Value, datos.kpi1Trend);
+        setText(kpi2, datos.kpi2Label, datos.kpi2Value, datos.kpi2Trend);
+        setText(kpi3, datos.kpi3Label, datos.kpi3Value, datos.kpi3Trend);
+
+        const valueEl = kpi4.querySelector('.kpi-value');
+        const trendEl = kpi4.querySelector('.kpi-trend');
+        const labelEl = kpi4.querySelector('.kpi-label');
+        const iconEl = kpi4.querySelector('.kpi-trend i');
+        if (labelEl) labelEl.textContent = 'Variación vs Base';
+        if (valueEl) {
+          valueEl.textContent = datos.kpi4Value;
+          valueEl.className = datos.kpi4Class;
+        }
+        if (trendEl) {
+          trendEl.innerHTML = '<i class="fas ' + datos.kpi4Icon + '"></i> ' + datos.kpi4Trend;
+        } else if (iconEl) {
+          iconEl.className = 'fas ' + datos.kpi4Icon;
+        }
       }
 
       function sortTable(modo) {
@@ -441,9 +525,9 @@ $grupoEstructura = $meta['grupo_estructura'] ?? [];
           }
 
           if (modo === 'costo') {
-            const costoUnit = parseFloat(celda.getAttribute('data-costo-unitario'));
-            if (!isNaN(costoUnit) && costoUnit > 0) {
-              ratioValue.textContent = '$' + costoUnit.toLocaleString('es-MX', {
+            const costoProduccion = parseFloat(celda.getAttribute('data-costo-produccion'));
+            if (!isNaN(costoProduccion) && costoProduccion > 0) {
+              ratioValue.textContent = '$' + costoProduccion.toLocaleString('es-MX', {
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2
               });
@@ -453,13 +537,13 @@ $grupoEstructura = $meta['grupo_estructura'] ?? [];
               ratioBase.style.display = 'none';
             }
 
-            // Actualizar badge según costo unitario semanal vs año anterior
+            // Actualizar badge según costo por producción semanal vs año anterior
             if (badge) {
               const row = celda.closest('tr[data-quimico]');
-              const costoUnitAnterior = row ? parseFloat(row.getAttribute('data-costo-unit-anterior')) : NaN;
+              const costoProduccionAnterior = row ? parseFloat(row.getAttribute('data-costo-produccion-anterior')) : NaN;
               let badgeColor, badgeLabel;
-              if (!isNaN(costoUnit) && costoUnit > 0 && !isNaN(costoUnitAnterior) && costoUnitAnterior > 0) {
-                const variacionUnit = (costoUnit - costoUnitAnterior) / costoUnitAnterior * 100;
+              if (!isNaN(costoProduccion) && costoProduccion > 0 && !isNaN(costoProduccionAnterior) && costoProduccionAnterior > 0) {
+                const variacionUnit = (costoProduccion - costoProduccionAnterior) / costoProduccionAnterior * 100;
                 badgeColor = variacionUnit > 6 ? '#ef4444' : (variacionUnit > 0 ? '#f59e0b' : '#10b981');
                 badgeLabel = variacionUnit > 6 ? 'Alto' : (variacionUnit > 0 ? 'Cuidado' : 'Óptimo');
               } else {
@@ -568,6 +652,7 @@ $grupoEstructura = $meta['grupo_estructura'] ?? [];
         sortByCosto.classList.remove('active');
         sortTable('consumo');
         cambiarModoVisualizacion('consumo');
+        actualizarKpisGenerales('consumo');
       });
 
       sortByCosto.addEventListener('click', function() {
@@ -575,10 +660,12 @@ $grupoEstructura = $meta['grupo_estructura'] ?? [];
         sortByConsumo.classList.remove('active');
         sortTable('costo');
         cambiarModoVisualizacion('costo');
+        actualizarKpisGenerales('costo');
       });
 
       // Aplicar ordenamiento inicial por consumo (mayor a menor)
       sortTable('consumo');
+      actualizarKpisGenerales('consumo');
     }
 
     renderWindow();

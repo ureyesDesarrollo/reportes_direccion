@@ -369,16 +369,22 @@ foreach ($quimicosCatalogo as $quimicoKey) {
 |--------------------------------------------------------------------------
 */
 $matrizImpactoEconomicoQuimicos = [];
+$matrizCostoProduccionQuimicos = [];
 
 foreach ($quimicosCatalogo as $quimicoKey) {
   $matrizImpactoEconomicoQuimicos[$quimicoKey] = [];
+  $matrizCostoProduccionQuimicos[$quimicoKey] = [];
 
   foreach ($semanasCatalogo as $semanaLabel) {
     $kgQuimico = (float)($matrizQuimicos[$quimicoKey][$semanaLabel] ?? 0.0);
     $costoPromedio = (float)($matrizCostos[$quimicoKey][$semanaLabel] ?? 0.0);
+    $produccionSemana = (float)($produccionPivotPorSemana[$semanaLabel] ?? 0.0);
 
     $impactoEconomico = $kgQuimico * $costoPromedio;
     $matrizImpactoEconomicoQuimicos[$quimicoKey][$semanaLabel] = $impactoEconomico;
+    $matrizCostoProduccionQuimicos[$quimicoKey][$semanaLabel] = $produccionSemana > 0
+      ? ($impactoEconomico / $produccionSemana)
+      : null;
   }
 }
 
@@ -499,6 +505,9 @@ $ratioPromedioAnioActual = $totalProduccionAnioActual > 0
   ? $totalQuimicosAnioActual / $totalProduccionAnioActual
   : null;
 
+$totalImpactoQuimicosAnioAnterior = 0.0;
+$totalImpactoQuimicosAnioActual = 0.0;
+
 $variacionQuimicos = $totalQuimicosAnioAnterior > 0
   ? (($totalQuimicosAnioActual - $totalQuimicosAnioAnterior) / $totalQuimicosAnioAnterior) * 100
   : null;
@@ -603,6 +612,21 @@ $consumoQuimicoAnioActual = $agruparPorClaveVisible($consumoQuimicoAnioActual);
 $impactoEconomicoAnioAnterior = $agruparPorClaveVisible($impactoEconomicoAnioAnterior);
 $impactoEconomicoAnioActual = $agruparPorClaveVisible($impactoEconomicoAnioActual);
 
+$totalImpactoQuimicosAnioAnterior = array_sum($impactoEconomicoAnioAnterior);
+$totalImpactoQuimicosAnioActual = array_sum($impactoEconomicoAnioActual);
+
+$costoPromedioPorProduccionAnioAnterior = $totalProduccionAnioAnterior > 0
+  ? ($totalImpactoQuimicosAnioAnterior / $totalProduccionAnioAnterior)
+  : null;
+$costoPromedioPorProduccionAnioActual = $totalProduccionAnioActual > 0
+  ? ($totalImpactoQuimicosAnioActual / $totalProduccionAnioActual)
+  : null;
+$variacionCostoProduccion = ($costoPromedioPorProduccionAnioAnterior !== null
+    && $costoPromedioPorProduccionAnioAnterior > 0
+    && $costoPromedioPorProduccionAnioActual !== null)
+  ? (($costoPromedioPorProduccionAnioActual - $costoPromedioPorProduccionAnioAnterior) / $costoPromedioPorProduccionAnioAnterior) * 100
+  : null;
+
 $costoPromedioAnioAnteriorAgrupado = [];
 $costoPromedioAnioActualAgrupado = [];
 
@@ -622,6 +646,25 @@ foreach ($quimicosCatalogo as $quimicoKey) {
 
 $costoPromedioAnioAnterior = $costoPromedioAnioAnteriorAgrupado;
 $costoPromedioAnioActual = $costoPromedioAnioActualAgrupado;
+
+$costoPorProduccionAnioAnterior = [];
+$costoPorProduccionAnioActual = [];
+$variacionCostoPorProduccionQuimico = [];
+
+foreach ($quimicosCatalogo as $quimico) {
+  $costoPorProduccionAnterior = $totalProduccionAnioAnterior > 0
+    ? (float)($impactoEconomicoAnioAnterior[$quimico] ?? 0.0) / $totalProduccionAnioAnterior
+    : 0.0;
+  $costoPorProduccionActual = $totalProduccionAnioActual > 0
+    ? (float)($impactoEconomicoAnioActual[$quimico] ?? 0.0) / $totalProduccionAnioActual
+    : 0.0;
+
+  $costoPorProduccionAnioAnterior[$quimico] = $costoPorProduccionAnterior;
+  $costoPorProduccionAnioActual[$quimico] = $costoPorProduccionActual;
+  $variacionCostoPorProduccionQuimico[$quimico] = $costoPorProduccionAnterior > 0
+    ? (($costoPorProduccionActual - $costoPorProduccionAnterior) / $costoPorProduccionAnterior) * 100
+    : 0.0;
+}
 
 /*
 |--------------------------------------------------------------------------
@@ -702,6 +745,9 @@ $result = [
   'ratioBase' => $ratioBase,
   'ratioGlobal' => $ratioGlobal,
   'ratioPromedioAnioActual' => $ratioPromedioAnioActual,
+  'costoPromedioPorProduccionAnioAnterior' => $costoPromedioPorProduccionAnioAnterior,
+  'costoPromedioPorProduccionAnioActual' => $costoPromedioPorProduccionAnioActual,
+  'variacionCostoProduccion' => $variacionCostoProduccion,
 
   'limiteVerde' => $limiteVerde,
   'limiteAmarillo' => $limiteAmarillo,
@@ -737,6 +783,7 @@ $result = [
   'produccionPivotPorSemana' => $produccionPivotPorSemana,
   'matrizRatioQuimicos' => $matrizRatioQuimicos,
   'matrizImpactoEconomicoQuimicos' => $matrizImpactoEconomicoQuimicos,
+  'matrizCostoProduccionQuimicos' => $matrizCostoProduccionQuimicos,
   'ratioBasePorQuimico' => $ratioBasePorQuimico,
   'totalesPorSemana' => $totalesPorSemana,
   'produccionPorSemana' => $produccionPorSemana,
@@ -749,6 +796,9 @@ $result = [
   'costoPromedioAnioAnterior' => $costoPromedioAnioAnterior,
   'costoPromedioAnioActual' => $costoPromedioAnioActual,
   'variacionCostoQuimico' => $variacionCostoQuimico,
+  'costoPorProduccionAnioAnterior' => $costoPorProduccionAnioAnterior,
+  'costoPorProduccionAnioActual' => $costoPorProduccionAnioActual,
+  'variacionCostoPorProduccionQuimico' => $variacionCostoPorProduccionQuimico,
   'impactoEconomicoAnioAnterior' => $impactoEconomicoAnioAnterior,
   'impactoEconomicoAnioActual' => $impactoEconomicoAnioActual,
 

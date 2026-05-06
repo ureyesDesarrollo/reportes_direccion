@@ -1,5 +1,7 @@
 <?php
 
+/** @var int $anioAnterior */
+/** @var int $anioActual */
 /** @var int $anioPivot */
 /** @var array $semanasCatalogo */
 /** @var array $refaccionesCatalogo */

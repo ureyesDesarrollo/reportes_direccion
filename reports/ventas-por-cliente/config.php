@@ -1,0 +1,56 @@
+<?php
+
+return [
+  'titulo'                    => 'Ventas por Cliente',
+  'fecha_desde'               => '2024-01-01',
+  'tabla_factura_cabecera'    => 'facturac',    // Tabla de cabecera de facturas
+  'tabla_factura_detalle'     => 'facturad',    // Tabla de detalle de facturas
+  'tabla_creditos'            => 'creditos',    // Notas/creditos ligados por factura
+  'tabla_clientes'            => 'clientes',    // Tabla de clientes en SAIPBI
+  'tabla_agentes'             => 'agentes',     // Tabla de vendedores/agentes
+  'tabla_remisiones'          => 'remisiones',  // Tabla de ventas remisionadas
+  'tabla_remision_detalle'    => 'remision_detalle', // Detalle de ventas remisionadas
+  'tabla_rev_clientes'        => 'rev_clientes', // Tabla de clientes en producción
+  'campo_numero_factura'      => 'NO_FAC',      // Folio de factura para unir cabecera/detalle
+  'campo_credito_factura'     => 'NO_FAC',      // Folio para descontar creditos
+  'campo_credito_monto'       => 'TOT_NOTA',    // Importe de la nota/credito
+  'campo_credito_monto_alt'   => 'TOT_IMP',     // Respaldo si TOT_NOTA viene en cero
+  'campo_credito_status'      => 'NO_ESTADO',   // Estado de la nota/credito
+  'campo_fecha_factura'       => 'FALTA_FAC',   // Campo fecha en facturac
+  'campo_status_factura'      => 'STATUS_FAC',  // Campo de estatus en facturac
+  'campo_cliente'             => 'CVE_CTE',     // Campo código cliente
+  'campo_vendedor'            => 'CVE_AGE',     // Campo vendedor en facturac
+  'campo_agente_vendedor'     => 'CVE_AGE',     // Campo llave en agentes
+  'campo_nombre_vendedor'     => 'DIR_AGE',     // Nombre visible del vendedor en agentes
+  'campo_remision_id'         => 'id',
+  'campo_remision_folio'      => 'remision',
+  'campo_remision_fecha'      => 'fecha_remision',
+  'campo_remision_cliente'    => 'cliente_nombre',
+  'campo_remision_vendedor'   => 'vendedor_nombre',
+  'campo_remision_tipo_venta' => 'tipo_venta',
+  'campo_remision_total'      => 'total_real',
+  'campo_remision_detalle_fk' => 'remision_id',
+  'campo_remision_cantidad'   => 'cantidad',
+  'campo_remision_precio_kg'  => 'precio_kg',
+  'campo_monto'               => 'TOTAL_FAC',   // Campo total factura
+  'campo_saldo_factura'       => 'SALDO_FAC',   // Saldo pendiente de la factura
+  'campo_cantidad_items'      => 'CANT_PROD',   // Cantidad del detalle de factura
+  'campo_unidad_detalle'      => 'UNIDAD',      // Unidad del detalle para calcular kilos
+  'campo_nombre_cliente'      => 'NOM_CTE',     // Campo nombre cliente en SAIPBI
+  'campo_dias_credito'        => 'DIA_CRE',     // Dias de credito del cliente
+  'campo_rev_cliente_nombre'  => 'cte_nombre',
+  'campo_rev_cliente_razon'   => 'cte_razon_social',
+  'campo_rev_cliente_tipo'    => 'cte_tipo',
+  'campo_rev_cliente_estatus' => 'cte_estatus',
+  'valor_rev_cliente_activo'  => 'A',
+  'status_cancelado_valores'  => ['Cancelada'],
+  'creditos_cancelado_valores' => ['Cancelada'],
+  'remisiones_clientes_excluir_exactos' => ['LABORATORIO'],
+  'remisiones_clientes_excluir_contiene' => ['LUIS ARBAIZA', 'LUI FRANCISCO ARBAIZA', 'LUIS FRANCISCO ARBAIZA'],
+  'tolerancia_pct'            => 10,            // Tolerancia para semáforo
+  'mes_corte'                 => (int)date('n'), // Comparación mensual hasta el mes actual
+  'ventana_proxima_venta_dias' => 30,           // Venta estimada vencida o próxima
+  'usar_todos_los_clientes'   => true,
+  'clientes_a_ignorar'        => [],
+  'anio_pivot'                => (int)date('Y'),
+];
