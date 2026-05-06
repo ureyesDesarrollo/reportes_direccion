@@ -15,4 +15,11 @@ return [
     'pass' => '',
     'charset' => 'utf8mb4',
   ],
+  'secadores' => [
+    'host' => 'localhost:3306',
+    'dbname' => 'bd_secadores',
+    'user' => 'root',
+    'pass' => '',
+    'charset' => 'utf8mb4',
+  ],
 ];

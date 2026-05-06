@@ -48,11 +48,20 @@ return [
   ],
   [
     'slug' => 'secadores',
-    'title' => 'SECADORES / Temperaturas',
-    'description' => 'Monitoreo histórico en tiempo casi real de temperaturas por túnel, con semáforos configurables por variable y actualización automática.',
+    'title' => 'SECADORES',
+    'description' => 'Tablero resumen de secadores con vista ejecutiva de ambos túneles, temperaturas por zona y semáforos operativos.',
     'icon' => 'fa-fan',
     'color' => '#0f766e',
     'url' => './secadores/index.php',
+    'enabled' => true,
+  ],
+  [
+    'slug' => 'secadores-temperatura',
+    'title' => 'SECADORES / Temperatura Detalle',
+    'description' => 'Detalle histórico de temperaturas por túnel, con semáforos configurables por variable y actualización automática.',
+    'icon' => 'fa-fan',
+    'color' => '#0f766e',
+    'url' => './secadores-temperatura/index.php',
     'enabled' => true,
   ],
   [
