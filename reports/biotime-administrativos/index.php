@@ -221,7 +221,6 @@ if ($empCodeFiltro !== '') {
             <tr>
               <th>Empleado</th>
               <th>Departamento</th>
-              <th>Comportamiento</th>
               <th>Días</th>
               <th>Horas trabajadas</th>
               <th>Retardo</th>
@@ -246,7 +245,6 @@ if ($empCodeFiltro !== '') {
                   <span style="color:#64748b; font-size:0.82rem;"><?= htmlspecialchars((string)($row['emp_code'] ?? '')) ?></span>
                 </td>
                 <td><?= htmlspecialchars((string)($row['departamento'] ?? '')) ?></td>
-                <td style="min-width:260px; color:#334155; line-height:1.35;"><?= htmlspecialchars((string)($row['comportamiento_resumen'] ?? 'Sin datos')) ?></td>
                 <td><?= htmlspecialchars((string)($row['dias'] ?? '0')) ?></td>
                 <td><?= htmlspecialchars((string)($row['horas_trabajadas'] ?? '00:00')) ?></td>
                 <td><?= htmlspecialchars((string)($row['retardo'] ?? '00:00')) ?></td>

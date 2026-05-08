@@ -73,6 +73,15 @@ return [
     'url' => './biotime-administrativos/index.php',
     'enabled' => true,
   ],
+  [
+    'slug' => 'proyectos-milestones',
+    'title' => 'PROYECTOS / Milestones',
+    'description' => 'Vista de proyectos por milestone con porcentaje de avance, responsable, filtros de estatus y detalle por tareas.',
+    'icon' => 'fa-diagram-project',
+    'color' => '#3b82f6',
+    'url' => './proyectos-milestones/index.php',
+    'enabled' => true,
+  ],
 
   // Ejemplos futuros:
   // [

@@ -22,4 +22,11 @@ return [
     'pass' => '',
     'charset' => 'utf8mb4',
   ],
+  'hoshin' => [
+    'host' => 'localhost:3306',
+    'dbname' => 'hoshin_kanri',
+    'user' => 'root',
+    'pass' => '',
+    'charset' => 'utf8mb4',
+  ],
 ];

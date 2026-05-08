@@ -99,6 +99,25 @@ $buildMaintenanceSummary = static function (array $items) use ($resolveStatusVis
   ];
 };
 
+$buildThresholdStatus = static function (?float $value, array $thresholds) use ($resolveStatusVisual): array {
+  if ($value === null) {
+    return ['key' => 'gris'] + $resolveStatusVisual('gris');
+  }
+
+  $redBelow = isset($thresholds['red_below']) ? (float)$thresholds['red_below'] : null;
+  $greenAbove = isset($thresholds['green_above']) ? (float)$thresholds['green_above'] : null;
+
+  if ($redBelow !== null && $value < $redBelow) {
+    return ['key' => 'rojo'] + $resolveStatusVisual('rojo');
+  }
+
+  if ($greenAbove !== null && $value > $greenAbove) {
+    return ['key' => 'verde'] + $resolveStatusVisual('verde');
+  }
+
+  return ['key' => 'amarillo'] + $resolveStatusVisual('amarillo');
+};
+
 $decorateStatusItems = static function (array $items) use ($resolveStatusVisual): array {
   $decorated = [];
   foreach ($items as $item) {
@@ -185,12 +204,14 @@ foreach ($tunelesConfig as $tunelKey => $tunelConfig) {
       $sourceTunnelKey = (string)($source['tunel_key'] ?? $tunelKey);
       $caudalInfo = $caudalByTunnel[$sourceTunnelKey] ?? null;
       if ($caudalInfo !== null && isset($caudalInfo['caudal'])) {
-        $continuousItems[$index]['valor'] = number_format((float)$caudalInfo['caudal'], 1) . ' m3/h';
+        $caudalValue = (float)$caudalInfo['caudal'];
+        $thresholdStatus = $buildThresholdStatus($caudalValue, (array)($source['thresholds'] ?? []));
+        $continuousItems[$index]['valor'] = number_format($caudalValue, 1) . ' m3/h';
         $continuousItems[$index]['detalle'] = 'Ultima captura: ' . ($caudalInfo['fecha_hora'] !== '' ? $caudalInfo['fecha_hora'] : '-');
-        $continuousItems[$index]['estado'] = 'verde';
-        $continuousItems[$index]['statusLabel'] = 'Dato actual';
-        $continuousItems[$index]['statusColor'] = '#3b82f6';
-        $continuousItems[$index]['statusBg'] = 'rgba(59, 130, 246, 0.10)';
+        $continuousItems[$index]['estado'] = $thresholdStatus['key'];
+        $continuousItems[$index]['statusLabel'] = $thresholdStatus['label'];
+        $continuousItems[$index]['statusColor'] = $thresholdStatus['color'];
+        $continuousItems[$index]['statusBg'] = $thresholdStatus['bg'];
       }
     }
   }

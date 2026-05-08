@@ -17,6 +17,10 @@ return [
           'source' => [
             'type' => 'mysql_caudal',
             'tunel_key' => 'tunel_1',
+            'thresholds' => [
+              'red_below' => 89000,
+              'green_above' => 90000,
+            ],
           ],
         ],
         /* [
@@ -71,6 +75,10 @@ return [
           'source' => [
             'type' => 'mysql_caudal',
             'tunel_key' => 'tunel_2',
+            'thresholds' => [
+              'red_below' => 91000,
+              'green_above' => 92000,
+            ],
           ],
         ],
         /* [
