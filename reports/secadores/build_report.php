@@ -45,6 +45,31 @@ $connectMysql = static function (array $cfg): PDO {
   ]);
 };
 
+$connectSqlServer = static function (array $cfg): PDO {
+  $server = trim((string)($cfg['server'] ?? ''));
+  $database = trim((string)($cfg['database'] ?? ''));
+  $port = (int)($cfg['port'] ?? 1433);
+  $encrypt = !empty($cfg['encrypt']) ? 'yes' : 'no';
+  $trust = !empty($cfg['trust_server_certificate']) ? 'yes' : 'no';
+  $timeout = (int)($cfg['login_timeout'] ?? 5);
+
+  $serverPart = $port > 0 ? $server . ',' . $port : $server;
+  $dsn = "sqlsrv:Server={$serverPart};Database={$database};Encrypt={$encrypt};TrustServerCertificate={$trust};LoginTimeout={$timeout}";
+
+  return new PDO($dsn, (string)($cfg['user'] ?? ''), (string)($cfg['pass'] ?? ''), [
+    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+  ]);
+};
+
+$quoteSqlIdentifier = static function (string $name): string {
+  if (!preg_match('/^[A-Za-z0-9_]+$/', $name)) {
+    throw new InvalidArgumentException('Identificador SQL inválido: ' . $name);
+  }
+
+  return '[' . $name . ']';
+};
+
 $buildPercentStatus = static function (?float $value, int $criticalCount = 0, int $alertCount = 0) use ($resolveStatusVisual): array {
   if ($value === null) {
     return ['key' => 'gris'] + $resolveStatusVisual('gris');
@@ -138,6 +163,7 @@ $decorateStatusItems = static function (array $items) use ($resolveStatusVisual)
 };
 
 $caudalByTunnel = [];
+$sqlServerFields = [];
 $warnings = array_values((array)($detailReport['meta']['warnings'] ?? []));
 
 try {
@@ -165,6 +191,40 @@ try {
   }
 } catch (Throwable $e) {
   $warnings[] = 'No fue posible consultar el flujo de aire en bd_secadores: ' . $e->getMessage();
+}
+
+try {
+  $tempConfig = require __DIR__ . '/../secadores-temperatura/config.php';
+  $sqlCfg = (array)($tempConfig['sqlserver'] ?? []);
+  $tabla = (string)($tempConfig['tabla'] ?? 'TREND001');
+  $campoFecha = (string)($tempConfig['campo_fecha'] ?? 'Time_Stamp');
+  $fieldNames = [];
+
+  foreach ($tunelesConfig as $tunelConfig) {
+    foreach ((array)($tunelConfig['parametros_continuos'] ?? []) as $parameter) {
+      $source = (array)($parameter['source'] ?? []);
+      if (($source['type'] ?? '') === 'sqlserver_field' && !empty($source['field'])) {
+        $fieldNames[(string)$source['field']] = (string)$source['field'];
+      }
+    }
+  }
+
+  if (!empty($fieldNames) && trim((string)($sqlCfg['server'] ?? '')) !== '') {
+    $pdoSqlServer = $connectSqlServer($sqlCfg);
+    $selectParts = [$quoteSqlIdentifier($campoFecha) . ' AS [__timestamp]'];
+    foreach ($fieldNames as $fieldName) {
+      $selectParts[] = $quoteSqlIdentifier($fieldName);
+    }
+
+    $sql = 'SELECT TOP (1) ' . implode(', ', $selectParts)
+      . ' FROM ' . $quoteSqlIdentifier($tabla)
+      . ' ORDER BY ' . $quoteSqlIdentifier($campoFecha) . ' DESC';
+
+    $stmt = $pdoSqlServer->query($sql);
+    $sqlServerFields = (array)($stmt->fetch() ?: []);
+  }
+} catch (Throwable $e) {
+  $warnings[] = 'No fue posible consultar los parámetros continuos en AVEVA: ' . $e->getMessage();
 }
 
 $tunelesResumen = [];
@@ -212,6 +272,24 @@ foreach ($tunelesConfig as $tunelKey => $tunelConfig) {
         $continuousItems[$index]['statusLabel'] = $thresholdStatus['label'];
         $continuousItems[$index]['statusColor'] = $thresholdStatus['color'];
         $continuousItems[$index]['statusBg'] = $thresholdStatus['bg'];
+      }
+    } elseif (($source['type'] ?? '') === 'sqlserver_field') {
+      $fieldName = (string)($source['field'] ?? '');
+      if ($fieldName !== '' && array_key_exists($fieldName, $sqlServerFields)) {
+        $rawValue = $sqlServerFields[$fieldName];
+        $decimals = isset($source['decimals']) ? max(0, (int)$source['decimals']) : 1;
+        $unit = trim((string)($source['unit'] ?? ''));
+        $formattedValue = is_numeric($rawValue) ? number_format((float)$rawValue, $decimals) : (string)$rawValue;
+        if ($unit !== '') {
+          $formattedValue .= ' ' . $unit;
+        }
+
+        $continuousItems[$index]['valor'] = $formattedValue;
+        $continuousItems[$index]['detalle'] = 'Ultima captura: ' . (string)($sqlServerFields['__timestamp'] ?? '-');
+        $continuousItems[$index]['estado'] = 'gris';
+        $continuousItems[$index]['statusLabel'] = 'Dato actual';
+        $continuousItems[$index]['statusColor'] = '#3b82f6';
+        $continuousItems[$index]['statusBg'] = 'rgba(59, 130, 246, 0.10)';
       }
     }
   }

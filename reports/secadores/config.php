@@ -23,18 +23,18 @@ return [
             ],
           ],
         ],
-        /* [
-          'titulo' => 'Humedad de aire',
-          'valor' => 'Sin captura',
-          'detalle' => 'Pendiente de origen',
-          'estado' => 'gris',
-        ],
         [
-          'titulo' => 'Humedad de salida',
+          'titulo' => 'Humedad de entrada',
           'valor' => 'Sin captura',
           'detalle' => 'Pendiente de origen',
           'estado' => 'gris',
-        ], */
+          'source' => [
+            'type' => 'sqlserver_field',
+            'field' => 'HUMEDAD_DE_ENTRADA_TUNEL_1',
+            'unit' => '%',
+            'decimals' => 1,
+          ],
+        ],
       ],
       'mantenimientos' => [
         [
