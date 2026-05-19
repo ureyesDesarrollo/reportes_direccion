@@ -94,6 +94,7 @@ $showModeTabs = false;
       datosAnioAnterior: <?= json_encode($datosAnioAnterior, JSON_UNESCAPED_UNICODE) ?>,
       datosAnioActual: <?= json_encode($datosAnioActual, JSON_UNESCAPED_UNICODE) ?>,
       chartData: <?= json_encode($chartData, JSON_UNESCAPED_UNICODE) ?>,
+      chartDataCosto: <?= json_encode($chartDataCosto, JSON_UNESCAPED_UNICODE) ?>,
 
       semanasCatalogo: <?= json_encode($semanasCatalogo, JSON_UNESCAPED_UNICODE) ?>,
       quimicosCatalogo: <?= json_encode($quimicosCatalogo, JSON_UNESCAPED_UNICODE) ?>,

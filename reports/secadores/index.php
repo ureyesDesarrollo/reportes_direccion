@@ -9,6 +9,8 @@ header('Cache-Control: no-cache, no-store, must-revalidate');
 header('Pragma: no-cache');
 header('Expires: 0');
 
+$appConfig = require __DIR__ . '/../../config/app.php';
+$config = require __DIR__ . '/config.php';
 require __DIR__ . '/../../shared/helpers.php';
 
 try {
@@ -20,11 +22,13 @@ try {
   exit;
 }
 
-$titulo = (string)($report['titulo'] ?? 'Secadores');
-$version = (int)($report['version'] ?? time());
+extract($report, EXTR_SKIP);
+
+$version = $version ?? time();
 ?>
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
@@ -32,215 +36,83 @@ $version = (int)($report['version'] ?? time());
   <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <link rel="stylesheet" href="../../assets/css/dashboard.css?v=<?= urlencode((string)$version) ?>">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <style>
-    .secadores-summary-grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 20px;
-      margin-top: 22px;
-    }
-
-    .secadores-panel {
-      background: #fff;
-      border: 1px solid #e2e8f0;
-      border-radius: 18px;
-      box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
-      overflow: hidden;
-    }
-
-    .secadores-panel-head {
-      padding: 18px 20px;
-      border-bottom: 1px solid #e2e8f0;
+    .secadores-toolbar {
       display: flex;
       justify-content: space-between;
       gap: 16px;
-      align-items: flex-start;
-    }
-
-    .secadores-panel-title {
-      margin: 0 0 6px;
-      font-size: 1.1rem;
-      font-weight: 800;
-      color: #0f172a;
-    }
-
-    .secadores-panel-sub {
-      color: #64748b;
-      font-size: 0.92rem;
-      line-height: 1.45;
-    }
-
-    .secadores-stamp {
-      color: #64748b;
-      font-size: 0.82rem;
-      text-align: right;
-      white-space: nowrap;
-    }
-
-    .secadores-detail-link {
-      display: inline-flex;
+      flex-wrap: wrap;
       align-items: center;
-      gap: 8px;
-      border: 1px solid #dbe2ea;
-      background: #fff;
-      color: #334155;
-      border-radius: 999px;
-      text-decoration: none;
-      padding: 10px 14px;
-      font-weight: 700;
-      margin-top: 10px;
+      margin-top: 16px;
     }
 
-    .secadores-card-link {
-      color: inherit;
-      text-decoration: none;
-      display: block;
-    }
-
-    .secadores-body {
-      padding: 20px;
-      display: grid;
-      gap: 20px;
-    }
-
-    .secadores-kpi-row {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 16px;
-    }
-
-    .secadores-kpi-box {
-      border-radius: 18px;
-      padding: 20px;
-      border: 1px solid #e2e8f0;
-      min-height: 140px;
+    .secadores-tabs {
       display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-    }
-
-    .secadores-kpi-label {
-      font-size: 0.85rem;
-      font-weight: 800;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-      color: #334155;
-    }
-
-    .secadores-kpi-value {
-      font-size: clamp(2rem, 4vw, 3.2rem);
-      line-height: 1;
-      font-weight: 800;
-      color: #0f172a;
-    }
-
-    .secadores-kpi-meta {
-      color: #475569;
-      font-size: 0.92rem;
-    }
-
-    .secadores-status {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      border-radius: 999px;
-      padding: 6px 10px;
-      font-size: 0.78rem;
-      font-weight: 800;
-      white-space: nowrap;
-    }
-
-    .secadores-section-title {
-      display: flex;
-      align-items: center;
       gap: 10px;
-      font-size: 0.96rem;
-      font-weight: 800;
-      color: #0f172a;
-      margin-bottom: 14px;
+      flex-wrap: wrap;
     }
 
-    .secadores-zones-grid {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 14px;
-    }
-
-    .secadores-zone-card,
-    .secadores-maint-card {
+    .secadores-tab {
       border: 1px solid #e2e8f0;
-      border-radius: 16px;
-      padding: 16px;
-      min-height: 122px;
-    }
-
-    .secadores-zone-label,
-    .secadores-maint-title {
-      font-size: 0.88rem;
-      font-weight: 800;
+      background: #fff;
       color: #334155;
-      margin-bottom: 10px;
+      padding: 10px 14px;
+      border-radius: 999px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all .2s ease;
     }
 
-    .secadores-zone-value,
-    .secadores-maint-value {
-      font-size: 1.55rem;
-      font-weight: 800;
-      color: #0f172a;
-      line-height: 1.05;
+    .secadores-tab.active {
+      border-color: #0f766e;
+      background: rgba(15, 118, 110, 0.10);
+      color: #0f766e;
     }
 
-    .secadores-zone-meta,
-    .secadores-maint-meta {
-      margin-top: 8px;
-      color: #64748b;
-      font-size: 0.84rem;
-      line-height: 1.4;
-    }
-
-    .secadores-maint-grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 14px;
+    .secadores-note {
+      margin-top: 20px;
+      padding: 16px 18px;
+      border-radius: 14px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      color: #475569;
+      line-height: 1.55;
     }
 
     .secadores-warning {
-      margin-top: 18px;
+      margin-top: 16px;
       padding: 14px 16px;
-      border-radius: 14px;
-      background: #fffbeb;
+      border-radius: 12px;
       border: 1px solid #fcd34d;
+      background: #fffbeb;
       color: #92400e;
     }
 
-    @media (max-width: 1180px) {
-      .secadores-summary-grid,
-      .secadores-kpi-row,
-      .secadores-zones-grid,
-      .secadores-maint-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-      }
+    .secadores-cell {
+      min-width: 92px;
+      text-align: center;
+      font-weight: 600;
+      color: #0f172a;
     }
 
-    @media (max-width: 760px) {
-      .secadores-summary-grid,
-      .secadores-kpi-row,
-      .secadores-zones-grid,
-      .secadores-maint-grid {
-        grid-template-columns: 1fr;
-      }
+    .secadores-cell small {
+      display: block;
+      margin-top: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      color: inherit;
+      opacity: .9;
+    }
 
-      .secadores-panel-head {
-        flex-direction: column;
-      }
-
-      .secadores-stamp {
-        text-align: left;
-        white-space: normal;
-      }
+    .secadores-empty {
+      padding: 28px 16px;
+      text-align: center;
+      color: #64748b;
     }
   </style>
 </head>
+
 <body>
   <div class="dashboard">
     <div class="header">
@@ -254,166 +126,347 @@ $version = (int)($report['version'] ?? time());
             Regresar al inicio
           </a>
         </div>
-        <h1><i class="fas fa-fan" style="margin-right:12px;"></i><?= htmlspecialchars($titulo) ?></h1>
+
+        <h1>
+          <i class="fas fa-fan" style="margin-right: 12px;"></i>
+          <?= htmlspecialchars($titulo) ?>
+        </h1>
+
         <div class="sub">
-          <span><i class="fas fa-gauge-high"></i> Resumen operativo de los dos tuneles</span>
-          <span class="badge"><i class="fas fa-temperature-three-quarters"></i> Temperatura por zona con semaforo</span>
-          <span class="year-badge" id="secadoresLastRefresh"><i class="fas fa-rotate"></i> Esperando actualizacion</span>
+          <span>
+            <i class="fas fa-database"></i>
+            Base: <?= htmlspecialchars((string)($meta['baseDatos'] ?? 'AVEVA_TAGS')) ?>
+          </span>
+          <span>
+            <i class="fas fa-table"></i>
+            Tabla: <?= htmlspecialchars((string)($meta['tabla'] ?? 'TREND001')) ?>
+          </span>
+          <span>
+            <i class="fas fa-clock"></i>
+            Refresco: <?= n(((float)($meta['intervaloActualizacion'] ?? 5000)) / 1000, 0) ?> s
+          </span>
+          <span class="badge">
+            <i class="fas fa-sliders"></i>
+            Semáforos configurables por variable
+          </span>
         </div>
+
+        <div class="secadores-toolbar">
+          <div class="secadores-tabs" id="secadoresTabs"></div>
+          <div class="year-badge" id="secadoresLastRefresh">
+            <i class="fas fa-rotate"></i>
+            Esperando actualización
+          </div>
+        </div>
+
+        <?php foreach (($meta['warnings'] ?? []) as $warning): ?>
+          <div class="secadores-warning">
+            <i class="fas fa-triangle-exclamation"></i>
+            <?= htmlspecialchars((string)$warning) ?>
+          </div>
+        <?php endforeach; ?>
       </div>
     </div>
 
-    <div id="secadoresWarnings"></div>
-    <div class="secadores-summary-grid" id="secadoresSummaryGrid"></div>
+    <?php require __DIR__ . '/partials/kpis.php'; ?>
+    <?php require __DIR__ . '/partials/chart.php'; ?>
+    <?php require __DIR__ . '/partials/table.php'; ?>
+
+    <div class="secadores-note">
+      <strong><i class="fas fa-info-circle"></i> Configuración del semáforo:</strong><br>
+      Edita <strong>reports/secadores/config.php</strong> para ajustar por variable los límites de color con <code>modo</code> (<code>rango</code>, <code>minimo</code>, <code>maximo</code>) y sus valores <code>verde_*</code> / <code>amarillo_*</code>.<br>
+      El campo de tiempo actual está configurado como <strong><?= htmlspecialchars((string)($meta['campoFecha'] ?? 'DateTime')) ?></strong>. Si en `TREND001` usa otro nombre, cámbialo ahí mismo.
+    </div>
   </div>
 
   <script>
-    window.secadoresResumenBootstrap = <?= json_encode($report, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+    window.secadoresBootstrap = <?= json_encode($report, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
   </script>
   <script>
     (() => {
+      const secadoresBandsPlugin = {
+        id: 'secadoresBands',
+        beforeDraw(chart, args, pluginOptions) {
+          const bands = pluginOptions || {};
+          const yScale = chart.scales?.y;
+          const chartArea = chart.chartArea;
+
+          if (!yScale || !chartArea || !bands.hasBands) {
+            return;
+          }
+
+          const { ctx } = chart;
+          const topLimit = yScale.max;
+          const bottomLimit = yScale.min;
+          const greenMin = bands.greenMin;
+          const greenMax = bands.greenMax;
+          const yellowMin = bands.yellowMin;
+          const yellowMax = bands.yellowMax;
+          const mode = bands.mode || 'rango';
+
+          const clampRange = (start, end) => {
+            if (start === null || start === undefined || end === null || end === undefined) {
+              return null;
+            }
+
+            const safeStart = Math.max(Math.min(start, topLimit), bottomLimit);
+            const safeEnd = Math.max(Math.min(end, topLimit), bottomLimit);
+            if (safeStart === safeEnd) {
+              return null;
+            }
+
+            return [safeStart, safeEnd];
+          };
+
+          const paintBand = (start, end, color) => {
+            const range = clampRange(start, end);
+            if (!range) {
+              return;
+            }
+
+            const y1 = yScale.getPixelForValue(range[0]);
+            const y2 = yScale.getPixelForValue(range[1]);
+            const top = Math.min(y1, y2);
+            const height = Math.abs(y2 - y1);
+            if (height <= 0) {
+              return;
+            }
+
+            ctx.save();
+            ctx.fillStyle = color;
+            ctx.fillRect(chartArea.left, top, chartArea.right - chartArea.left, height);
+            ctx.restore();
+          };
+
+          if (mode === 'minimo') {
+            paintBand(bottomLimit, yellowMin ?? greenMin ?? topLimit, 'rgba(239, 68, 68, 0.08)');
+            paintBand(yellowMin ?? bottomLimit, greenMin ?? topLimit, 'rgba(245, 158, 11, 0.10)');
+            paintBand(greenMin ?? bottomLimit, topLimit, 'rgba(16, 185, 129, 0.08)');
+            return;
+          }
+
+          if (mode === 'maximo') {
+            paintBand(bottomLimit, greenMax ?? topLimit, 'rgba(16, 185, 129, 0.08)');
+            paintBand(greenMax ?? bottomLimit, yellowMax ?? topLimit, 'rgba(245, 158, 11, 0.10)');
+            paintBand(yellowMax ?? bottomLimit, topLimit, 'rgba(239, 68, 68, 0.08)');
+            return;
+          }
+
+          paintBand(bottomLimit, yellowMin ?? greenMin ?? bottomLimit, 'rgba(239, 68, 68, 0.08)');
+          paintBand(yellowMin ?? bottomLimit, greenMin ?? yellowMax ?? topLimit, 'rgba(245, 158, 11, 0.10)');
+          paintBand(greenMin ?? bottomLimit, greenMax ?? topLimit, 'rgba(16, 185, 129, 0.08)');
+          paintBand(greenMax ?? bottomLimit, yellowMax ?? topLimit, 'rgba(245, 158, 11, 0.10)');
+          paintBand(yellowMax ?? greenMax ?? topLimit, topLimit, 'rgba(239, 68, 68, 0.08)');
+        }
+      };
+
+      if (window.Chart && !Chart.registry.plugins.get('secadoresBands')) {
+        Chart.register(secadoresBandsPlugin);
+      }
+
       const state = {
-        payload: window.secadoresResumenBootstrap || {},
+        payload: window.secadoresBootstrap || {},
+        activeTunnel: (window.secadoresBootstrap && window.secadoresBootstrap.tunelSeleccionado) || 'tunel_1',
+        chart: null,
         timer: null,
       };
 
-      const renderWarnings = () => {
-        const wrap = document.getElementById('secadoresWarnings');
-        if (!wrap) return;
-        const warnings = state.payload.meta?.warnings || [];
-        wrap.innerHTML = warnings.map((warning) =>
-          '<div class="secadores-warning"><i class="fas fa-triangle-exclamation"></i> ' + warning + '</div>'
-        ).join('');
+      const formatNumber = (value, decimals = 2) => {
+        if (value === null || value === undefined || Number.isNaN(Number(value))) {
+          return '-';
+        }
+
+        return Number(value).toLocaleString('en-US', {
+          minimumFractionDigits: decimals,
+          maximumFractionDigits: decimals,
+        });
       };
 
-      const renderHeader = () => {
-        const lastRefresh = document.getElementById('secadoresLastRefresh');
-        if (!lastRefresh) return;
-        lastRefresh.innerHTML = '<i class="fas fa-rotate"></i> Actualizacion: ' + new Date().toLocaleString('es-MX');
+      const getTunnelTitle = (tunnelKey) => {
+        const tunnel = state.payload.tuneles?.[tunnelKey];
+        return tunnel ? tunnel.titulo : tunnelKey;
       };
 
-      const renderTunnels = () => {
-        const grid = document.getElementById('secadoresSummaryGrid');
-        if (!grid) return;
+      const renderTabs = () => {
+        const tabs = document.getElementById('secadoresTabs');
+        if (!tabs) return;
 
-        const tunnels = Object.values(state.payload.tuneles || {});
-        grid.innerHTML = tunnels.map((tunnel) => {
-          const operation = tunnel.operacion || {};
-          const maintenance = tunnel.mantenimiento || {};
+        tabs.innerHTML = '';
+        Object.entries(state.payload.tuneles || {}).forEach(([key, tunnel]) => {
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'secadores-tab' + (key === state.activeTunnel ? ' active' : '');
+          button.textContent = tunnel.titulo;
+          button.addEventListener('click', () => {
+            state.activeTunnel = key;
+            renderAll();
+          });
+          tabs.appendChild(button);
+        });
+      };
 
-          const continuous = (tunnel.parametrosContinuos || []).map((item) => (
-            '<div class="secadores-zone-card" style="background:' + item.statusBg + '; border-color:' + item.statusColor + '33;">' +
-              '<div class="secadores-zone-label">' + item.titulo + '</div>' +
-              '<div class="secadores-zone-value">' + item.valor + '</div>' +
-              '<div class="secadores-zone-meta">' + item.detalle + '<br>' +
-                '<span class="secadores-status" style="background:' + item.statusBg + '; color:' + item.statusColor + '; margin-top:8px;">' +
-                  '<i class="fas fa-circle"></i>' + item.statusLabel +
-                '</span>' +
-              '</div>' +
-            '</div>'
-          )).join('');
+      const renderKpis = () => {
+        const summary = state.payload.resumenes?.[state.activeTunnel] || {};
+        document.getElementById('secadoresUltimaLectura').textContent = summary.ultimaLectura || '-';
+        document.getElementById('secadoresVerdes').textContent = summary.enVerde ?? 0;
+        document.getElementById('secadoresAlertas').textContent = summary.enAlerta ?? 0;
+        document.getElementById('secadoresCriticas').textContent = summary.enCritico ?? 0;
+        document.getElementById('secadoresPromedio').textContent = summary.promedioActual !== null && summary.promedioActual !== undefined
+          ? formatNumber(summary.promedioActual, 2)
+          : '-';
+        document.getElementById('secadoresPromedioTrend').textContent =
+          'Máx: ' + (summary.maximoActual !== null && summary.maximoActual !== undefined ? formatNumber(summary.maximoActual, 2) : '-') +
+          ' | Mín: ' + (summary.minimoActual !== null && summary.minimoActual !== undefined ? formatNumber(summary.minimoActual, 2) : '-');
+      };
 
-          const zones = (tunnel.zonas || []).map((zone) => (
-            '<a class="secadores-card-link" href="' + tunnel.detalleUrl + '">' +
-              '<div class="secadores-zone-card" style="background:' + zone.statusBg + '; border-color:' + zone.statusColor + '33;">' +
-                '<div class="secadores-zone-label">' + zone.label + '</div>' +
-                '<div class="secadores-zone-value">' + zone.value + '</div>' +
-                '<div class="secadores-zone-meta">' +
-                  '<span class="secadores-status" style="background:' + zone.statusBg + '; color:' + zone.statusColor + ';">' +
-                    '<i class="fas fa-circle"></i>' + zone.statusLabel +
-                  '</span>' +
-                '</div>' +
-              '</div>' +
-            '</a>'
-          )).join('');
+      const renderChart = () => {
+        const chartWrap = state.payload.charts?.[state.activeTunnel] || { labels: [], datasets: [] };
+        const subtitle = document.getElementById('secadoresChartSub');
+        if (subtitle) {
+          const bands = chartWrap.bands || {};
+          const parts = ['Histórico reciente de ' + getTunnelTitle(state.activeTunnel)];
+          if (bands.hasBands) {
+            const fmt = (value) => value === null || value === undefined ? '-' : formatNumber(value, 1);
+            if ((bands.mode || 'rango') === 'rango') {
+              parts.push('Verde ' + fmt(bands.greenMin) + ' a ' + fmt(bands.greenMax));
+            }
+          }
+          subtitle.textContent = parts.join(' | ');
+        }
 
-          const maints = (tunnel.mantenimientos || []).map((item) => (
-            '<div class="secadores-maint-card" style="background:' + item.statusBg + '; border-color:' + item.statusColor + '33;">' +
-              '<div class="secadores-maint-title">' + item.titulo + '</div>' +
-              '<div class="secadores-maint-value">' + item.valor + '</div>' +
-              '<div class="secadores-maint-meta">' + item.detalle + '<br><span class="secadores-status" style="background:' + item.statusBg + '; color:' + item.statusColor + '; margin-top:8px;">' +
-              '<i class="fas fa-circle"></i>' + item.statusLabel + '</span></div>' +
-            '</div>'
-          )).join('');
+        const ctx = document.getElementById('secadoresChart');
+        if (!ctx) return;
 
-          return (
-            '<section class="secadores-panel">' +
-              '<div class="secadores-panel-head">' +
-                '<div>' +
-                  '<h2 class="secadores-panel-title">' + tunnel.titulo + '</h2>' +
-                  '<div class="secadores-panel-sub">' + (tunnel.subtitulo || '') + '</div>' +
-                '</div>' +
-                '<div class="secadores-stamp">' +
-                  '<strong>Ultima lectura</strong><br>' + (tunnel.ultimaLectura || '-') +
-                '</div>' +
-              '</div>' +
-              '<div class="secadores-body">' +
-                '<div class="secadores-kpi-row">' +
-                  '<div class="secadores-kpi-box" style="background:' + operation.statusBg + '; border-color:' + operation.statusColor + '33;">' +
-                    '<div class="secadores-kpi-label">Cumplimiento de operacion</div>' +
-                    '<div class="secadores-kpi-value">' + (operation.formatted || '-') + '</div>' +
-                    '<div class="secadores-kpi-meta">' + (operation.trend || '') + '<br>' +
-                      '<span class="secadores-status" style="background:' + operation.statusBg + '; color:' + operation.statusColor + '; margin-top:10px;">' +
-                        '<i class="fas fa-circle"></i>' + (operation.statusLabel || '-') +
-                      '</span>' +
-                    '</div>' +
-                  '</div>' +
-                  '<div class="secadores-kpi-box" style="background:' + maintenance.statusBg + '; border-color:' + maintenance.statusColor + '33;">' +
-                    '<div class="secadores-kpi-label">Cumplimiento de mtto y revision</div>' +
-                    '<div class="secadores-kpi-value">' + (maintenance.formatted || '-') + '</div>' +
-                    '<div class="secadores-kpi-meta">' + (maintenance.trend || '') + '<br>' +
-                      '<span class="secadores-status" style="background:' + maintenance.statusBg + '; color:' + maintenance.statusColor + '; margin-top:10px;">' +
-                        '<i class="fas fa-circle"></i>' + (maintenance.statusLabel || '-') +
-                      '</span>' +
-                    '</div>' +
-                  '</div>' +
-                '</div>' +
-                '<div>' +
-                  '<div class="secadores-section-title"><i class="fas fa-wind"></i> Parametros continuos</div>' +
-                  '<div class="secadores-zones-grid">' + continuous + '</div>' +
-                '</div>' +
-                '<div>' +
-                  '<div class="secadores-section-title"><i class="fas fa-temperature-three-quarters"></i> Temperatura de zonas</div>' +
-                  '<div class="secadores-zones-grid">' + zones + '</div>' +
-                '</div>' +
-                '<div>' +
-                  '<div class="secadores-section-title"><i class="fas fa-screwdriver-wrench"></i> Mantenimientos vitales</div>' +
-                  '<div class="secadores-maint-grid">' + maints + '</div>' +
-                '</div>' +
-              '</div>' +
-            '</section>'
-          );
+        if (state.chart) {
+          state.chart.destroy();
+        }
+
+        state.chart = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: chartWrap.labels || [],
+            datasets: chartWrap.datasets || [],
+          },
+          options: {
+            animation: false,
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+              mode: 'index',
+              intersect: false,
+            },
+            plugins: {
+              secadoresBands: chartWrap.bands || {},
+              legend: {
+                position: 'bottom',
+              },
+            },
+            scales: {
+              x: {
+                ticks: {
+                  maxRotation: 0,
+                  autoSkip: true,
+                  maxTicksLimit: 10,
+                },
+              },
+              y: {
+                beginAtZero: false,
+              },
+            },
+          },
+        });
+      };
+
+      const renderTable = () => {
+        const tunnel = state.payload.tuneles?.[state.activeTunnel] || { campos: [] };
+        const rows = state.payload.tablas?.[state.activeTunnel] || [];
+        const tableHead = document.getElementById('secadoresTableHead');
+        const tableBody = document.getElementById('secadoresTableBody');
+        const subtitle = document.getElementById('secadoresTableSub');
+
+        if (subtitle) {
+          subtitle.textContent = 'Últimos ' + (state.payload.meta?.limiteRegistros ?? rows.length) + ' registros de ' + getTunnelTitle(state.activeTunnel);
+        }
+
+        if (tableHead) {
+          const headerCells = ['<tr><th>Fecha / Hora</th>'];
+          (tunnel.campos || []).forEach((field) => {
+            headerCells.push('<th>' + field.label + '</th>');
+          });
+          headerCells.push('</tr>');
+          tableHead.innerHTML = headerCells.join('');
+        }
+
+        if (!tableBody) return;
+
+        if (!rows.length) {
+          tableBody.innerHTML = '<tr><td colspan="' + ((tunnel.campos || []).length + 1) + '" class="secadores-empty">Sin lecturas disponibles para este túnel.</td></tr>';
+          return;
+        }
+
+        tableBody.innerHTML = rows.map((row) => {
+          const cells = row.cells.map((cell) => {
+            const background = cell.statusColor || '#f8fafc';
+            return '<td class="secadores-cell" style="background:' + background + '1A; border-left: 4px solid ' + background + ';">'
+              + (cell.formatted || '-')
+              + '<small>' + (cell.statusLabel || 'Sin dato') + '</small>'
+              + '</td>';
+          }).join('');
+
+          return '<tr><td style="white-space: nowrap; font-weight: 600;">' + row.timestamp + '</td>' + cells + '</tr>';
         }).join('');
       };
 
       const renderAll = () => {
-        renderHeader();
-        renderWarnings();
-        renderTunnels();
+        renderTabs();
+        renderKpis();
+        renderChart();
+        renderTable();
       };
 
-      const scheduleRefresh = () => {
-        if (state.timer) {
-          window.clearInterval(state.timer);
+      const updateRefreshBadge = (ok, message) => {
+        const badge = document.getElementById('secadoresLastRefresh');
+        if (!badge) return;
+
+        if (ok) {
+          badge.innerHTML = '<i class="fas fa-rotate"></i> Actualizado: ' + new Date().toLocaleTimeString();
+          return;
         }
 
-        const interval = Number(state.payload.meta?.intervaloActualizacion || 1800000);
-        state.timer = window.setInterval(async () => {
-          try {
-            const response = await fetch('./data.php', { cache: 'no-store' });
-            if (!response.ok) {
-              throw new Error('No fue posible actualizar el tablero');
-            }
-            state.payload = await response.json();
-            renderAll();
-          } catch (error) {
+        badge.innerHTML = '<i class="fas fa-triangle-exclamation"></i> ' + message;
+      };
+
+      const fetchData = async () => {
+        try {
+          const response = await fetch('data.php?t=' + Date.now(), { cache: 'no-store' });
+          if (!response.ok) {
+            throw new Error('HTTP ' + response.status);
           }
-        }, interval);
+
+          const payload = await response.json();
+          if (payload && !payload.error) {
+            state.payload = payload;
+            if (!state.payload.tuneles?.[state.activeTunnel]) {
+              state.activeTunnel = state.payload.tunelSeleccionado || Object.keys(state.payload.tuneles || {})[0] || state.activeTunnel;
+            }
+            renderAll();
+            updateRefreshBadge(true, '');
+            return;
+          }
+
+          throw new Error(payload?.message || 'No se pudo cargar la actualización.');
+        } catch (error) {
+          updateRefreshBadge(false, 'Sin actualizar');
+        }
       };
 
       renderAll();
-      scheduleRefresh();
+      updateRefreshBadge(true, '');
+
+      const interval = Number(state.payload.meta?.intervaloActualizacion || 5000);
+      state.timer = window.setInterval(fetchData, interval);
     })();
   </script>
 </body>
+
 </html>

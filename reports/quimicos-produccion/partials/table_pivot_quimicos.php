@@ -30,8 +30,20 @@
 $toleranciaPct = (float)($meta['toleranciaPct'] ?? 10);
 $totalSemanas = count($semanasCatalogo);
 $windowSize = 5;
-$startIndex = max(0, $totalSemanas - $windowSize);
+$currentIsoYear = (int)date('o');
+$currentIsoWeek = (int)date('W');
+$maxVisibleWeekIndex = max(0, min($totalSemanas - 1, $currentIsoWeek - 1));
+
+if ($anioPivot < $currentIsoYear) {
+  $maxVisibleWeekIndex = max(0, $totalSemanas - 1);
+} elseif ($anioPivot > $currentIsoYear) {
+  $maxVisibleWeekIndex = 0;
+}
+
+$endIndex = $maxVisibleWeekIndex;
+$startIndex = max(0, $endIndex - $windowSize + 1);
 $grupoEstructura = $meta['grupo_estructura'] ?? [];
+$semanaDisplay = static fn($semana): string => preg_replace('/^S0([1-9])$/', 'S$1', (string)$semana) ?? (string)$semana;
 ?>
 <div class="cards-section">
   <div class="pivot-header">
@@ -49,11 +61,15 @@ $grupoEstructura = $meta['grupo_estructura'] ?? [];
       <div class="sort-buttons">
         <button type="button" class="sort-btn active" id="sortByConsumo" data-sort="consumo" title="Ordenar por mayor consumo">
           <i class="fas fa-droplet"></i>
-          Consumo
+          Consumo por producción
         </button>
         <button type="button" class="sort-btn" id="sortByCosto" data-sort="costo" title="Ordenar por mayor costo por producción">
           <i class="fas fa-dollar-sign"></i>
-          Costo
+          Costo por producción
+        </button>
+        <button type="button" class="sort-btn" id="sortByCompra" data-sort="compra" title="Ordenar por mayor costo de compra">
+          <i class="fas fa-dollar-sign"></i>
+          Costo de compra
         </button>
       </div>
       <label class="toggle-semaforo">
@@ -89,7 +105,7 @@ $grupoEstructura = $meta['grupo_estructura'] ?? [];
     </button>
 
     <div class="pivot-window-info" id="pivotWindowInfo">
-      Mostrando semanas
+      Mostrando <?= htmlspecialchars($semanaDisplay($semanasCatalogo[$startIndex] ?? '-')) ?> a <?= htmlspecialchars($semanaDisplay($semanasCatalogo[$endIndex] ?? '-')) ?>
     </div>
 
     <button type="button" class="pivot-nav-btn" id="pivotNextBtn">
@@ -114,13 +130,14 @@ $grupoEstructura = $meta['grupo_estructura'] ?? [];
           </th>
 
           <?php foreach ($semanasCatalogo as $index => $semana): ?>
+            <?php $weekVisible = $index >= $startIndex && $index <= $endIndex; ?>
             <th
               class="week-col week-col-header"
               data-week-index="<?= $index ?>"
-              data-semana="<?= htmlspecialchars($semana) ?>">
+              data-semana="<?= htmlspecialchars($semana) ?>"
+              style="<?= $weekVisible ? '' : 'display:none;' ?>">
               <div class="week-pill">
-                <span class="week-pill-top"><?= htmlspecialchars($semana) ?></span>
-                <span class="week-pill-bottom">Semana</span>
+                <span class="week-pill-top"><?= htmlspecialchars($semanaDisplay($semana)) ?></span>
               </div>
             </th>
           <?php endforeach; ?>
@@ -204,6 +221,7 @@ $grupoEstructura = $meta['grupo_estructura'] ?? [];
               </td>
 
               <?php foreach ($semanasCatalogo as $index => $semana): ?>
+                <?php $weekVisible = $index >= $startIndex && $index <= $endIndex; ?>
                 <?php
                 $ratioQuimico = $matrizRatioQuimicos[$quimico][$semana] ?? null;
                 $baseQuimico = $ratioBasePorQuimico[$quimico] ?? null;
@@ -214,6 +232,7 @@ $grupoEstructura = $meta['grupo_estructura'] ?? [];
                 <td
                   class="week-col cell-ratio-semaforo"
                   data-week-index="<?= $index ?>"
+                  style="<?= $weekVisible ? '' : 'display:none;' ?>"
                   data-ratio="<?= $ratioQuimico !== null ? (float)$ratioQuimico : 'null' ?>"
                   data-costo="<?= $impactoEconomico !== null ? (float)$impactoEconomico : 'null' ?>"
                   data-costo-unitario="<?= $costoUnitSemana ?>"
@@ -246,7 +265,8 @@ $grupoEstructura = $meta['grupo_estructura'] ?? [];
             <td class="sticky-col" style="background: #f8fafc;"></td>
             <td class="sticky-col col-costo-unit" style="background: #f8fafc; display: none;"></td>
             <?php foreach ($semanasCatalogo as $index => $semana): ?>
-              <td class="week-col" data-week-index="<?= $index ?>">
+              <?php $weekVisible = $index >= $startIndex && $index <= $endIndex; ?>
+              <td class="week-col" data-week-index="<?= $index ?>" style="<?= $weekVisible ? '' : 'display:none;' ?>">
                 <strong><?= n((float)($totalesPorSemana[$semana] ?? 0), 2) ?></strong>
               </td>
             <?php endforeach; ?>
@@ -258,7 +278,8 @@ $grupoEstructura = $meta['grupo_estructura'] ?? [];
             <td class="sticky-col" style="background: #f8fafc;"></td>
             <td class="sticky-col col-costo-unit" style="background: #f8fafc; display: none;"></td>
             <?php foreach ($semanasCatalogo as $index => $semana): ?>
-              <td class="week-col" data-week-index="<?= $index ?>">
+              <?php $weekVisible = $index >= $startIndex && $index <= $endIndex; ?>
+              <td class="week-col" data-week-index="<?= $index ?>" style="<?= $weekVisible ? '' : 'display:none;' ?>">
                 <strong><?= n((float)($produccionPorSemana[$semana] ?? 0), 2) ?></strong>
               </td>
             <?php endforeach; ?>
@@ -270,11 +291,12 @@ $grupoEstructura = $meta['grupo_estructura'] ?? [];
             <td class="sticky-col" style="background: #f8fafc;"></td>
             <td class="sticky-col col-costo-unit" style="background: #f8fafc; display: none;"></td>
             <?php foreach ($semanasCatalogo as $index => $semana): ?>
+              <?php $weekVisible = $index >= $startIndex && $index <= $endIndex; ?>
               <?php
               $ratio = $ratioPorSemana[$semana] ?? null;
               [$estado, $color, $colorHex] = semaforo($ratio, $ratioBase, $toleranciaPct);
               ?>
-              <td class="week-col cell-ratio-semaforo" data-week-index="<?= $index ?>">
+              <td class="week-col cell-ratio-semaforo" data-week-index="<?= $index ?>" style="<?= $weekVisible ? '' : 'display:none;' ?>">
                 <div class="ratio-semaforo-wrap">
                   <div class="ratio-value">
                     <strong><?= $ratio !== null ? n((float)$ratio, 2) : '-' ?></strong>
@@ -306,14 +328,16 @@ $grupoEstructura = $meta['grupo_estructura'] ?? [];
   (function() {
     const semanas = <?= json_encode(array_values($semanasCatalogo), JSON_UNESCAPED_UNICODE) ?>;
     const windowSize = 5;
+    const maxVisibleWeekIndex = <?= (int)$maxVisibleWeekIndex ?>;
     let startIndex = <?= (int)$startIndex ?>;
+    const formatSemana = (semana) => String(semana || '').replace(/^S0([1-9])$/, 'S$1');
 
     const prevBtn = document.getElementById('pivotPrevBtn');
     const nextBtn = document.getElementById('pivotNextBtn');
     const info = document.getElementById('pivotWindowInfo');
 
     function renderWindow() {
-      const endIndex = Math.min(semanas.length - 1, startIndex + windowSize - 1);
+      const endIndex = Math.min(maxVisibleWeekIndex, startIndex + windowSize - 1);
 
       document.querySelectorAll('#pivotTable .week-col').forEach(cell => {
         const idx = parseInt(cell.dataset.weekIndex, 10);
@@ -322,13 +346,13 @@ $grupoEstructura = $meta['grupo_estructura'] ?? [];
       });
 
       if (info) {
-        const desde = semanas[startIndex] || '-';
-        const hasta = semanas[endIndex] || '-';
+        const desde = formatSemana(semanas[startIndex] || '-');
+        const hasta = formatSemana(semanas[endIndex] || '-');
         info.textContent = `Mostrando ${desde} a ${hasta}`;
       }
 
       if (prevBtn) prevBtn.disabled = startIndex <= 0;
-      if (nextBtn) nextBtn.disabled = endIndex >= semanas.length - 1;
+      if (nextBtn) nextBtn.disabled = endIndex >= maxVisibleWeekIndex;
     }
 
     if (prevBtn) {
@@ -342,7 +366,7 @@ $grupoEstructura = $meta['grupo_estructura'] ?? [];
 
     if (nextBtn) {
       nextBtn.addEventListener('click', function() {
-        const maxStart = Math.max(0, semanas.length - windowSize);
+        const maxStart = Math.max(0, maxVisibleWeekIndex - windowSize + 1);
         if (startIndex < maxStart) {
           startIndex = Math.min(maxStart, startIndex + 1);
           renderWindow();
@@ -445,6 +469,207 @@ $grupoEstructura = $meta['grupo_estructura'] ?? [];
         } else if (iconEl) {
           iconEl.className = 'fas ' + datos.kpi4Icon;
         }
+      }
+
+      function actualizarCabeceraGrafica(modo) {
+        const title = document.querySelector('.chart-header h3');
+        const legend = document.querySelector('.chart-header .legend');
+        if (!title || !legend) return;
+
+        if (modo === 'costo') {
+          title.innerHTML =
+            '<i class="fas fa-chart-line"></i> Comportamiento de costo por producción <?= htmlspecialchars((string)$anioAnterior) ?> vs <?= htmlspecialchars((string)$anioActual) ?>' +
+            '<span style="font-size: 0.8rem;">' +
+            '<span style="color: #3b82f6;">● <?= htmlspecialchars((string)$anioAnterior) ?> (Base)</span> vs ' +
+            '<span style="color: #10b981;">● <?= htmlspecialchars((string)$anioActual) ?></span>' +
+            '</span>';
+          legend.innerHTML =
+            '<div class="legend-item"><div class="legend-color" style="background: #10b981;"></div><span>Óptimo (≤ <?= $costoPromedioPorProduccionAnioAnterior !== null ? '$ ' . n((float)$costoPromedioPorProduccionAnioAnterior, 2) : '-' ?>)</span></div>' +
+            '<div class="legend-item"><div class="legend-color" style="background: #f59e0b;"></div><span>Cuidado (≤ <?= $costoPromedioPorProduccionAnioAnterior !== null ? '$ ' . n((float)($costoPromedioPorProduccionAnioAnterior * (1 + ($toleranciaPct / 100))), 2) : '-' ?>)</span></div>' +
+            '<div class="legend-item"><div class="legend-color" style="background: #ef4444;"></div><span>Alto (&gt; <?= $costoPromedioPorProduccionAnioAnterior !== null ? '$ ' . n((float)($costoPromedioPorProduccionAnioAnterior * (1 + ($toleranciaPct / 100))), 2) : '-' ?>)</span></div>';
+          return;
+        }
+
+        title.innerHTML =
+          '<i class="fas fa-chart-line"></i> Comparativa Semanal <?= htmlspecialchars((string)$anioAnterior) ?> vs <?= htmlspecialchars((string)$anioActual) ?>' +
+          '<span style="font-size: 0.8rem;">' +
+          '<span style="color: #3b82f6;">● <?= htmlspecialchars((string)$anioAnterior) ?> (Base)</span> vs ' +
+          '<span style="color: #10b981;">● <?= htmlspecialchars((string)$anioActual) ?></span>' +
+          '</span>';
+        legend.innerHTML =
+          '<div class="legend-item"><div class="legend-color" style="background: #10b981;"></div><span>Óptimo (≤ <?= $ratioBase !== null ? n((float)$ratioBase, 2) : '-' ?>)</span></div>' +
+          '<div class="legend-item"><div class="legend-color" style="background: #f59e0b;"></div><span>Cuidado (≤ <?= $limiteAmarillo !== null ? n((float)$limiteAmarillo, 2) : '-' ?>)</span></div>' +
+          '<div class="legend-item"><div class="legend-color" style="background: #ef4444;"></div><span>Alto (&gt; <?= $limiteAmarillo !== null ? n((float)$limiteAmarillo, 2) : '-' ?>)</span></div>';
+      }
+
+      function renderPivotChart(modo) {
+        if (typeof Chart === 'undefined') return;
+
+        const canvas = document.getElementById('ratioChart');
+        if (!canvas) return;
+
+        const chartSource = modo === 'costo' ?
+          (window.reportData.chartDataCosto || {}) :
+          (window.reportData.chartData || {});
+
+        const labels = chartSource.labels || [];
+        const actualData = chartSource.ratiosActual || [];
+        const baseData = chartSource.ratiosBase || [];
+        const pointColors = chartSource.colorsActual || actualData.map(() => '#94a3b8');
+        const ratioBaseChart = Number(chartSource.ratioBase || 0);
+        const tolerancia = <?= json_encode($toleranciaPct) ?>;
+        const limiteAmarilloChart = ratioBaseChart > 0 ? ratioBaseChart * (1 + (tolerancia / 100)) : null;
+
+        const existingChart = Chart.getChart(canvas);
+        if (existingChart) {
+          existingChart.destroy();
+        }
+
+        const datasets = [{
+          label: modo === 'costo' ? 'Costo por producción <?= htmlspecialchars((string)$anioActual) ?>' : 'Ratio <?= htmlspecialchars((string)$anioActual) ?>',
+          data: actualData,
+          borderColor: '#2a35d4',
+          backgroundColor: 'rgba(16, 185, 129, 0.05)',
+          borderWidth: 3,
+          pointRadius: 6,
+          pointHoverRadius: 8,
+          pointBackgroundColor: pointColors,
+          pointBorderColor: 'white',
+          pointBorderWidth: 2,
+          tension: 0.3,
+          fill: false,
+        }];
+
+        if (<?= json_encode($anioAnterior) ?> !== 2025) {
+          datasets.push({
+            label: modo === 'costo' ? 'Base <?= htmlspecialchars((string)$anioAnterior) ?>' : 'Base <?= htmlspecialchars((string)$anioAnterior) ?>',
+            data: baseData,
+            borderColor: '#3b82f6',
+            backgroundColor: 'rgba(59, 130, 246, 0.08)',
+            borderDash: [6, 4],
+            borderWidth: 2,
+            pointRadius: 0,
+            tension: 0.3,
+            fill: false,
+          });
+        }
+
+        if (limiteAmarilloChart !== null) {
+          datasets.push({
+            label: 'Límite Amarillo',
+            data: Array(labels.length).fill(limiteAmarilloChart),
+            borderColor: '#f59e0b',
+            borderWidth: 2,
+            backgroundColor: 'transparent',
+            borderDash: [6, 4],
+            fill: false,
+            pointRadius: 0,
+            tension: 0,
+          });
+        }
+
+        const semaforoPlugin = {
+          id: 'semaforoShadingPivot',
+          afterDraw(chartInstance) {
+            const yAxis = chartInstance.scales.y;
+            const chartArea = chartInstance.chartArea;
+            if (!yAxis || !chartArea || !ratioBaseChart || !limiteAmarilloChart) return;
+
+            const ctx = chartInstance.ctx;
+            const verdePx = yAxis.getPixelForValue(ratioBaseChart);
+            const amarilloPx = yAxis.getPixelForValue(limiteAmarilloChart);
+
+            ctx.save();
+            ctx.fillStyle = 'rgba(239, 68, 68, 0.15)';
+            ctx.fillRect(chartArea.left, chartArea.top, chartArea.width, verdePx - chartArea.top);
+
+            ctx.fillStyle = 'rgba(245, 158, 11, 0.15)';
+            ctx.fillRect(chartArea.left, verdePx, chartArea.width, amarilloPx - verdePx);
+
+            ctx.fillStyle = 'rgba(16, 185, 129, 0.15)';
+            ctx.fillRect(chartArea.left, amarilloPx, chartArea.width, chartArea.bottom - amarilloPx);
+            ctx.restore();
+          }
+        };
+
+        new Chart(canvas.getContext('2d'), {
+          type: 'line',
+          data: {
+            labels,
+            datasets
+          },
+          plugins: [semaforoPlugin],
+          options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            interaction: {
+              mode: 'index',
+              intersect: false
+            },
+            plugins: {
+              legend: {
+                display: true,
+                position: 'top'
+              },
+              tooltip: {
+                backgroundColor: 'white',
+                titleColor: '#0f172a',
+                bodyColor: '#475569',
+                borderColor: '#e2e8f0',
+                borderWidth: 1,
+                callbacks: {
+                  title: function(context) {
+                    return context.length ? formatSemana(context[0].label) : '';
+                  },
+                  label: function(context) {
+                    const label = context.dataset.label || '';
+                    const value = context.parsed.y;
+                    if (value === null) return label + ': Sin dato';
+                    const formatted = modo === 'costo' ?
+                      '$ ' + value.toLocaleString('es-MX', {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2
+                      }) :
+                      value.toLocaleString('es-MX', {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2
+                      });
+                    return label + ': ' + formatted;
+                  }
+                }
+              }
+            },
+            scales: {
+              y: {
+                grid: {
+                  color: '#e2e8f0'
+                },
+                title: {
+                  display: true,
+                  text: modo === 'costo' ? 'Costo por producción' : 'Ratio (kg químico / kg producción)',
+                  color: '#64748b',
+                },
+              },
+              x: {
+                grid: {
+                  display: false
+                },
+                ticks: {
+                  callback: function(value) {
+                    return formatSemana(this.getLabelForValue(value));
+                  }
+                },
+                title: {
+                  display: true,
+                  text: 'Semana',
+                  color: '#64748b',
+                },
+              },
+            },
+          }
+        });
+
+        actualizarCabeceraGrafica(modo);
       }
 
       function sortTable(modo) {
@@ -566,7 +791,10 @@ $grupoEstructura = $meta['grupo_estructura'] ?? [];
             // Modo consumo - mostrar ratio
             const ratio = parseFloat(celda.getAttribute('data-ratio'));
             if (!isNaN(ratio) && ratio !== null) {
-              ratioValue.textContent = ratio.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+              ratioValue.textContent = ratio.toLocaleString('es-MX', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+              });
               ratioBase.style.display = 'block';
             } else {
               ratioValue.textContent = '-';
@@ -630,13 +858,19 @@ $grupoEstructura = $meta['grupo_estructura'] ?? [];
 
               const spanAnterior = celdaAnterior.querySelector('.valor-anterior');
               if (spanAnterior && !isNaN(consumoAnterior)) {
-                spanAnterior.textContent = consumoAnterior.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                spanAnterior.textContent = consumoAnterior.toLocaleString('es-MX', {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2
+                });
               }
 
               const spanActual = celdaActual.querySelector('.valor-actual');
               const spanVariacion = celdaActual.querySelector('.variacion-texto');
               if (spanActual && !isNaN(consumoActual)) {
-                spanActual.textContent = consumoActual.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                spanActual.textContent = consumoActual.toLocaleString('es-MX', {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2
+                });
               }
               if (spanVariacion && !isNaN(variacionConsumo)) {
                 spanVariacion.style.color = color;
@@ -653,6 +887,8 @@ $grupoEstructura = $meta['grupo_estructura'] ?? [];
         sortTable('consumo');
         cambiarModoVisualizacion('consumo');
         actualizarKpisGenerales('consumo');
+        renderWindow();
+        renderPivotChart('consumo');
       });
 
       sortByCosto.addEventListener('click', function() {
@@ -661,13 +897,21 @@ $grupoEstructura = $meta['grupo_estructura'] ?? [];
         sortTable('costo');
         cambiarModoVisualizacion('costo');
         actualizarKpisGenerales('costo');
+        renderWindow();
+        renderPivotChart('costo');
       });
 
       // Aplicar ordenamiento inicial por consumo (mayor a menor)
       sortTable('consumo');
       actualizarKpisGenerales('consumo');
+      renderPivotChart('consumo');
     }
 
     renderWindow();
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(renderWindow);
+    } else {
+      setTimeout(renderWindow, 0);
+    }
   })();
 </script>

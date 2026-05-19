@@ -14,8 +14,6 @@
 /** @var float $total_ventas_anio_actual */
 /** @var float $total_kg_anio_anterior */
 /** @var float $total_kg_anio_actual */
-/** @var float|null $precio_promedio_kg_anio_anterior */
-/** @var float|null $precio_promedio_kg_anio_actual */
 /** @var int $cantidad_clientes_anterior */
 /** @var int $cantidad_clientes_actual */
 /** @var float|null $variacion_clientes_activos */
@@ -43,7 +41,6 @@ $calcVariation = static function ($actual, $anterior): ?float {
 
 $variacionKgAnual = $calcVariation($total_kg_anio_actual ?? 0, $total_kg_anio_anterior ?? 0);
 $variacionVentasAnual = $calcVariation($total_ventas_anio_actual ?? 0, $total_ventas_anio_anterior ?? 0);
-$variacionPrecioPromedioGeneral = $calcVariation($precio_promedio_kg_anio_actual ?? 0, $precio_promedio_kg_anio_anterior ?? 0);
 
 $trendIcon = static function (?float $value): string {
   if ($value === null || $value == 0.0) {
@@ -118,17 +115,6 @@ $trendColor = static function (?float $value): string {
     <div class="kpi-value">$<?= n((float)($total_ventas_anio_actual ?? 0), 0) ?></div>
     <div class="kpi-trend">
       <?= htmlspecialchars((string)$anio_anterior) ?>: $<?= n((float)($total_ventas_anio_anterior ?? 0), 0) ?> | Var: <?= htmlspecialchars($formatPct($variacionVentasAnual)) ?>
-    </div>
-  </div>
-
-  <div class="kpi-card" role="group" aria-label="Precio promedio general">
-    <div class="kpi-icon">
-      <i class="fas fa-tags" style="color: #ef4444;"></i>
-    </div>
-    <div class="kpi-label">Precio promedio general</div>
-    <div class="kpi-value"><?= ($precio_promedio_kg_anio_actual ?? null) !== null ? '$' . n((float)$precio_promedio_kg_anio_actual, 2) : '-' ?></div>
-    <div class="kpi-trend">
-      <?= htmlspecialchars((string)$anio_anterior) ?>: <?= ($precio_promedio_kg_anio_anterior ?? null) !== null ? '$' . n((float)$precio_promedio_kg_anio_anterior, 2) : '-' ?> | Var: <?= htmlspecialchars($formatPct($variacionPrecioPromedioGeneral)) ?>
     </div>
   </div>
 

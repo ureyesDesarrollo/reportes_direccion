@@ -132,6 +132,7 @@ $rowsPivot = $stmtPivot->fetchAll();
 |--------------------------------------------------------------------------
 */
 $quimicosPorPeriodo = [];
+$impactoEconomicoPorPeriodo = [];
 foreach ($rowsPivot as $row) {
   $periodo = (int)$row['periodo'];
   if (!isset($quimicosPorPeriodo[$periodo])) {
@@ -144,6 +145,8 @@ foreach ($rowsPivot as $row) {
     ];
   }
   $quimicosPorPeriodo[$periodo]['quimicos_kg'] += (float)$row['quimicos_kg'];
+  $impactoEconomicoPorPeriodo[$periodo] = ($impactoEconomicoPorPeriodo[$periodo] ?? 0.0)
+    + ((float)$row['quimicos_kg'] * (float)($row['costo_promedio'] ?? 0.0));
 }
 
 /*
@@ -158,7 +161,7 @@ $produccionPorPeriodo = ReportEngine::fetchProductionSeries($pdoProd, $fechaDesd
 | 4) MATRIZ BASE DE KG POR QUÍMICO Y SEMANA DEL AÑO PIVOT
 |--------------------------------------------------------------------------
 */
-$semanasCatalogo = [];
+$semanasCatalogo = array_map(fn($week) => 'S' . str_pad((string)$week, 2, '0', STR_PAD_LEFT), range(1, 52));
 $quimicosCatalogo = [];
 $quimicosEtiquetas = [];
 $matrizQuimicos = [];
@@ -184,10 +187,6 @@ foreach ($rowsPivot as $row) {
 
   $quimicosEtiquetas[$quimicoKey] = $quimicoLabel;
 
-  if (!in_array($semanaLabel, $semanasCatalogo, true)) {
-    $semanasCatalogo[] = $semanaLabel;
-  }
-
   if (!in_array($quimicoKey, $quimicosCatalogo, true)) {
     $quimicosCatalogo[] = $quimicoKey;
   }
@@ -208,22 +207,6 @@ foreach ($rowsPivot as $row) {
   $matrizImpactoAcumulado[$quimicoKey][$semanaLabel] += $kg * $costo;
 }
 
-// si existe producción en una semana del año pivot, asegúrala como columna
-foreach ($produccionPorPeriodo as $row) {
-  $semanaIso = (string)$row['semana_iso'];
-  $anioIso = (int)substr($semanaIso, 0, 4);
-
-  if ($anioIso !== $anioPivot) {
-    continue;
-  }
-
-  $semanaLabel = substr($semanaIso, -3);
-  if (!in_array($semanaLabel, $semanasCatalogo, true)) {
-    $semanasCatalogo[] = $semanaLabel;
-  }
-}
-
-sort($semanasCatalogo);
 sort($quimicosCatalogo);
 
 // Rellenar con 0 donde falte
@@ -627,6 +610,48 @@ $variacionCostoProduccion = ($costoPromedioPorProduccionAnioAnterior !== null
   ? (($costoPromedioPorProduccionAnioActual - $costoPromedioPorProduccionAnioAnterior) / $costoPromedioPorProduccionAnioAnterior) * 100
   : null;
 
+$datosCostoAnioAnterior = [];
+$datosCostoAnioActual = [];
+foreach ($periodos as $periodo) {
+  $semanaIso = $quimicosPorPeriodo[$periodo]['semana_iso']
+    ?? $produccionPorPeriodo[$periodo]['semana_iso']
+    ?? (string)$periodo;
+
+  $semanaInicio = $quimicosPorPeriodo[$periodo]['semana_inicio']
+    ?? $produccionPorPeriodo[$periodo]['semana_inicio']
+    ?? '';
+
+  $semanaFin = $quimicosPorPeriodo[$periodo]['semana_fin']
+    ?? $produccionPorPeriodo[$periodo]['semana_fin']
+    ?? '';
+
+  $produccionPeriodo = (float)($produccionPorPeriodo[$periodo]['kilos_producidos'] ?? 0.0);
+  $impactoPeriodo = (float)($impactoEconomicoPorPeriodo[$periodo] ?? 0.0);
+  $costoProduccionPeriodo = $produccionPeriodo > 0 ? ($impactoPeriodo / $produccionPeriodo) : null;
+  [$estadoCosto, $colorCosto, $colorHexCosto] = semaforo($costoProduccionPeriodo, $costoPromedioPorProduccionAnioAnterior, $toleranciaPct);
+
+  $itemCosto = [
+    'periodo' => $periodo,
+    'semana_iso' => $semanaIso,
+    'semana_label' => substr((string)$semanaIso, -3),
+    'semana_inicio' => $semanaInicio,
+    'semana_fin' => $semanaFin,
+    'quimicos' => $impactoPeriodo,
+    'produccion' => $produccionPeriodo,
+    'ratio' => $costoProduccionPeriodo,
+    'estado' => $estadoCosto,
+    'color' => $colorCosto,
+    'colorHex' => $colorHexCosto,
+  ];
+
+  $anioItem = (int)substr((string)$semanaIso, 0, 4);
+  if ($anioItem === $anioAnterior) {
+    $datosCostoAnioAnterior[] = $itemCosto;
+  } elseif ($anioItem === $anioActual) {
+    $datosCostoAnioActual[] = $itemCosto;
+  }
+}
+
 $costoPromedioAnioAnteriorAgrupado = [];
 $costoPromedioAnioActualAgrupado = [];
 
@@ -728,7 +753,15 @@ foreach ($semanasCatalogo as $semanaLabel) {
 | 11) CHART DATA
 |--------------------------------------------------------------------------
 */
-$chartData = buildChartData($datosAnioActual, $datosAnioAnterior, $anioAnterior, $anioActual, $ratioBase);
+$chartData = buildChartData($datosAnioActual, $datosAnioAnterior, $anioAnterior, $anioActual, $ratioBase, $semanasCatalogo);
+$chartDataCosto = buildChartData(
+  $datosCostoAnioActual,
+  $datosCostoAnioAnterior,
+  $anioAnterior,
+  $anioActual,
+  $costoPromedioPorProduccionAnioAnterior,
+  $semanasCatalogo
+);
 
 /*
 |--------------------------------------------------------------------------
@@ -771,8 +804,11 @@ $result = [
   'reporte' => $reporte,
   'datosAnioAnterior' => $datosAnioAnterior,
   'datosAnioActual' => $datosAnioActual,
+  'datosCostoAnioAnterior' => $datosCostoAnioAnterior,
+  'datosCostoAnioActual' => $datosCostoAnioActual,
 
   'chartData' => $chartData,
+  'chartDataCosto' => $chartDataCosto,
 
   // Datos de vista pivote
   'semanasCatalogo' => $semanasCatalogo,

@@ -167,8 +167,37 @@ function buildChartData(
   array $datosAnioAnterior,
   int $anioAnterior,
   int $anioActual,
-  ?float $ratioBase
+  ?float $ratioBase,
+  ?array $weekLabels = null
 ): array {
+  if ($weekLabels !== null) {
+    $actualPorSemana = [];
+    foreach ($datosAnioActual as $item) {
+      $semanaLabel = $item['semana_label'] ?? substr((string)($item['semana_iso'] ?? ''), -3);
+      if ($semanaLabel !== '') {
+        $actualPorSemana[$semanaLabel] = $item;
+      }
+    }
+
+    $anteriorPorSemana = [];
+    foreach ($datosAnioAnterior as $item) {
+      $semanaLabel = $item['semana_label'] ?? substr((string)($item['semana_iso'] ?? ''), -3);
+      if ($semanaLabel !== '') {
+        $anteriorPorSemana[$semanaLabel] = $item;
+      }
+    }
+
+    return [
+      'anioAnterior' => $anioAnterior,
+      'anioActual' => $anioActual,
+      'ratioBase' => $ratioBase,
+      'labels' => array_values($weekLabels),
+      'ratiosActual' => array_map(fn($semana) => $actualPorSemana[$semana]['ratio'] ?? null, $weekLabels),
+      'colorsActual' => array_map(fn($semana) => $actualPorSemana[$semana]['colorHex'] ?? '#94a3b8', $weekLabels),
+      'ratiosBase' => array_map(fn($semana) => $anteriorPorSemana[$semana]['ratio'] ?? null, $weekLabels),
+    ];
+  }
+
   return [
     'anioAnterior' => $anioAnterior,
     'anioActual' => $anioActual,

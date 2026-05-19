@@ -8,11 +8,11 @@ $databaseConfig = require __DIR__ . '/../../config/database.php';
 $connectMysql = static function (array $cfg): PDO {
   $host = (string)($cfg['host'] ?? 'localhost:3306');
   $parts = explode(':', $host, 2);
-  $server = $parts[0] ?? 'localhost';
+  $hostname = $parts[0] !== '' ? $parts[0] : 'localhost';
   $port = $parts[1] ?? '3306';
   $dbname = (string)($cfg['dbname'] ?? '');
   $charset = (string)($cfg['charset'] ?? 'utf8mb4');
-  $dsn = "mysql:host={$server};port={$port};dbname={$dbname};charset={$charset}";
+  $dsn = 'mysql:host=' . $hostname . ';port=' . $port . ';dbname=' . $dbname . ';charset=' . $charset;
 
   return new PDO($dsn, (string)($cfg['user'] ?? ''), (string)($cfg['pass'] ?? ''), [
     PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
@@ -20,314 +20,383 @@ $connectMysql = static function (array $cfg): PDO {
   ]);
 };
 
-$milestoneStatusText = static function (int $status): string {
-  if ($status === 1) {
-    return 'Activo';
-  }
-  if ($status === 2) {
-    return 'Cerrado';
-  }
-  if ($status === 3) {
-    return 'Inactivo';
-  }
-  if ($status === 4) {
-    return 'Pausado';
-  }
-  if ($status === 5) {
-    return 'Descontinuado';
-  }
-  return 'Sin estatus';
+$milestoneStatuses = (array)($config['milestone_estatus'] ?? []);
+$dueSoonDays = max(1, (int)($config['dias_alerta_vencimiento'] ?? 7));
+$statusFilter = trim((string)($_GET['estatus'] ?? ''));
+$responsableFilter = trim((string)($_GET['responsable'] ?? ''));
+$zonaFilter = trim((string)($_GET['zona'] ?? ''));
+$areaFilter = trim((string)($_GET['area'] ?? ''));
+$tipoProyectoFilter = trim((string)($_GET['tipo_proyecto'] ?? ''));
+$departamentoResponsableFilter = trim((string)($_GET['departamento_responsable'] ?? ''));
+$searchTerm = trim((string)($_GET['q'] ?? ''));
+$milestoneSelected = (int)($_GET['milestone'] ?? 0);
+$empresaId = (int)($config['empresa_id'] ?? 0);
+
+$resolveMilestoneStatus = static function (int $statusId) use ($milestoneStatuses): array {
+  return $milestoneStatuses[$statusId] ?? ['label' => 'Sin estatus', 'color' => '#94a3b8'];
 };
 
-$taskStatusText = static function (int $status, int $completed): string {
-  if ($completed === 1 || $status === 4) {
-    return 'Aprobada';
+$resolveProjectHealth = static function (array $project) use ($dueSoonDays): array {
+  $statusId = (int)($project['milestone_estatus'] ?? 0);
+  $dueDate = trim((string)($project['fecha_fin'] ?? ''));
+  $today = new DateTimeImmutable('today');
+
+  if ($statusId === 2) {
+    return ['label' => 'Cerrado', 'key' => 'verde', 'color' => '#10b981'];
   }
-  if ($status === 3) {
-    return 'En revisión';
+
+  if ($statusId === 5) {
+    return ['label' => 'Descontinuado', 'key' => 'gris', 'color' => '#64748b'];
   }
-  if ($status === 5) {
-    return 'Rechazada';
+
+  if ($statusId === 3) {
+    return ['label' => 'Inactivo', 'key' => 'gris', 'color' => '#94a3b8'];
   }
-  if ($status === 6) {
-    return 'Completada fuera de tiempo';
+
+  if ($statusId === 4) {
+    return ['label' => 'Pausado', 'key' => 'amarillo', 'color' => '#f59e0b'];
   }
-  if ($status === 2) {
-    return 'En progreso';
+
+  if ((int)($project['tareas_vencidas'] ?? 0) > 0) {
+    return ['label' => 'Con atraso', 'key' => 'rojo', 'color' => '#ef4444'];
   }
-  return 'Abierta';
+
+  if ((int)($project['tareas_completadas_tarde'] ?? 0) > 0) {
+    return ['label' => 'Atención', 'key' => 'amarillo', 'color' => '#f59e0b'];
+  }
+
+  if ($dueDate !== '') {
+    try {
+      $due = new DateTimeImmutable($dueDate);
+      $daysLeft = (int)$today->diff($due)->format('%r%a');
+      if ($daysLeft <= $dueSoonDays && (float)($project['avance_real'] ?? 0) < 100.0) {
+        return ['label' => 'Por vencer', 'key' => 'amarillo', 'color' => '#f59e0b'];
+      }
+    } catch (Throwable $e) {
+    }
+  }
+
+  if ((float)($project['avance_real'] ?? 0) >= 100.0) {
+    return ['label' => 'Completo', 'key' => 'verde', 'color' => '#10b981'];
+  }
+
+  return ['label' => 'En curso', 'key' => 'verde', 'color' => '#10b981'];
 };
 
-$taskStatusVisual = static function (int $status, int $completed, bool $overdue): array {
-  if ($completed === 1 || $status === 4) {
-    return ['label' => 'Aprobada', 'color' => '#10b981', 'bg' => 'rgba(16, 185, 129, 0.10)'];
+$normalizeTaskStatus = static function (array $task): array {
+  $statusId = (int)($task['estatus'] ?? 0);
+  $completed = (int)($task['completada'] ?? 0) === 1;
+  $completedAt = trim((string)($task['completada_en'] ?? ''));
+  $dueDate = trim((string)($task['fecha_fin'] ?? ''));
+  $today = date('Y-m-d');
+  $completedLate = $statusId === 6 || ($completed && $completedAt !== '' && $dueDate !== '' && substr($completedAt, 0, 10) > $dueDate);
+  $finishedOnTime = $statusId === 4 || ($completed && !$completedLate);
+  $overdue = !$completed && !in_array($statusId, [4, 6], true) && $dueDate !== '' && $dueDate < $today;
+
+  if ($completedLate) {
+    return ['label' => 'Completada tarde', 'color' => '#ef4444'];
   }
-  if ($status === 3) {
-    return ['label' => 'En revisión', 'color' => '#3b82f6', 'bg' => 'rgba(59, 130, 246, 0.10)'];
+
+  if ($finishedOnTime) {
+    return ['label' => 'Terminada', 'color' => '#10b981'];
   }
-  if ($status === 5) {
-    return ['label' => 'Rechazada', 'color' => '#ef4444', 'bg' => 'rgba(239, 68, 68, 0.10)'];
-  }
-  if ($status === 6) {
-    return ['label' => 'Fuera de tiempo', 'color' => '#f97316', 'bg' => 'rgba(249, 115, 22, 0.10)'];
-  }
+
   if ($overdue) {
-    return ['label' => 'Vencida', 'color' => '#ef4444', 'bg' => 'rgba(239, 68, 68, 0.10)'];
+    return ['label' => 'Vencida', 'color' => '#ef4444'];
   }
-  if ($status === 2) {
-    return ['label' => 'En progreso', 'color' => '#f59e0b', 'bg' => 'rgba(245, 158, 11, 0.10)'];
+
+  if ($statusId === 3) {
+    return ['label' => 'En revisión', 'color' => '#f59e0b'];
   }
-  return ['label' => 'Abierta', 'color' => '#64748b', 'bg' => 'rgba(100, 116, 139, 0.10)'];
+
+  if ($statusId === 5) {
+    return ['label' => 'Rechazada', 'color' => '#ef4444'];
+  }
+
+  if ($statusId === 2) {
+    return ['label' => 'En progreso', 'color' => '#2563eb'];
+  }
+
+  return ['label' => 'Abierta', 'color' => '#94a3b8'];
 };
 
-$milestoneVisual = static function (int $status, float $progress, int $overdueCount): array {
-  if ($status === 5) {
-    return ['key' => 'descontinuado', 'label' => 'Descontinuado', 'color' => '#ef4444', 'bg' => 'rgba(239, 68, 68, 0.10)'];
-  }
-  if ($status === 4) {
-    return ['key' => 'pausado', 'label' => 'Pausado', 'color' => '#f59e0b', 'bg' => 'rgba(245, 158, 11, 0.10)'];
-  }
-  if ($status === 3) {
-    return ['key' => 'inactivo', 'label' => 'Inactivo', 'color' => '#94a3b8', 'bg' => 'rgba(148, 163, 184, 0.12)'];
-  }
-  if ($status === 2 || $progress >= 100.0) {
-    return ['key' => 'cerrado', 'label' => 'Cerrado', 'color' => '#10b981', 'bg' => 'rgba(16, 185, 129, 0.10)'];
-  }
-  if ($overdueCount > 0) {
-    return ['key' => 'activo-riesgo', 'label' => 'Activo con riesgo', 'color' => '#ef4444', 'bg' => 'rgba(239, 68, 68, 0.10)'];
-  }
-  if ($progress >= 50.0) {
-    return ['key' => 'activo-avance', 'label' => 'Activo en avance', 'color' => '#f59e0b', 'bg' => 'rgba(245, 158, 11, 0.10)'];
-  }
-  return ['key' => 'activo', 'label' => 'Activo', 'color' => '#3b82f6', 'bg' => 'rgba(59, 130, 246, 0.10)'];
-};
+$pdo = $connectMysql((array)($databaseConfig[$config['database_key']] ?? []));
 
-$formatDate = static function (?string $value): string {
-  if ($value === null || $value === '' || $value === '0000-00-00') {
-    return '-';
-  }
-
-  try {
-    return (new DateTimeImmutable($value))->format('Y-m-d');
-  } catch (Throwable $e) {
-    return $value;
-  }
-};
-
-$detailMilestoneId = (int)($_GET['milestone_id'] ?? 0);
-$statusFilter = trim((string)($_GET['estatus'] ?? 'all'));
-$search = trim((string)($_GET['q'] ?? ''));
-$warnings = [];
-
-$pdo = $connectMysql((array)($databaseConfig['hoshin'] ?? []));
-
-$sqlMilestones = "
+$summarySql = "
 SELECT
-  COALESCE(e.estrategia_id, 0) AS estrategia_id,
-  COALESCE(e.titulo, 'Sin estrategia') AS estrategia,
-  m.milestone_id,
-  m.estrategia_id,
-  m.titulo AS milestone,
-  m.descripcion,
-  m.estatus AS milestone_estatus,
+  v.proyecto_directivo_id,
+  v.milestone_id,
+  v.estrategia_id,
+  v.milestone,
+  m.descripcion AS milestone_descripcion,
+  v.milestone_estatus,
   m.prioridad,
-  u.nombre_completo AS responsable,
-  u.usuario_id AS responsable_id,
-  COALESCE(NULLIF(GROUP_CONCAT(DISTINCT o.titulo ORDER BY o.titulo SEPARATOR ' | '), ''), 'Sin objetivo') AS objetivo,
-  MIN(COALESCE(t.fecha_inicio, DATE(t.creado_en), t.fecha_fin)) AS fecha_inicio,
-  MAX(t.fecha_fin) AS fecha_fin,
-  COUNT(DISTINCT t.tarea_id) AS total_tareas,
-  COUNT(DISTINCT CASE WHEN t.completada = 1 OR t.estatus = 4 THEN t.tarea_id END) AS finalizadas,
-  COUNT(DISTINCT CASE WHEN (t.completada = 0 OR t.completada IS NULL) AND t.estatus IN (1,2,3,5) THEN t.tarea_id END) AS activas,
-  COUNT(DISTINCT CASE WHEN (t.completada = 0 OR t.completada IS NULL) AND t.fecha_fin < CURDATE() AND t.estatus IN (1,2,3,5) THEN t.tarea_id END) AS vencidas,
-  COUNT(DISTINCT CASE WHEN t.estatus = 3 THEN t.tarea_id END) AS revision,
-  COUNT(DISTINCT CASE WHEN t.estatus = 5 THEN t.tarea_id END) AS rechazadas
-FROM milestones m
-LEFT JOIN tareas t ON t.milestone_id = m.milestone_id
-LEFT JOIN usuarios u ON u.usuario_id = m.responsable_usuario_id
-LEFT JOIN estrategias e ON e.estrategia_id = m.estrategia_id
-LEFT JOIN objetivo_estrategia oe ON oe.estrategia_id = e.estrategia_id
-LEFT JOIN objetivos o ON o.objetivo_id = oe.objetivo_id
-GROUP BY
-  e.estrategia_id, e.titulo,
-  m.milestone_id, m.estrategia_id, m.titulo, m.descripcion, m.estatus, m.prioridad,
-  u.nombre_completo, u.usuario_id
-ORDER BY m.creado_en DESC, m.milestone_id DESC
+  m.responsable_usuario_id AS responsable_id,
+  COALESCE(v.responsable, 'Sin responsable') AS responsable,
+  COALESCE(v.zona, 'Sin zona') AS zona,
+  COALESCE(v.area, 'Sin área') AS area,
+  COALESCE(v.tipo_proyecto, 'Sin tipo') AS tipo_proyecto,
+  COALESCE(v.responsable_area, 'Sin departamento') AS responsable_area,
+  v.estado_directivo,
+  v.prioridad_directiva,
+  v.visible_en_direccion,
+  v.requiere_reporte_direccion,
+  v.fecha_inicio_operativa AS fecha_inicio,
+  v.fecha_fin_operativa AS fecha_fin,
+  v.total_tareas,
+  v.tareas_finalizadas,
+  v.tareas_vencidas,
+  v.tareas_completadas_tarde,
+  v.avance_real
+FROM vista_proyectos_directivos v
+JOIN milestones m
+  ON m.milestone_id = v.milestone_id
+JOIN estrategias e
+  ON e.estrategia_id = v.estrategia_id
+WHERE 1 = 1
 ";
 
-$milestones = [];
-$stmtMilestones = $pdo->query($sqlMilestones);
-foreach (($stmtMilestones->fetchAll() ?: []) as $row) {
-  $totalTasks = (int)($row['total_tareas'] ?? 0);
-  $completedTasks = (int)($row['finalizadas'] ?? 0);
-  $progress = $totalTasks > 0 ? round(($completedTasks / $totalTasks) * 100, 1) : 0.0;
-  $milestoneStatus = (int)($row['milestone_estatus'] ?? 0);
-  $visual = $milestoneVisual($milestoneStatus, $progress, (int)($row['vencidas'] ?? 0));
-
-  $milestones[] = [
-    'milestone_id' => (int)$row['milestone_id'],
-    'titulo' => (string)($row['milestone'] ?? 'Sin título'),
-    'descripcion' => (string)($row['descripcion'] ?? ''),
-    'objetivo' => (string)($row['objetivo'] ?? 'Sin objetivo'),
-    'estrategia' => (string)($row['estrategia'] ?? 'Sin estrategia'),
-    'responsable' => (string)($row['responsable'] ?? 'Sin asignar'),
-    'responsable_id' => (int)($row['responsable_id'] ?? 0),
-    'estatus' => $milestoneStatus,
-    'estatus_label' => $milestoneStatusText($milestoneStatus),
-    'prioridad' => (int)($row['prioridad'] ?? 0),
-    'fecha_inicio' => $formatDate($row['fecha_inicio'] ?? null),
-    'fecha_fin' => $formatDate($row['fecha_fin'] ?? null),
-    'total_tareas' => $totalTasks,
-    'finalizadas' => $completedTasks,
-    'activas' => (int)($row['activas'] ?? 0),
-    'vencidas' => (int)($row['vencidas'] ?? 0),
-    'revision' => (int)($row['revision'] ?? 0),
-    'rechazadas' => (int)($row['rechazadas'] ?? 0),
-    'avance' => $progress,
-    'avance_label' => number_format($progress, 0) . '%',
-    'visual' => $visual,
-  ];
+$summaryParams = [];
+if ($empresaId > 0) {
+  $summarySql .= " AND v.empresa_id = ? ";
+  $summaryParams[] = $empresaId;
+}
+$summarySql .= " AND (COALESCE(v.visible_en_direccion, 0) = 1 OR COALESCE(v.requiere_reporte_direccion, 0) = 1) ";
+if ($responsableFilter !== '') {
+  $summarySql .= " AND m.responsable_usuario_id = ? ";
+  $summaryParams[] = (int)$responsableFilter;
+}
+if ($zonaFilter !== '') {
+  $summarySql .= " AND COALESCE(v.zona, 'Sin zona') = ? ";
+  $summaryParams[] = $zonaFilter;
+}
+if ($areaFilter !== '') {
+  $summarySql .= " AND COALESCE(v.area, 'Sin área') = ? ";
+  $summaryParams[] = $areaFilter;
+}
+if ($tipoProyectoFilter !== '') {
+  $summarySql .= " AND COALESCE(v.tipo_proyecto, 'Sin tipo') = ? ";
+  $summaryParams[] = $tipoProyectoFilter;
+}
+if ($departamentoResponsableFilter !== '') {
+  $summarySql .= " AND COALESCE(v.responsable_area, 'Sin departamento') = ? ";
+  $summaryParams[] = $departamentoResponsableFilter;
+}
+if ($searchTerm !== '') {
+  $summarySql .= " AND (
+    v.milestone LIKE ?
+    OR COALESCE(m.descripcion, '') LIKE ?
+    OR COALESCE(v.responsable, '') LIKE ?
+    OR COALESCE(v.zona, '') LIKE ?
+    OR COALESCE(v.area, '') LIKE ?
+  ) ";
+  $searchLike = '%' . $searchTerm . '%';
+  $summaryParams[] = $searchLike;
+  $summaryParams[] = $searchLike;
+  $summaryParams[] = $searchLike;
+  $summaryParams[] = $searchLike;
+  $summaryParams[] = $searchLike;
 }
 
-$validStatusFilters = ['1', '2', '3', '4', '5'];
+$stmt = $pdo->prepare($summarySql);
+$stmt->execute($summaryParams);
+$projectsAll = [];
+$responsables = [];
+$zonas = [];
+$areas = [];
+$tiposProyecto = [];
+$departamentosResponsables = [];
+$countsByStatus = ['all' => 0];
 
-$filteredMilestones = array_values(array_filter($milestones, static function (array $item) use ($statusFilter, $search, $validStatusFilters): bool {
-  $matchesStatus = true;
-  if (in_array($statusFilter, $validStatusFilters, true)) {
-    $matchesStatus = (int)$item['estatus'] === (int)$statusFilter;
+foreach (($stmt->fetchAll() ?: []) as $row) {
+  $row['milestone_estatus'] = (int)($row['milestone_estatus'] ?? 0);
+  $row['total_tareas'] = (int)($row['total_tareas'] ?? 0);
+  $row['tareas_finalizadas'] = (int)($row['tareas_finalizadas'] ?? 0);
+  $row['tareas_vencidas'] = (int)($row['tareas_vencidas'] ?? 0);
+  $row['tareas_completadas_tarde'] = (int)($row['tareas_completadas_tarde'] ?? 0);
+  $row['avance_real'] = (float)($row['avance_real'] ?? 0);
+  $row['milestone_status'] = $resolveMilestoneStatus($row['milestone_estatus']);
+  $row['health'] = $resolveProjectHealth($row);
+  $row['pendientes'] = max(0, $row['total_tareas'] - $row['tareas_finalizadas']);
+
+  $projectsAll[] = $row;
+  $countsByStatus['all']++;
+  $statusKey = (string)$row['milestone_estatus'];
+  $countsByStatus[$statusKey] = (int)($countsByStatus[$statusKey] ?? 0) + 1;
+  $responsableId = trim((string)($row['responsable_id'] ?? ''));
+  $responsableNombre = trim((string)($row['responsable'] ?? 'Sin responsable'));
+  if ($responsableId !== '') {
+    $responsables[$responsableId] = $responsableNombre !== '' ? $responsableNombre : 'Sin responsable';
   }
 
-  if (!$matchesStatus) {
-    return false;
+  $zonaNombre = trim((string)($row['zona'] ?? ''));
+  if ($zonaNombre !== '') {
+    $zonas[$zonaNombre] = $zonaNombre;
   }
 
-  if ($search === '') {
+  $areaNombre = trim((string)($row['area'] ?? ''));
+  if ($areaNombre !== '') {
+    $areas[$areaNombre] = $areaNombre;
+  }
+
+  $tipoNombre = trim((string)($row['tipo_proyecto'] ?? ''));
+  if ($tipoNombre !== '') {
+    $tiposProyecto[$tipoNombre] = $tipoNombre;
+  }
+
+  $deptoNombre = trim((string)($row['responsable_area'] ?? ''));
+  if ($deptoNombre !== '') {
+    $departamentosResponsables[$deptoNombre] = $deptoNombre;
+  }
+}
+
+usort($projectsAll, static function (array $a, array $b): int {
+  $priority = [
+    1 => 10,
+    4 => 20,
+    3 => 30,
+    5 => 40,
+    2 => 50,
+  ];
+  $statusA = $priority[(int)($a['milestone_estatus'] ?? 0)] ?? 99;
+  $statusB = $priority[(int)($b['milestone_estatus'] ?? 0)] ?? 99;
+  if ($statusA !== $statusB) {
+    return $statusA <=> $statusB;
+  }
+
+  $dateA = (string)($a['fecha_fin'] ?? '');
+  $dateB = (string)($b['fecha_fin'] ?? '');
+  if ($dateA === $dateB) {
+    return strcasecmp((string)($a['milestone'] ?? ''), (string)($b['milestone'] ?? ''));
+  }
+
+  if ($dateA === '') {
+    return 1;
+  }
+  if ($dateB === '') {
+    return -1;
+  }
+
+  return strcmp($dateA, $dateB);
+});
+
+$projects = array_values(array_filter($projectsAll, static function (array $project) use ($statusFilter): bool {
+  if ($statusFilter === '' || $statusFilter === 'all') {
     return true;
   }
 
-  $haystack = mb_strtolower(implode(' ', [
-    $item['titulo'] ?? '',
-    $item['objetivo'] ?? '',
-    $item['estrategia'] ?? '',
-    $item['responsable'] ?? '',
-  ]));
-
-  return strpos($haystack, mb_strtolower($search)) !== false;
+  return (string)($project['milestone_estatus'] ?? '') === $statusFilter;
 }));
 
-$counters = [
-  'todos' => count($milestones),
-  '1' => count(array_filter($milestones, static fn(array $item): bool => (int)$item['estatus'] === 1)),
-  '2' => count(array_filter($milestones, static fn(array $item): bool => (int)$item['estatus'] === 2)),
-  '3' => count(array_filter($milestones, static fn(array $item): bool => (int)$item['estatus'] === 3)),
-  '4' => count(array_filter($milestones, static fn(array $item): bool => (int)$item['estatus'] === 4)),
-  '5' => count(array_filter($milestones, static fn(array $item): bool => (int)$item['estatus'] === 5)),
-];
+$totalProjects = count($projectsAll);
+$activeProjects = 0;
+$closedProjects = 0;
+$lateProjects = 0;
+$averageProgress = 0.0;
+foreach ($projectsAll as $project) {
+  if ((int)($project['milestone_estatus'] ?? 0) === 1) {
+    $activeProjects++;
+  }
+  if ((int)($project['milestone_estatus'] ?? 0) === 2) {
+    $closedProjects++;
+  }
+  if ((int)($project['tareas_vencidas'] ?? 0) > 0) {
+    $lateProjects++;
+  }
+  $averageProgress += (float)($project['avance_real'] ?? 0);
+}
+$averageProgress = $totalProjects > 0 ? round($averageProgress / $totalProjects, 1) : 0.0;
 
-$detailMilestone = null;
-if ($detailMilestoneId > 0) {
-  foreach ($milestones as $milestone) {
-    if ((int)$milestone['milestone_id'] === $detailMilestoneId) {
-      $detailMilestone = $milestone;
+$detailProject = null;
+$detailTasks = [];
+if ($milestoneSelected > 0) {
+  foreach ($projectsAll as $project) {
+    if ((int)($project['milestone_id'] ?? 0) === $milestoneSelected) {
+      $detailProject = $project;
       break;
     }
   }
 
-  if ($detailMilestone !== null) {
-    $sqlTasks = "
-    SELECT
-      t.tarea_id,
-      t.titulo,
-      t.descripcion,
-      t.fecha_inicio,
-      t.fecha_fin,
-      t.estatus,
-      t.completada,
-      t.completada_en,
-      ru.nombre_completo AS responsable,
-      t.prioridad
-    FROM tareas t
-    LEFT JOIN usuarios ru ON ru.usuario_id = t.responsable_usuario_id
-    WHERE t.milestone_id = ?
-    ORDER BY
-      CASE WHEN t.fecha_fin IS NULL THEN 1 ELSE 0 END,
-      t.fecha_fin ASC,
-      t.tarea_id ASC
-    ";
+  if ($detailProject === null) {
+    throw new RuntimeException('No se encontró el milestone solicitado.');
+  }
 
-    $stmtTasks = $pdo->prepare($sqlTasks);
-    $stmtTasks->execute([$detailMilestoneId]);
-    $taskRows = $stmtTasks->fetchAll() ?: [];
-    $tasks = [];
-    $summary = [
-      'total' => 0,
-      'aprobadas' => 0,
-      'revision' => 0,
-      'rechazadas' => 0,
-      'vencidas' => 0,
-    ];
-
-    foreach ($taskRows as $task) {
-      $summary['total']++;
-      $completed = (int)($task['completada'] ?? 0);
-      $status = (int)($task['estatus'] ?? 0);
-      $dueDate = (string)($task['fecha_fin'] ?? '');
-      $overdue = $completed !== 1 && $dueDate !== '' && $dueDate < date('Y-m-d') && in_array($status, [1, 2, 3, 5], true);
-      if ($completed === 1 || $status === 4) {
-        $summary['aprobadas']++;
-      }
-      if ($status === 3) {
-        $summary['revision']++;
-      }
-      if ($status === 5) {
-        $summary['rechazadas']++;
-      }
-      if ($overdue) {
-        $summary['vencidas']++;
-      }
-
-      $visual = $taskStatusVisual($status, $completed, $overdue);
-      $tasks[] = [
-        'tarea_id' => (int)$task['tarea_id'],
-        'titulo' => (string)($task['titulo'] ?? 'Sin tarea'),
-        'descripcion' => (string)($task['descripcion'] ?? ''),
-        'responsable' => (string)($task['responsable'] ?? 'Sin asignar'),
-        'fecha_inicio' => $formatDate($task['fecha_inicio'] ?? null),
-        'fecha_fin' => $formatDate($task['fecha_fin'] ?? null),
-        'estatus' => $status,
-        'estatus_label' => $taskStatusText($status, $completed),
-        'completada' => $completed,
-        'completada_en' => $formatDate($task['completada_en'] ?? null),
-        'prioridad' => (int)($task['prioridad'] ?? 0),
-        'visual' => $visual,
-      ];
-    }
-
-    $detailMilestone['tasks'] = $tasks;
-    $detailMilestone['task_summary'] = $summary;
-  } else {
-    $warnings[] = 'No se encontró el milestone solicitado.';
+  $tasksSql = "
+  SELECT
+    t.tarea_id,
+    t.titulo,
+    t.descripcion,
+    t.fecha_inicio,
+    t.fecha_fin,
+    t.completada,
+    t.completada_en,
+    t.estatus,
+    t.prioridad,
+    COALESCE(u.nombre_completo, 'Sin responsable') AS responsable
+  FROM tareas t
+  LEFT JOIN usuarios u
+    ON u.usuario_id = t.responsable_usuario_id
+  WHERE t.milestone_id = ?
+  ORDER BY
+    CASE WHEN t.fecha_fin IS NULL THEN 1 ELSE 0 END,
+    t.fecha_fin ASC,
+    t.tarea_id ASC
+  ";
+  $taskStmt = $pdo->prepare($tasksSql);
+  $taskStmt->execute([$milestoneSelected]);
+  foreach (($taskStmt->fetchAll() ?: []) as $task) {
+    $task['status_visual'] = $normalizeTaskStatus($task);
+    $detailTasks[] = $task;
   }
 }
 
+ksort($responsables, SORT_NATURAL);
+ksort($zonas, SORT_NATURAL);
+ksort($areas, SORT_NATURAL);
+ksort($tiposProyecto, SORT_NATURAL);
+ksort($departamentosResponsables, SORT_NATURAL);
+
+$statusOptions = ['all' => ['label' => 'Todos', 'color' => '#0f172a']];
+foreach ($milestoneStatuses as $statusId => $statusMeta) {
+  $statusOptions[(string)$statusId] = [
+    'label' => (string)($statusMeta['label'] ?? ('Estatus ' . $statusId)),
+    'color' => (string)($statusMeta['color'] ?? '#94a3b8'),
+  ];
+}
+
 $meta = [
-  'statusFilter' => $statusFilter,
-  'search' => $search,
-  'counters' => $counters,
-  'filasPorPaginaTareas' => (int)($config['filas_por_pagina_tareas'] ?? 20),
-  'hostApp' => (string)($config['host_app'] ?? '/hoshin_kanri'),
-  'warnings' => $warnings,
+  'statusFilter' => $statusFilter === '' ? 'all' : $statusFilter,
+  'responsableFilter' => $responsableFilter,
+  'zonaFilter' => $zonaFilter,
+  'areaFilter' => $areaFilter,
+  'tipoProyectoFilter' => $tipoProyectoFilter,
+  'departamentoResponsableFilter' => $departamentoResponsableFilter,
+  'searchTerm' => $searchTerm,
+  'cardsPorPagina' => (int)($config['cards_por_pagina'] ?? 12),
+  'intervaloActualizacion' => (int)($config['intervalo_actualizacion'] ?? 300000),
+  'countsByStatus' => $countsByStatus,
+  'statusOptions' => $statusOptions,
+  'responsables' => $responsables,
+  'zonas' => $zonas,
+  'areas' => $areas,
+  'tiposProyecto' => $tiposProyecto,
+  'departamentosResponsables' => $departamentosResponsables,
+  'selectedMilestone' => $milestoneSelected,
 ];
 
 return [
   'titulo' => (string)($config['titulo'] ?? 'Proyectos / Milestones'),
-  'milestones' => $filteredMilestones,
-  'allMilestones' => $milestones,
-  'detailMilestone' => $detailMilestone,
+  'proyectos' => $projects,
+  'proyectos_total' => $totalProjects,
+  'proyectos_activos' => $activeProjects,
+  'proyectos_cerrados' => $closedProjects,
+  'proyectos_con_atraso' => $lateProjects,
+  'avance_promedio' => $averageProgress,
+  'detalle_proyecto' => $detailProject,
+  'detalle_tareas' => $detailTasks,
   'meta' => $meta,
   'version' => max(
     @filemtime(__FILE__) ?: time(),
-    @filemtime(__DIR__ . '/config.php') ?: time(),
-    @filemtime(__DIR__ . '/index.php') ?: time()
+    @filemtime(__DIR__ . '/config.php') ?: time()
   ),
 ];
