@@ -10,8 +10,8 @@ header('Pragma: no-cache');
 header('Expires: 0');
 
 $appConfig = require __DIR__ . '/../../config/app.php';
-$dbConfig = require __DIR__ . '/../../config/database.php';
-$config = require __DIR__ . '/config.php';
+$dbConfig  = require __DIR__ . '/../../config/database.php';
+$config    = require __DIR__ . '/config.php';
 require __DIR__ . '/../../shared/helpers.php';
 
 try {
@@ -25,25 +25,25 @@ try {
 
 extract($report, EXTR_SKIP);
 
-$cardsPorPagina = $meta['cardsPorPagina'] ?? 9;
-$filasPorPagina = $meta['filasPorPagina'] ?? 15;
-$toleranciaPct = $meta['toleranciaPct'] ?? 10;
+$cardsPorPagina         = $meta['cardsPorPagina'] ?? 9;
+$filasPorPagina         = $meta['filasPorPagina'] ?? 15;
+$toleranciaPct          = $meta['toleranciaPct'] ?? 10;
 $intervaloActualizacion = $meta['intervaloActualizacion'] ?? 300000;
-$fechaDesde = $meta['fechaDesde'] ?? '';
-$productosQuimicos = $meta['productos'] ?? [];
+$fechaDesde             = $meta['fechaDesde'] ?? '';
+$productosQuimicos      = $meta['productos'] ?? [];
 
 /*
 |--------------------------------------------------------------------------
 | Variables para partials compartidos
 |--------------------------------------------------------------------------
 */
-$isGrupo = false;
-$urlVolverIndex = '../index.php';
-$grupoActual = null;
+$isGrupo              = false;
+$urlVolverIndex       = '../index.php';
+$grupoActual          = null;
 $productoSeleccionado = null;
-$productoLabel = null;
-$modo = 'consumo'; // quimicos-produccion siempre es consumo
-$showModeTabs = false;
+$productoLabel        = null;
+$modo                 = 'consumo'; // quimicos-produccion siempre es consumo
+$showModeTabs         = false;
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -80,13 +80,14 @@ $showModeTabs = false;
       anioAnterior: <?= json_encode($anioAnterior) ?>,
       anioActual: <?= json_encode($anioActual) ?>,
       anioPivot: <?= json_encode($anioPivot) ?>,
-      ratioBase: <?= json_encode($ratioBase) ?>,
-      maxRatio: <?= json_encode($maxRatio) ?>,
+      ratioBase: <?= json_encode($ratioBase ?? null) ?>,
+      maxRatio: <?= json_encode($maxRatio ?? null) ?>,
       cardsPorPagina: <?= json_encode($cardsPorPagina) ?>,
       filasPorPagina: <?= json_encode($filasPorPagina) ?>,
       toleranciaPct: <?= json_encode($toleranciaPct) ?>,
       intervaloActualizacion: <?= json_encode($intervaloActualizacion) ?>,
-      version: <?= json_encode($version) ?>
+      version: <?= json_encode($version) ?>,
+      disableDefaultChart: true
     };
 
     window.reportData = {
@@ -95,19 +96,23 @@ $showModeTabs = false;
       datosAnioActual: <?= json_encode($datosAnioActual, JSON_UNESCAPED_UNICODE) ?>,
       chartData: <?= json_encode($chartData, JSON_UNESCAPED_UNICODE) ?>,
       chartDataCosto: <?= json_encode($chartDataCosto, JSON_UNESCAPED_UNICODE) ?>,
+      chartDataCompra: <?= json_encode($chartDataCompra, JSON_UNESCAPED_UNICODE) ?>,
 
       semanasCatalogo: <?= json_encode($semanasCatalogo, JSON_UNESCAPED_UNICODE) ?>,
       quimicosCatalogo: <?= json_encode($quimicosCatalogo, JSON_UNESCAPED_UNICODE) ?>,
       quimicosEtiquetas: <?= json_encode($quimicosEtiquetas, JSON_UNESCAPED_UNICODE) ?>,
       matrizQuimicos: <?= json_encode($matrizQuimicos, JSON_UNESCAPED_UNICODE) ?>,
       matrizCostos: <?= json_encode($matrizCostos, JSON_UNESCAPED_UNICODE) ?>,
+      matrizCompraQuimicos: <?= json_encode($matrizCompraQuimicos, JSON_UNESCAPED_UNICODE) ?>,
       produccionPivotPorSemana: <?= json_encode($produccionPivotPorSemana, JSON_UNESCAPED_UNICODE) ?>,
       matrizRatioQuimicos: <?= json_encode($matrizRatioQuimicos, JSON_UNESCAPED_UNICODE) ?>,
       totalesPorSemana: <?= json_encode($totalesPorSemana, JSON_UNESCAPED_UNICODE) ?>,
       produccionPorSemana: <?= json_encode($produccionPorSemana, JSON_UNESCAPED_UNICODE) ?>,
       ratioPorSemana: <?= json_encode($ratioPorSemana, JSON_UNESCAPED_UNICODE) ?>,
+      compraPorSemana: <?= json_encode($compraPorSemana, JSON_UNESCAPED_UNICODE) ?>,
       totalesConsumoQuimico: <?= json_encode($totalesConsumoQuimico, JSON_UNESCAPED_UNICODE) ?>,
       totalesCostoQuimico: <?= json_encode($totalesCostoQuimico, JSON_UNESCAPED_UNICODE) ?>,
+      totalesCompraQuimico: <?= json_encode($totalesCompraQuimico, JSON_UNESCAPED_UNICODE) ?>,
 
       kpis: {
         totalQuimicosAnioAnterior: <?= json_encode($totalQuimicosAnioAnterior) ?>,

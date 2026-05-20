@@ -1,6 +1,8 @@
 <?php
 
 /** @var int $anioPivot */
+/** @var int $anioAnterior */
+/** @var int $anioActual */
 /** @var array $semanasCatalogo */
 /** @var array $quimicosCatalogo */
 /** @var array $quimicosEtiquetas */
@@ -20,11 +22,31 @@
 /** @var array $impactoEconomicoAnioActual */
 /** @var array $matrizCostos */
 /** @var array $matrizCostoProduccionQuimicos */
+/** @var array $matrizCompraQuimicos */
+/** @var array $totalesConsumoQuimico */
+/** @var array $totalesCompraQuimico */
 /** @var array $totalesPorSemana */
 /** @var array $produccionPorSemana */
 /** @var array $ratioPorSemana */
+/** @var array $compraPorSemana */
+/** @var array $importeCompraAnioAnterior */
+/** @var array $importeCompraAnioActual */
+/** @var array $variacionCompraQuimico */
 /** @var float|null $ratioBase */
 /** @var float|null $limiteAmarillo */
+/** @var float|null $ratioPromedioAnioActual */
+/** @var float|null $costoPromedioPorProduccionAnioAnterior */
+/** @var float|null $costoPromedioPorProduccionAnioActual */
+/** @var float|null $variacionRatio */
+/** @var float|null $variacionCostoProduccion */
+/** @var float $totalCompraAnioAnterior */
+/** @var float $totalCompraAnioActual */
+/** @var float|null $promedioCompraSemanalAnioAnterior */
+/** @var float|null $variacionCompra */
+/** @var float $totalQuimicosAnioAnterior */
+/** @var float $totalQuimicosAnioActual */
+/** @var float $totalProduccionAnioAnterior */
+/** @var float $totalProduccionAnioActual */
 /** @var array $meta */
 
 $toleranciaPct = (float)($meta['toleranciaPct'] ?? 10);
@@ -67,8 +89,8 @@ $semanaDisplay = static fn($semana): string => preg_replace('/^S0([1-9])$/', 'S$
           <i class="fas fa-dollar-sign"></i>
           Costo por producción
         </button>
-        <button type="button" class="sort-btn" id="sortByCompra" data-sort="compra" title="Ordenar por mayor costo de compra">
-          <i class="fas fa-dollar-sign"></i>
+        <button type="button" class="sort-btn" id="sortByCompra" data-sort="compra" title="Ordenar por mayor importe de compra">
+          <i class="fas fa-file-invoice-dollar"></i>
           Costo de compra
         </button>
       </div>
@@ -160,7 +182,8 @@ $semanaDisplay = static fn($semana): string => preg_replace('/^S0([1-9])$/', 'S$
             <tr
               data-quimico="<?= htmlspecialchars($quimico) ?>"
               data-costo-unit-anterior="<?= (float)($costoPromedioAnioAnterior[$quimico] ?? 0) ?>"
-              data-costo-produccion-anterior="<?= (float)($costoPorProduccionAnioAnterior[$quimico] ?? 0) ?>">
+              data-costo-produccion-anterior="<?= (float)($costoPorProduccionAnioAnterior[$quimico] ?? 0) ?>"
+              data-compra-anterior="<?= (float)($importeCompraAnioAnterior[$quimico] ?? 0) ?>">
               <td class="sticky-col pivot-product-col">
                 <?php
                 $etiqueta = $quimicosEtiquetas[$quimico] ?? $quimico;
@@ -192,6 +215,9 @@ $semanaDisplay = static fn($semana): string => preg_replace('/^S0([1-9])$/', 'S$
               $costoAnterior = (float)($costoPorProduccionAnioAnterior[$quimico] ?? 0);
               $costoActual = (float)($costoPorProduccionAnioActual[$quimico] ?? 0);
               $variacionCosto = $variacionCostoPorProduccionQuimico[$quimico] ?? 0;
+              $compraAnterior = (float)($importeCompraAnioAnterior[$quimico] ?? 0);
+              $compraActual = (float)($importeCompraAnioActual[$quimico] ?? 0);
+              $variacionCompraItem = $variacionCompraQuimico[$quimico] ?? 0;
 
               if ($variacion > 10) {
                 $colorSemaforo = '#ef4444';
@@ -202,11 +228,11 @@ $semanaDisplay = static fn($semana): string => preg_replace('/^S0([1-9])$/', 'S$
               }
               ?>
 
-              <td class="sticky-col" style="text-align: center; font-weight: 600; background: #f8fafc;" data-valor-anterior="<?= $anterior ?>" data-valor-costo-anterior="<?= $costoAnterior ?>">
+              <td class="sticky-col" style="text-align: center; font-weight: 600; background: #f8fafc;" data-valor-anterior="<?= $anterior ?>" data-valor-costo-anterior="<?= $costoAnterior ?>" data-valor-compra-anterior="<?= $compraAnterior ?>">
                 <span class="valor-anterior"><?= n($anterior, 2) ?></span>
               </td>
 
-              <td class="sticky-col" style="text-align: center; background: #f8fafc; border-left: 4px solid <?= htmlspecialchars($colorSemaforo) ?>;" data-valor-actual="<?= $actual ?>" data-valor-costo-actual="<?= $costoActual ?>" data-variacion="<?= $variacion ?>" data-variacion-costo="<?= $variacionCosto ?>">
+              <td class="sticky-col" style="text-align: center; background: #f8fafc; border-left: 4px solid <?= htmlspecialchars($colorSemaforo) ?>;" data-valor-actual="<?= $actual ?>" data-valor-costo-actual="<?= $costoActual ?>" data-valor-compra-actual="<?= $compraActual ?>" data-variacion="<?= $variacion ?>" data-variacion-costo="<?= $variacionCosto ?>" data-variacion-compra="<?= $variacionCompraItem ?>">
                 <div style="font-weight: 600;">
                   <span class="valor-actual"><?= n($actual, 2) ?></span><br>
                   <span style="font-size: 0.85em; color: <?= htmlspecialchars($colorSemaforo) ?>;" class="variacion-texto">
@@ -226,6 +252,7 @@ $semanaDisplay = static fn($semana): string => preg_replace('/^S0([1-9])$/', 'S$
                 $ratioQuimico = $matrizRatioQuimicos[$quimico][$semana] ?? null;
                 $baseQuimico = $ratioBasePorQuimico[$quimico] ?? null;
                 $impactoEconomico = $matrizImpactoEconomicoQuimicos[$quimico][$semana] ?? null;
+                $importeCompraSemana = (float)($matrizCompraQuimicos[$quimico][$semana] ?? 0.0);
                 [$estadoCelda, $colorCelda, $colorHexCelda] = semaforo($ratioQuimico, $baseQuimico, $toleranciaPct);
                 ?>
                 <?php $costoUnitSemana = (float)($matrizCostos[$quimico][$semana] ?? 0); ?>
@@ -236,6 +263,7 @@ $semanaDisplay = static fn($semana): string => preg_replace('/^S0([1-9])$/', 'S$
                   data-ratio="<?= $ratioQuimico !== null ? (float)$ratioQuimico : 'null' ?>"
                   data-costo="<?= $impactoEconomico !== null ? (float)$impactoEconomico : 'null' ?>"
                   data-costo-unitario="<?= $costoUnitSemana ?>"
+                  data-compra="<?= $importeCompraSemana ?>"
                   data-costo-produccion="<?= ($matrizCostoProduccionQuimicos[$quimico][$semana] ?? null) !== null ? (float)$matrizCostoProduccionQuimicos[$quimico][$semana] : 'null' ?>">
                   <div class="ratio-semaforo-wrap">
                     <div class="ratio-value">
@@ -325,6 +353,7 @@ $semanaDisplay = static fn($semana): string => preg_replace('/^S0([1-9])$/', 'S$
 </div>
 
 <script>
+  document.addEventListener('DOMContentLoaded', function() {
   (function() {
     const semanas = <?= json_encode(array_values($semanasCatalogo), JSON_UNESCAPED_UNICODE) ?>;
     const windowSize = 5;
@@ -385,14 +414,16 @@ $semanaDisplay = static fn($semana): string => preg_replace('/^S0([1-9])$/', 'S$
       });
     }
 
-    // Ordenamiento dinámico por consumo/costo
+    // Ordenamiento dinámico por consumo/costo/compra
     const sortByConsumo = document.getElementById('sortByConsumo');
     const sortByCosto = document.getElementById('sortByCosto');
+    const sortByCompra = document.getElementById('sortByCompra');
     const table = document.getElementById('pivotTable');
 
-    if (sortByConsumo && sortByCosto && table) {
+    if (sortByConsumo && sortByCosto && sortByCompra && table) {
       const totalesConsumo = <?= json_encode($totalesConsumoQuimico, JSON_UNESCAPED_UNICODE) ?>;
       const totalesCosto = <?= json_encode($costoPorProduccionAnioActual, JSON_UNESCAPED_UNICODE) ?>;
+      const totalesCompra = <?= json_encode($totalesCompraQuimico, JSON_UNESCAPED_UNICODE) ?>;
       const resumenKpis = {
         consumo: {
           kpi1Label: 'Total Consumo Grupo <?= htmlspecialchars((string)$anioAnterior) ?> (Base)',
@@ -423,6 +454,21 @@ $semanaDisplay = static fn($semana): string => preg_replace('/^S0([1-9])$/', 'S$
           kpi4Class: 'kpi-value <?= ($variacionCostoProduccion ?? 0) < 0 ? 'trend-down' : (($variacionCostoProduccion ?? 0) > 0 ? 'trend-up' : '') ?>',
           kpi4Trend: '<?= ($variacionCostoProduccion ?? 0) < 0 ? 'Mejora' : (($variacionCostoProduccion ?? 0) > 0 ? 'Deterioro' : 'Estable') ?>',
           kpi4Icon: 'fa-arrow-<?= ($variacionCostoProduccion ?? 0) < 0 ? 'down' : (($variacionCostoProduccion ?? 0) > 0 ? 'up' : 'right') ?>'
+        },
+        compra: {
+          kpi1Label: 'Costo de compra <?= htmlspecialchars((string)$anioAnterior) ?> (Base)',
+          kpi1Value: '<?= '$ ' . n((float)$totalCompraAnioAnterior, 2) ?>',
+          kpi1Trend: 'vs <?= htmlspecialchars((string)$anioActual) ?>: <?= '$ ' . n((float)$totalCompraAnioActual, 2) ?>',
+          kpi2Label: 'Total Producción <?= htmlspecialchars((string)$anioAnterior) ?> (Base)',
+          kpi2Value: '<?= n((float)$totalProduccionAnioAnterior, 2) ?> kg',
+          kpi2Trend: 'vs <?= htmlspecialchars((string)$anioActual) ?>: <?= n((float)$totalProduccionAnioActual, 2) ?> kg',
+          kpi3Label: 'Costo de compra <?= htmlspecialchars((string)$anioActual) ?>',
+          kpi3Value: '<?= '$ ' . n((float)$totalCompraAnioActual, 2) ?>',
+          kpi3Trend: 'Base <?= htmlspecialchars((string)$anioAnterior) ?>: <?= '$ ' . n((float)$totalCompraAnioAnterior, 2) ?>',
+          kpi4Value: '<?= $variacionCompra !== null ? (($variacionCompra > 0 ? '+' : '') . n((float)$variacionCompra, 2) . '%') : '-' ?>',
+          kpi4Class: 'kpi-value <?= ($variacionCompra ?? 0) < 0 ? 'trend-down' : (($variacionCompra ?? 0) > 0 ? 'trend-up' : '') ?>',
+          kpi4Trend: '<?= ($variacionCompra ?? 0) < 0 ? 'Mejora' : (($variacionCompra ?? 0) > 0 ? 'Deterioro' : 'Estable') ?>',
+          kpi4Icon: 'fa-arrow-<?= ($variacionCompra ?? 0) < 0 ? 'down' : (($variacionCompra ?? 0) > 0 ? 'up' : 'right') ?>'
         }
       };
 
@@ -476,6 +522,21 @@ $semanaDisplay = static fn($semana): string => preg_replace('/^S0([1-9])$/', 'S$
         const legend = document.querySelector('.chart-header .legend');
         if (!title || !legend) return;
 
+        if (modo === 'compra') {
+          title.innerHTML =
+            '<i class="fas fa-chart-line"></i> Comportamiento de costo de compra <?= htmlspecialchars((string)$anioAnterior) ?> vs <?= htmlspecialchars((string)$anioActual) ?>' +
+            '<span style="font-size: 0.8rem;">' +
+            '<span style="color: #3b82f6;">● <?= htmlspecialchars((string)$anioAnterior) ?> (Base)</span> vs ' +
+            '<span style="color: #10b981;">● <?= htmlspecialchars((string)$anioActual) ?></span>' +
+            '</span>';
+          legend.innerHTML =
+            '<div class="legend-item"><div class="legend-color" style="background: #10b981;"></div><span>Óptimo (≤ <?= $promedioCompraSemanalAnioAnterior !== null ? '$ ' . n((float)$promedioCompraSemanalAnioAnterior, 2) : '-' ?>)</span></div>' +
+            '<div class="legend-item"><div class="legend-color" style="background: #f59e0b;"></div><span>Cuidado (≤ <?= $promedioCompraSemanalAnioAnterior !== null ? '$ ' . n((float)($promedioCompraSemanalAnioAnterior * (1 + ($toleranciaPct / 100))), 2) : '-' ?>)</span></div>' +
+            '<div class="legend-item"><div class="legend-color" style="background: #ef4444;"></div><span>Alto (&gt; <?= $promedioCompraSemanalAnioAnterior !== null ? '$ ' . n((float)($promedioCompraSemanalAnioAnterior * (1 + ($toleranciaPct / 100))), 2) : '-' ?>)</span></div>' +
+            '<div class="legend-item"><div class="legend-color" style="background: #3b82f6;"></div><span>Base <?= htmlspecialchars((string)$anioAnterior) ?></span></div>';
+          return;
+        }
+
         if (modo === 'costo') {
           title.innerHTML =
             '<i class="fas fa-chart-line"></i> Comportamiento de costo por producción <?= htmlspecialchars((string)$anioAnterior) ?> vs <?= htmlspecialchars((string)$anioActual) ?>' +
@@ -508,9 +569,9 @@ $semanaDisplay = static fn($semana): string => preg_replace('/^S0([1-9])$/', 'S$
         const canvas = document.getElementById('ratioChart');
         if (!canvas) return;
 
-        const chartSource = modo === 'costo' ?
-          (window.reportData.chartDataCosto || {}) :
-          (window.reportData.chartData || {});
+        const chartSource = modo === 'compra' ?
+          (window.reportData.chartDataCompra || {}) :
+          (modo === 'costo' ? (window.reportData.chartDataCosto || {}) : (window.reportData.chartData || {}));
 
         const labels = chartSource.labels || [];
         const actualData = chartSource.ratiosActual || [];
@@ -519,6 +580,7 @@ $semanaDisplay = static fn($semana): string => preg_replace('/^S0([1-9])$/', 'S$
         const ratioBaseChart = Number(chartSource.ratioBase || 0);
         const tolerancia = <?= json_encode($toleranciaPct) ?>;
         const limiteAmarilloChart = ratioBaseChart > 0 ? ratioBaseChart * (1 + (tolerancia / 100)) : null;
+        const actualLineColor = '#2a35d4';
 
         const existingChart = Chart.getChart(canvas);
         if (existingChart) {
@@ -526,9 +588,9 @@ $semanaDisplay = static fn($semana): string => preg_replace('/^S0([1-9])$/', 'S$
         }
 
         const datasets = [{
-          label: modo === 'costo' ? 'Costo por producción <?= htmlspecialchars((string)$anioActual) ?>' : 'Ratio <?= htmlspecialchars((string)$anioActual) ?>',
+          label: modo === 'compra' ? 'Costo de compra <?= htmlspecialchars((string)$anioActual) ?>' : (modo === 'costo' ? 'Costo por producción <?= htmlspecialchars((string)$anioActual) ?>' : 'Ratio <?= htmlspecialchars((string)$anioActual) ?>'),
           data: actualData,
-          borderColor: '#2a35d4',
+          borderColor: actualLineColor,
           backgroundColor: 'rgba(16, 185, 129, 0.05)',
           borderWidth: 3,
           pointRadius: 6,
@@ -542,7 +604,7 @@ $semanaDisplay = static fn($semana): string => preg_replace('/^S0([1-9])$/', 'S$
 
         if (<?= json_encode($anioAnterior) ?> !== 2025) {
           datasets.push({
-            label: modo === 'costo' ? 'Base <?= htmlspecialchars((string)$anioAnterior) ?>' : 'Base <?= htmlspecialchars((string)$anioAnterior) ?>',
+            label: 'Base <?= htmlspecialchars((string)$anioAnterior) ?>',
             data: baseData,
             borderColor: '#3b82f6',
             backgroundColor: 'rgba(59, 130, 246, 0.08)',
@@ -625,7 +687,7 @@ $semanaDisplay = static fn($semana): string => preg_replace('/^S0([1-9])$/', 'S$
                     const label = context.dataset.label || '';
                     const value = context.parsed.y;
                     if (value === null) return label + ': Sin dato';
-                    const formatted = modo === 'costo' ?
+                    const formatted = modo === 'costo' || modo === 'compra' ?
                       '$ ' + value.toLocaleString('es-MX', {
                         minimumFractionDigits: 2,
                         maximumFractionDigits: 2
@@ -646,7 +708,7 @@ $semanaDisplay = static fn($semana): string => preg_replace('/^S0([1-9])$/', 'S$
                 },
                 title: {
                   display: true,
-                  text: modo === 'costo' ? 'Costo por producción' : 'Ratio (kg químico / kg producción)',
+                  text: modo === 'compra' ? 'Importe comprado' : (modo === 'costo' ? 'Costo por producción' : 'Ratio (kg químico / kg producción)'),
                   color: '#64748b',
                 },
               },
@@ -688,8 +750,9 @@ $semanaDisplay = static fn($semana): string => preg_replace('/^S0([1-9])$/', 'S$
 
           if (!keyA || !keyB) return 0;
 
-          const valorA = modo === 'consumo' ? (totalesConsumo[keyA] || 0) : (totalesCosto[keyA] || 0);
-          const valorB = modo === 'consumo' ? (totalesConsumo[keyB] || 0) : (totalesCosto[keyB] || 0);
+          const valores = modo === 'compra' ? totalesCompra : (modo === 'costo' ? totalesCosto : totalesConsumo);
+          const valorA = valores[keyA] || 0;
+          const valorB = valores[keyB] || 0;
 
           return valorB - valorA; // Mayor a menor
         });
@@ -749,7 +812,43 @@ $semanaDisplay = static fn($semana): string => preg_replace('/^S0([1-9])$/', 'S$
             celda.setAttribute('data-badge-title-original', badge.getAttribute('title') || '');
           }
 
-          if (modo === 'costo') {
+          if (modo === 'compra') {
+            const importeCompra = parseFloat(celda.getAttribute('data-compra'));
+            if (!isNaN(importeCompra) && importeCompra > 0) {
+              ratioValue.textContent = '$' + importeCompra.toLocaleString('es-MX', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+              });
+            } else {
+              ratioValue.textContent = '-';
+            }
+            ratioBase.style.display = 'none';
+
+            if (badge) {
+              const row = celda.closest('tr[data-quimico]');
+              const compraAnterior = row ? parseFloat(row.getAttribute('data-compra-anterior')) : NaN;
+              let badgeColor, badgeLabel;
+              if (!isNaN(importeCompra) && importeCompra > 0 && !isNaN(compraAnterior) && compraAnterior > 0) {
+                const variacionUnit = (importeCompra - compraAnterior) / compraAnterior * 100;
+                badgeColor = variacionUnit > 10 ? '#ef4444' : (variacionUnit > 0 ? '#f59e0b' : '#10b981');
+                badgeLabel = variacionUnit > 10 ? 'Alto' : (variacionUnit > 0 ? 'Cuidado' : 'Óptimo');
+              } else {
+                badgeColor = '#94a3b8';
+                badgeLabel = 'Sin dato';
+              }
+              const dot = badge.querySelector('.status-dot');
+              if (dot) dot.style.background = badgeColor;
+              badge.style.background = badgeColor + '15';
+              badge.style.color = badgeColor;
+              badge.style.border = '1px solid ' + badgeColor + '30';
+              badge.title = badgeLabel;
+              badge.childNodes.forEach(node => {
+                if (node.nodeType === Node.TEXT_NODE && node.textContent.trim() !== '') {
+                  node.textContent = ' ' + badgeLabel;
+                }
+              });
+            }
+          } else if (modo === 'costo') {
             const costoProduccion = parseFloat(celda.getAttribute('data-costo-produccion'));
             if (!isNaN(costoProduccion) && costoProduccion > 0) {
               ratioValue.textContent = '$' + costoProduccion.toLocaleString('es-MX', {
@@ -817,7 +916,35 @@ $semanaDisplay = static fn($semana): string => preg_replace('/^S0([1-9])$/', 'S$
           const celdaActual = row.querySelector('td.sticky-col[data-variacion]');
 
           if (celdaAnterior && celdaActual) {
-            if (modo === 'costo') {
+            if (modo === 'compra') {
+              const compraAnterior = parseFloat(celdaAnterior.getAttribute('data-valor-compra-anterior'));
+              const compraActual = parseFloat(celdaActual.getAttribute('data-valor-compra-actual'));
+              const variacionCompra = parseFloat(celdaActual.getAttribute('data-variacion-compra'));
+              const color = semaforoColor(variacionCompra);
+
+              celdaActual.style.borderLeftColor = color;
+
+              const spanAnterior = celdaAnterior.querySelector('.valor-anterior');
+              if (spanAnterior && !isNaN(compraAnterior)) {
+                spanAnterior.textContent = '$' + compraAnterior.toLocaleString('es-MX', {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2
+                });
+              }
+
+              const spanActual = celdaActual.querySelector('.valor-actual');
+              const spanVariacion = celdaActual.querySelector('.variacion-texto');
+              if (spanActual && !isNaN(compraActual)) {
+                spanActual.textContent = '$' + compraActual.toLocaleString('es-MX', {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2
+                });
+              }
+              if (spanVariacion && !isNaN(variacionCompra)) {
+                spanVariacion.style.color = color;
+                spanVariacion.textContent = (variacionCompra >= 0 ? '+' : '') + variacionCompra.toFixed(1) + '%';
+              }
+            } else if (modo === 'costo') {
               const costoAnterior = parseFloat(celdaAnterior.getAttribute('data-valor-costo-anterior'));
               const costoActual = parseFloat(celdaActual.getAttribute('data-valor-costo-actual'));
               const variacionCosto = parseFloat(celdaActual.getAttribute('data-variacion-costo'));
@@ -884,6 +1011,7 @@ $semanaDisplay = static fn($semana): string => preg_replace('/^S0([1-9])$/', 'S$
       sortByConsumo.addEventListener('click', function() {
         sortByConsumo.classList.add('active');
         sortByCosto.classList.remove('active');
+        sortByCompra.classList.remove('active');
         sortTable('consumo');
         cambiarModoVisualizacion('consumo');
         actualizarKpisGenerales('consumo');
@@ -894,11 +1022,23 @@ $semanaDisplay = static fn($semana): string => preg_replace('/^S0([1-9])$/', 'S$
       sortByCosto.addEventListener('click', function() {
         sortByCosto.classList.add('active');
         sortByConsumo.classList.remove('active');
+        sortByCompra.classList.remove('active');
         sortTable('costo');
         cambiarModoVisualizacion('costo');
         actualizarKpisGenerales('costo');
         renderWindow();
         renderPivotChart('costo');
+      });
+
+      sortByCompra.addEventListener('click', function() {
+        sortByCompra.classList.add('active');
+        sortByConsumo.classList.remove('active');
+        sortByCosto.classList.remove('active');
+        sortTable('compra');
+        cambiarModoVisualizacion('compra');
+        actualizarKpisGenerales('compra');
+        renderWindow();
+        renderPivotChart('compra');
       });
 
       // Aplicar ordenamiento inicial por consumo (mayor a menor)
@@ -914,4 +1054,5 @@ $semanaDisplay = static fn($semana): string => preg_replace('/^S0([1-9])$/', 'S$
       setTimeout(renderWindow, 0);
     }
   })();
+  });
 </script>

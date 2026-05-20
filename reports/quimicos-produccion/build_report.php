@@ -56,6 +56,9 @@ if ($cached !== null) {
 $state = ReportEngine::createContext($config, $appConfig, $dbConfig);
 $pdoMovs = $state['pdoMovs'];
 $pdoProd = $state['pdoProd'];
+$dbCompras = $dbConfig['movs'];
+$dbCompras['dbname'] = 'saipbi2';
+$pdoCompras = conectar($dbCompras);
 $campoFechaMovsSql = $state['campoFechaMovsSql'];
 $weekFields = $state['weekFields'];
 $grupoEstructura = $config['grupo_estructura'] ?? [];
@@ -125,6 +128,14 @@ $sqlPivot .= "
 $stmtPivot = $pdoMovs->prepare($sqlPivot);
 $stmtPivot->execute($paramsPivot);
 $rowsPivot = $stmtPivot->fetchAll();
+$productosCompraCatalogo = [];
+
+foreach ($rowsPivot as $row) {
+  $cveProdCompra = trim((string)($row['cve_prod'] ?? ''));
+  if ($cveProdCompra !== '' && !in_array($cveProdCompra, $productosCompraCatalogo, true)) {
+    $productosCompraCatalogo[] = $cveProdCompra;
+  }
+}
 
 /*
 |--------------------------------------------------------------------------
@@ -672,6 +683,181 @@ foreach ($quimicosCatalogo as $quimicoKey) {
 $costoPromedioAnioAnterior = $costoPromedioAnioAnteriorAgrupado;
 $costoPromedioAnioActual = $costoPromedioAnioActualAgrupado;
 
+/*
+|--------------------------------------------------------------------------
+| 9a.1) IMPORTE DE COMPRA POR QUÍMICO Y SEMANA (SAIPBI2)
+|--------------------------------------------------------------------------
+*/
+$importeCompraAnioAnterior = [];
+$importeCompraAnioActual = [];
+$matrizCompraQuimicos = [];
+$compraPorSemana = [];
+$comprasPorPeriodo = [];
+
+foreach ($quimicosCatalogo as $quimicoKey) {
+  $matrizCompraQuimicos[$quimicoKey] = array_fill_keys($semanasCatalogo, 0.0);
+}
+
+foreach ($semanasCatalogo as $semanaLabel) {
+  $compraPorSemana[$semanaLabel] = 0.0;
+}
+
+$productosCompraCatalogo = [];
+foreach ($quimicosCatalogo as $quimicoKey) {
+  if (isset($grupoEstructura[$quimicoKey])) {
+    foreach (($grupoEstructura[$quimicoKey]['productos'] ?? []) as $productoGrupo) {
+      $productoGrupo = trim((string)$productoGrupo);
+      if ($productoGrupo !== '' && !in_array($productoGrupo, $productosCompraCatalogo, true)) {
+        $productosCompraCatalogo[] = $productoGrupo;
+      }
+    }
+    continue;
+  }
+
+  if (!in_array($quimicoKey, $productosCompraCatalogo, true)) {
+    $productosCompraCatalogo[] = $quimicoKey;
+  }
+}
+
+if (!empty($productosCompraCatalogo)) {
+  $placeholdersCompra = createPlaceholders($productosCompraCatalogo);
+  $importeCompraExpr = "
+    COALESCE(d.SUBT_PROD, COALESCE(d.VALOR_PROD, 0) * COALESCE(d.CANT_PROD, 0))
+    * CASE
+        WHEN COALESCE(c.CVE_MON, 1) = 1 THEN 1
+        ELSE COALESCE(NULLIF(c.TIP_CAM, 0), NULLIF(c.U_TIP_CAM, 0), 1)
+      END";
+
+  $sqlCompras = "
+    SELECT
+      YEARWEEK(c.FALTA_FAC, 3) AS periodo,
+      DATE_FORMAT(c.FALTA_FAC, '%x-S%v') AS semana_iso,
+      DATE_FORMAT(DATE_SUB(DATE(c.FALTA_FAC), INTERVAL WEEKDAY(c.FALTA_FAC) DAY), '%Y-%m-%d') AS semana_inicio,
+      DATE_FORMAT(DATE_ADD(DATE(c.FALTA_FAC), INTERVAL (6 - WEEKDAY(c.FALTA_FAC)) DAY), '%Y-%m-%d') AS semana_fin,
+      CAST(DATE_FORMAT(c.FALTA_FAC, '%x') AS UNSIGNED) AS anio_iso,
+      TRIM(d.CVE_PROD) AS cve_prod,
+      SUM($importeCompraExpr) AS importe_compra
+    FROM comprafd d
+    INNER JOIN comprafc c
+      ON c.CLAVE_FACTURA = d.CLAVE_FACTURA
+    WHERE c.FALTA_FAC >= ?
+      AND TRIM(d.CVE_PROD) IN ($placeholdersCompra)
+      AND UPPER(TRIM(COALESCE(c.STATUS_FAC, ''))) <> 'CANCELADA'
+    GROUP BY
+      YEARWEEK(c.FALTA_FAC, 3),
+      DATE_FORMAT(c.FALTA_FAC, '%x-S%v'),
+      DATE_FORMAT(DATE_SUB(DATE(c.FALTA_FAC), INTERVAL WEEKDAY(c.FALTA_FAC) DAY), '%Y-%m-%d'),
+      DATE_FORMAT(DATE_ADD(DATE(c.FALTA_FAC), INTERVAL (6 - WEEKDAY(c.FALTA_FAC)) DAY), '%Y-%m-%d'),
+      CAST(DATE_FORMAT(c.FALTA_FAC, '%x') AS UNSIGNED),
+      TRIM(d.CVE_PROD)
+    ORDER BY semana_iso, cve_prod
+  ";
+
+  $stmtCompras = $pdoCompras->prepare($sqlCompras);
+  $stmtCompras->execute(array_merge([$fechaDesde], $productosCompraCatalogo));
+
+  while ($row = $stmtCompras->fetch()) {
+    $cveProd = trim((string)$row['cve_prod']);
+    $quimicoKey = $grupoPorProducto[$cveProd] ?? $cveProd;
+
+    if (!in_array($quimicoKey, $quimicosCatalogo, true)) {
+      continue;
+    }
+
+    $anioIso = (int)$row['anio_iso'];
+    $periodo = (int)$row['periodo'];
+    $semanaIso = (string)$row['semana_iso'];
+    $semanaLabel = substr($semanaIso, -3);
+    $importeCompra = (float)$row['importe_compra'];
+
+    if ($anioIso === $anioAnterior) {
+      $importeCompraAnioAnterior[$quimicoKey] = ($importeCompraAnioAnterior[$quimicoKey] ?? 0.0) + $importeCompra;
+    } elseif ($anioIso === $anioActual) {
+      $importeCompraAnioActual[$quimicoKey] = ($importeCompraAnioActual[$quimicoKey] ?? 0.0) + $importeCompra;
+    }
+
+    if ($anioIso === $anioPivot && isset($matrizCompraQuimicos[$quimicoKey][$semanaLabel])) {
+      $matrizCompraQuimicos[$quimicoKey][$semanaLabel] += $importeCompra;
+      $compraPorSemana[$semanaLabel] = ($compraPorSemana[$semanaLabel] ?? 0.0) + $importeCompra;
+    }
+
+    if (!isset($comprasPorPeriodo[$periodo])) {
+      $comprasPorPeriodo[$periodo] = [
+        'periodo' => $periodo,
+        'semana_iso' => $semanaIso,
+        'semana_label' => $semanaLabel,
+        'semana_inicio' => $row['semana_inicio'],
+        'semana_fin' => $row['semana_fin'],
+        'importe_compra' => 0.0,
+      ];
+    }
+
+    $comprasPorPeriodo[$periodo]['importe_compra'] += $importeCompra;
+  }
+}
+
+$totalCompraAnioAnterior = array_sum($importeCompraAnioAnterior);
+$totalCompraAnioActual = array_sum($importeCompraAnioActual);
+$variacionCompra = $totalCompraAnioAnterior > 0
+  ? (($totalCompraAnioActual - $totalCompraAnioAnterior) / $totalCompraAnioAnterior) * 100
+  : null;
+
+$variacionCompraQuimico = [];
+$totalesCompraQuimico = [];
+
+foreach ($quimicosCatalogo as $quimico) {
+  $compraAnterior = (float)($importeCompraAnioAnterior[$quimico] ?? 0.0);
+  $compraActual = (float)($importeCompraAnioActual[$quimico] ?? 0.0);
+
+  $totalesCompraQuimico[$quimico] = $compraActual;
+  $variacionCompraQuimico[$quimico] = $compraAnterior > 0
+    ? (($compraActual - $compraAnterior) / $compraAnterior) * 100
+    : 0.0;
+}
+
+$datosCompraAnioAnterior = [];
+$datosCompraAnioActual = [];
+
+foreach ($comprasPorPeriodo as $row) {
+  $itemCompra = [
+    'periodo' => $row['periodo'],
+    'semana_iso' => $row['semana_iso'],
+    'semana_label' => $row['semana_label'],
+    'semana_inicio' => $row['semana_inicio'],
+    'semana_fin' => $row['semana_fin'],
+    'quimicos' => $row['importe_compra'],
+    'produccion' => 0.0,
+    'ratio' => $row['importe_compra'],
+    'colorHex' => '#64748b',
+  ];
+
+  $anioItem = (int)substr((string)$row['semana_iso'], 0, 4);
+  if ($anioItem === $anioAnterior) {
+    $datosCompraAnioAnterior[] = $itemCompra;
+  } elseif ($anioItem === $anioActual) {
+    $datosCompraAnioActual[] = $itemCompra;
+  }
+}
+
+$semanasCompraBase = count(array_filter($datosCompraAnioAnterior, fn($item) => (float)($item['ratio'] ?? 0.0) > 0));
+$promedioCompraSemanalAnioAnterior = $semanasCompraBase > 0
+  ? ($totalCompraAnioAnterior / $semanasCompraBase)
+  : null;
+
+$compraBasePorSemana = [];
+foreach ($datosCompraAnioAnterior as $itemCompraBase) {
+  $compraBasePorSemana[$itemCompraBase['semana_label']] = (float)($itemCompraBase['ratio'] ?? 0.0);
+}
+
+foreach ($datosCompraAnioActual as &$itemCompraActual) {
+  $semanaLabelCompra = (string)($itemCompraActual['semana_label'] ?? '');
+  $importeCompraActual = (float)($itemCompraActual['ratio'] ?? 0.0);
+  $importeCompraBase = $compraBasePorSemana[$semanaLabelCompra] ?? null;
+  [, , $colorCompraHex] = semaforo($importeCompraActual > 0 ? $importeCompraActual : null, $importeCompraBase, $toleranciaPct);
+  $itemCompraActual['colorHex'] = $colorCompraHex;
+}
+unset($itemCompraActual);
+
 $costoPorProduccionAnioAnterior = [];
 $costoPorProduccionAnioActual = [];
 $variacionCostoPorProduccionQuimico = [];
@@ -762,6 +948,14 @@ $chartDataCosto = buildChartData(
   $costoPromedioPorProduccionAnioAnterior,
   $semanasCatalogo
 );
+$chartDataCompra = buildChartData(
+  $datosCompraAnioActual,
+  $datosCompraAnioAnterior,
+  $anioAnterior,
+  $anioActual,
+  $promedioCompraSemanalAnioAnterior,
+  $semanasCatalogo
+);
 
 /*
 |--------------------------------------------------------------------------
@@ -781,6 +975,10 @@ $result = [
   'costoPromedioPorProduccionAnioAnterior' => $costoPromedioPorProduccionAnioAnterior,
   'costoPromedioPorProduccionAnioActual' => $costoPromedioPorProduccionAnioActual,
   'variacionCostoProduccion' => $variacionCostoProduccion,
+  'totalCompraAnioAnterior' => $totalCompraAnioAnterior,
+  'totalCompraAnioActual' => $totalCompraAnioActual,
+  'promedioCompraSemanalAnioAnterior' => $promedioCompraSemanalAnioAnterior,
+  'variacionCompra' => $variacionCompra,
 
   'limiteVerde' => $limiteVerde,
   'limiteAmarillo' => $limiteAmarillo,
@@ -806,9 +1004,12 @@ $result = [
   'datosAnioActual' => $datosAnioActual,
   'datosCostoAnioAnterior' => $datosCostoAnioAnterior,
   'datosCostoAnioActual' => $datosCostoAnioActual,
+  'datosCompraAnioAnterior' => $datosCompraAnioAnterior,
+  'datosCompraAnioActual' => $datosCompraAnioActual,
 
   'chartData' => $chartData,
   'chartDataCosto' => $chartDataCosto,
+  'chartDataCompra' => $chartDataCompra,
 
   // Datos de vista pivote
   'semanasCatalogo' => $semanasCatalogo,
@@ -820,15 +1021,21 @@ $result = [
   'matrizRatioQuimicos' => $matrizRatioQuimicos,
   'matrizImpactoEconomicoQuimicos' => $matrizImpactoEconomicoQuimicos,
   'matrizCostoProduccionQuimicos' => $matrizCostoProduccionQuimicos,
+  'matrizCompraQuimicos' => $matrizCompraQuimicos,
   'ratioBasePorQuimico' => $ratioBasePorQuimico,
   'totalesPorSemana' => $totalesPorSemana,
   'produccionPorSemana' => $produccionPorSemana,
   'ratioPorSemana' => $ratioPorSemana,
+  'compraPorSemana' => $compraPorSemana,
   'totalesConsumoQuimico' => $totalesConsumoQuimico,
   'totalesCostoQuimico' => $totalesCostoQuimico,
+  'totalesCompraQuimico' => $totalesCompraQuimico,
   'consumoQuimicoAnioAnterior' => $consumoQuimicoAnioAnterior,
   'consumoQuimicoAnioActual' => $consumoQuimicoAnioActual,
   'variacionConsumoQuimico' => $variacionConsumoQuimico,
+  'importeCompraAnioAnterior' => $importeCompraAnioAnterior,
+  'importeCompraAnioActual' => $importeCompraAnioActual,
+  'variacionCompraQuimico' => $variacionCompraQuimico,
   'costoPromedioAnioAnterior' => $costoPromedioAnioAnterior,
   'costoPromedioAnioActual' => $costoPromedioAnioActual,
   'variacionCostoQuimico' => $variacionCostoQuimico,

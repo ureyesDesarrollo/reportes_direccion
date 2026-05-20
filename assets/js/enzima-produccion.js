@@ -2,6 +2,10 @@
   const reportData = window.reportData || {};
   const reportConfig = window.reportConfig || {};
 
+  if (reportConfig.disableDefaultChart) {
+    return;
+  }
+
   let datosAnioAnterior = reportData.datosAnioAnterior || [];
   let datosAnioActual = reportData.datosAnioActual || [];
   let reporteData = reportData.reporte || [];
