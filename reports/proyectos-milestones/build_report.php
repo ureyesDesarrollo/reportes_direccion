@@ -28,6 +28,7 @@ $zonaFilter = trim((string)($_GET['zona'] ?? ''));
 $areaFilter = trim((string)($_GET['area'] ?? ''));
 $tipoProyectoFilter = trim((string)($_GET['tipo_proyecto'] ?? ''));
 $departamentoResponsableFilter = trim((string)($_GET['departamento_responsable'] ?? ''));
+$prioridadFilter = trim((string)($_GET['prioridad'] ?? ''));
 $searchTerm = trim((string)($_GET['q'] ?? ''));
 $milestoneSelected = (int)($_GET['milestone'] ?? 0);
 $empresaId = (int)($config['empresa_id'] ?? 0);
@@ -206,6 +207,7 @@ $zonas = [];
 $areas = [];
 $tiposProyecto = [];
 $departamentosResponsables = [];
+$prioridades = [];
 $countsByStatus = ['all' => 0];
 
 foreach (($stmt->fetchAll() ?: []) as $row) {
@@ -218,6 +220,11 @@ foreach (($stmt->fetchAll() ?: []) as $row) {
   $row['milestone_status'] = $resolveMilestoneStatus($row['milestone_estatus']);
   $row['health'] = $resolveProjectHealth($row);
   $row['pendientes'] = max(0, $row['total_tareas'] - $row['tareas_finalizadas']);
+  $prioridadNombre = trim((string)($row['prioridad_directiva'] ?? ''));
+  if ($prioridadNombre === '') {
+    $prioridadNombre = trim((string)($row['prioridad'] ?? ''));
+  }
+  $row['prioridad_display'] = $prioridadNombre !== '' ? $prioridadNombre : 'Sin prioridad';
 
   $projectsAll[] = $row;
   $countsByStatus['all']++;
@@ -248,18 +255,49 @@ foreach (($stmt->fetchAll() ?: []) as $row) {
   if ($deptoNombre !== '') {
     $departamentosResponsables[$deptoNombre] = $deptoNombre;
   }
+
+  $prioridadNombre = trim((string)($row['prioridad_display'] ?? ''));
+  if ($prioridadNombre !== '') {
+    $prioridades[$prioridadNombre] = $prioridadNombre;
+  }
 }
 
 usort($projectsAll, static function (array $a, array $b): int {
-  $priority = [
+  $priorityOrder = [
+    'alta' => 10,
+    'urg' => 10,
+    'crit' => 10,
+    'cr' => 10,
+    'media' => 20,
+    'normal' => 20,
+    'baja' => 30,
+  ];
+
+  $determinePriority = static function (string $value) use ($priorityOrder): int {
+    $normalized = strtolower(trim($value));
+    foreach ($priorityOrder as $token => $order) {
+      if ($normalized !== '' && stripos($normalized, $token) !== false) {
+        return $order;
+      }
+    }
+    return 40;
+  };
+
+  $priorityA = $determinePriority((string)($a['prioridad_display'] ?? ''));
+  $priorityB = $determinePriority((string)($b['prioridad_display'] ?? ''));
+  if ($priorityA !== $priorityB) {
+    return $priorityA <=> $priorityB;
+  }
+
+  $statusOrder = [
     1 => 10,
     4 => 20,
     3 => 30,
     5 => 40,
     2 => 50,
   ];
-  $statusA = $priority[(int)($a['milestone_estatus'] ?? 0)] ?? 99;
-  $statusB = $priority[(int)($b['milestone_estatus'] ?? 0)] ?? 99;
+  $statusA = $statusOrder[(int)($a['milestone_estatus'] ?? 0)] ?? 99;
+  $statusB = $statusOrder[(int)($b['milestone_estatus'] ?? 0)] ?? 99;
   if ($statusA !== $statusB) {
     return $statusA <=> $statusB;
   }
@@ -280,12 +318,22 @@ usort($projectsAll, static function (array $a, array $b): int {
   return strcmp($dateA, $dateB);
 });
 
-$projects = array_values(array_filter($projectsAll, static function (array $project) use ($statusFilter): bool {
+$projects = array_values(array_filter($projectsAll, static function (array $project) use ($statusFilter, $prioridadFilter): bool {
   if ($statusFilter === '' || $statusFilter === 'all') {
+    $matchesStatus = true;
+  } else {
+    $matchesStatus = (string)($project['milestone_estatus'] ?? '') === $statusFilter;
+  }
+
+  if (!$matchesStatus) {
+    return false;
+  }
+
+  if ($prioridadFilter === '') {
     return true;
   }
 
-  return (string)($project['milestone_estatus'] ?? '') === $statusFilter;
+  return (string)($project['prioridad_display'] ?? 'Sin prioridad') === $prioridadFilter;
 }));
 
 $totalProjects = count($projectsAll);
@@ -355,6 +403,7 @@ ksort($zonas, SORT_NATURAL);
 ksort($areas, SORT_NATURAL);
 ksort($tiposProyecto, SORT_NATURAL);
 ksort($departamentosResponsables, SORT_NATURAL);
+ksort($prioridades, SORT_NATURAL);
 
 $statusOptions = ['all' => ['label' => 'Todos', 'color' => '#0f172a']];
 foreach ($milestoneStatuses as $statusId => $statusMeta) {
@@ -371,6 +420,7 @@ $meta = [
   'areaFilter' => $areaFilter,
   'tipoProyectoFilter' => $tipoProyectoFilter,
   'departamentoResponsableFilter' => $departamentoResponsableFilter,
+  'prioridadFilter' => $prioridadFilter,
   'searchTerm' => $searchTerm,
   'cardsPorPagina' => (int)($config['cards_por_pagina'] ?? 12),
   'intervaloActualizacion' => (int)($config['intervalo_actualizacion'] ?? 300000),
@@ -381,6 +431,7 @@ $meta = [
   'areas' => $areas,
   'tiposProyecto' => $tiposProyecto,
   'departamentosResponsables' => $departamentosResponsables,
+  'prioridades' => $prioridades,
   'selectedMilestone' => $milestoneSelected,
 ];
 

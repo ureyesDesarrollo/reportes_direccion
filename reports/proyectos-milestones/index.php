@@ -33,6 +33,7 @@ $zonaFilter = (string)($meta['zonaFilter'] ?? '');
 $areaFilter = (string)($meta['areaFilter'] ?? '');
 $tipoProyectoFilter = (string)($meta['tipoProyectoFilter'] ?? '');
 $departamentoResponsableFilter = (string)($meta['departamentoResponsableFilter'] ?? '');
+$prioridadFilter = (string)($meta['prioridadFilter'] ?? '');
 $searchTerm = (string)($meta['searchTerm'] ?? '');
 $countsByStatus = (array)($meta['countsByStatus'] ?? []);
 $statusOptions = (array)($meta['statusOptions'] ?? []);
@@ -41,6 +42,7 @@ $zonas = (array)($meta['zonas'] ?? []);
 $areas = (array)($meta['areas'] ?? []);
 $tiposProyecto = (array)($meta['tiposProyecto'] ?? []);
 $departamentosResponsables = (array)($meta['departamentosResponsables'] ?? []);
+$prioridades = (array)($meta['prioridades'] ?? []);
 $selectedMilestone = (int)($meta['selectedMilestone'] ?? 0);
 $hasDetail = false;
 $currentStatusFilter = $statusFilter !== '' ? (string)$statusFilter : 'all';
@@ -63,6 +65,9 @@ if ($tipoProyectoFilter !== '') {
 }
 if ($departamentoResponsableFilter !== '') {
   $baseQuery['departamento_responsable'] = $departamentoResponsableFilter;
+}
+if ($prioridadFilter !== '') {
+  $baseQuery['prioridad'] = $prioridadFilter;
 }
 if ($searchTerm !== '') {
   $baseQuery['q'] = $searchTerm;
@@ -275,6 +280,20 @@ $topBackLabel = 'Regresar al inicio';
       font-size: 0.78rem;
       font-weight: 800;
       white-space: nowrap;
+    }
+
+    .project-priority {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 0.78rem;
+      font-weight: 800;
+      white-space: nowrap;
+      background: #f8fafc;
+      color: #475569;
+      border: 1px solid #e2e8f0;
     }
 
     .project-progress-wrap {
@@ -541,6 +560,17 @@ $topBackLabel = 'Regresar al inicio';
             <?php endforeach; ?>
           </select>
         </div>
+        <div class="projects-field">
+          <label for="prioridad">Prioridad</label>
+          <select id="prioridad" name="prioridad">
+            <option value="">Todas</option>
+            <?php foreach ($prioridades as $prioridad): ?>
+              <option value="<?= htmlspecialchars((string)$prioridad) ?>" <?= $prioridadFilter === (string)$prioridad ? 'selected' : '' ?>>
+                <?= htmlspecialchars((string)$prioridad) ?>
+              </option>
+            <?php endforeach; ?>
+          </select>
+        </div>
         <?php if ($currentStatusFilter !== 'all'): ?>
           <input type="hidden" name="estatus" value="<?= htmlspecialchars($currentStatusFilter) ?>">
         <?php endif; ?>
@@ -593,6 +623,7 @@ $topBackLabel = 'Regresar al inicio';
                 <th>Zona</th>
                 <th>Área</th>
                 <th>Responsable</th>
+                <th>Prioridad</th>
                 <th>Estatus</th>
                 <th>Semáforo</th>
                 <th>Avance</th>
@@ -605,6 +636,15 @@ $topBackLabel = 'Regresar al inicio';
                 <?php
                 $projectStatus = (array)($project['milestone_status'] ?? ['label' => 'Sin estatus', 'color' => '#94a3b8']);
                 $projectHealth = (array)($project['health'] ?? ['label' => 'Sin dato', 'color' => '#94a3b8']);
+                $projectPriority = trim((string)($project['prioridad_display'] ?? 'Sin prioridad'));
+                $priorityColor = '#64748b';
+                if (stripos($projectPriority, 'alta') !== false || stripos($projectPriority, 'urg') !== false || stripos($projectPriority, 'cr') !== false) {
+                  $priorityColor = '#ef4444';
+                } elseif (stripos($projectPriority, 'media') !== false || stripos($projectPriority, 'normal') !== false) {
+                  $priorityColor = '#f59e0b';
+                } elseif (stripos($projectPriority, 'baja') !== false) {
+                  $priorityColor = '#10b981';
+                }
                 $detailUrl = './detail.php?' . http_build_query(array_merge($baseQuery, ['milestone' => $project['milestone_id']]));
                 ?>
                 <tr>
@@ -617,6 +657,11 @@ $topBackLabel = 'Regresar al inicio';
                   <td><?= htmlspecialchars((string)($project['zona'] ?? 'Sin zona')) ?></td>
                   <td><?= htmlspecialchars((string)($project['area'] ?? 'Sin área')) ?></td>
                   <td><?= htmlspecialchars((string)($project['responsable'] ?? 'Sin responsable')) ?></td>
+                  <td>
+                    <span class="project-priority" style="background:<?= htmlspecialchars($priorityColor) ?>1A; color:<?= htmlspecialchars($priorityColor) ?>; border-color:<?= htmlspecialchars($priorityColor) ?>33;">
+                      <i class="fas fa-flag"></i><?= htmlspecialchars($projectPriority !== '' ? $projectPriority : 'Sin prioridad') ?>
+                    </span>
+                  </td>
                   <td>
                     <span class="project-badge" style="background:<?= htmlspecialchars($projectStatus['color']) ?>1A; color:<?= htmlspecialchars($projectStatus['color']) ?>;">
                       <i class="fas fa-circle"></i><?= htmlspecialchars((string)($projectStatus['label'] ?? '')) ?>

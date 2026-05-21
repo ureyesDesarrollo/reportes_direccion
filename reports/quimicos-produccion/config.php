@@ -6,7 +6,14 @@ return [
   'campo_fecha_movs' => 'F_MOV',
   'productos' => [],
   'tolerancia_pct' => 10,
-  'cve_mov' => '17',
+  'cve_mov_consumo' => ['17'],
+  'cve_mov_ajuste' => ['15'],
+  'conversiones_unidad_producto' => [
+    'TOROHY1' => [
+      'SACO' => 25,
+      'SACOS' => 25,
+    ],
+  ],
   'usar_todos_los_productos' => true,
   'anio_pivot' => (int)date('Y'),
   'grupo_estructura' => [

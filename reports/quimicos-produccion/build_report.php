@@ -27,7 +27,24 @@ $fechaDesde = $config['fecha_desde'];
 $campoFechaMovs = $config['campo_fecha_movs'];
 $productosQuimicos = $config['productos'] ?? [];
 $toleranciaPct = (float)($config['tolerancia_pct'] ?? 10);
-$cveMov = $config['cve_mov'] ?? null;
+$normalizarCveMov = static function ($valor): array {
+  $valores = is_array($valor) ? $valor : [$valor];
+  $normalizados = [];
+
+  foreach ($valores as $item) {
+    $item = trim((string)$item);
+    if ($item !== '' && !in_array($item, $normalizados, true)) {
+      $normalizados[] = $item;
+    }
+  }
+
+  return $normalizados;
+};
+
+$cveMovConsumo = $normalizarCveMov($config['cve_mov_consumo'] ?? ($config['cve_mov'] ?? '17'));
+$cveMovAjuste = $normalizarCveMov($config['cve_mov_ajuste'] ?? '15');
+$cveMovReporte = array_values(array_unique(array_merge($cveMovConsumo, $cveMovAjuste)));
+$conversionesUnidadProducto = $config['conversiones_unidad_producto'] ?? [];
 $usarTodosLosProductos = (bool)($config['usar_todos_los_productos'] ?? true);
 $anioPivot = (int)($config['anio_pivot'] ?? date('Y'));
 
@@ -61,6 +78,39 @@ $dbCompras['dbname'] = 'saipbi2';
 $pdoCompras = conectar($dbCompras);
 $campoFechaMovsSql = $state['campoFechaMovsSql'];
 $weekFields = $state['weekFields'];
+$conversionCases = [];
+
+foreach ($conversionesUnidadProducto as $productoConversion => $unidadesConversion) {
+  foreach ((array)$unidadesConversion as $unidadConversion => $factorConversion) {
+    $productoConversion = trim((string)$productoConversion);
+    $unidadConversion = trim((string)$unidadConversion);
+    $factorConversion = (float)$factorConversion;
+
+    if ($productoConversion === '' || $unidadConversion === '' || $factorConversion <= 0) {
+      continue;
+    }
+
+    $conversionCases[] = "WHEN TRIM(m.CVE_PROD) = " . $pdoMovs->quote($productoConversion)
+      . " AND UPPER(TRIM(m.UNIUSU)) = " . $pdoMovs->quote(strtoupper($unidadConversion))
+      . " THEN m.CANT_PROD * " . $factorConversion;
+  }
+}
+
+$conversionCasesSql = $conversionCases !== [] ? implode("\n                ", $conversionCases) . "\n                " : '';
+$cantidadQuimicoExpr = "
+            CASE
+                $conversionCasesSql
+                WHEN UPPER(TRIM(m.UNIUSU)) IN ('KG','KGS','KILO','KILOS') THEN m.CANT_PROD
+                WHEN UPPER(TRIM(m.UNIUSU)) IN ('G','GR','GRAMO','GRAMOS') THEN m.CANT_PROD / 1000
+                ELSE m.CANT_PROD
+            END";
+$signoMovimientoExpr = "
+            CASE
+                WHEN UPPER(TRIM(m.TIPO_MOV)) = 'E' THEN -1
+                WHEN UPPER(TRIM(m.TIPO_MOV)) = 'S' THEN 1
+                ELSE 0
+            END";
+$cantidadNetaExpr = "(($cantidadQuimicoExpr) * ($signoMovimientoExpr))";
 $grupoEstructura = $config['grupo_estructura'] ?? [];
 $grupoPorProducto = [];
 $grupoTitulos = [];
@@ -87,21 +137,17 @@ $sqlPivot = "
         " . $weekFields . ",
         TRIM(m.CVE_PROD) AS cve_prod,
         COALESCE(TRIM(p.DESC_PROD), '') AS desc_prod,
-        SUM(
-            CASE
-                WHEN UPPER(TRIM(m.UNIUSU)) IN ('KG','KGS','KILO','KILOS') THEN m.CANT_PROD
-                WHEN UPPER(TRIM(m.UNIUSU)) IN ('G','GR','GRAMO','GRAMOS') THEN m.CANT_PROD / 1000
-                ELSE m.CANT_PROD
-            END
-        ) AS quimicos_kg,
-        AVG(m.COSTO_ENT) AS costo_promedio
+        SUM($cantidadNetaExpr) AS quimicos_kg,
+        SUM(COALESCE(m.COSTO_ENT, 0) * $cantidadNetaExpr) AS impacto_economico,
+        CASE WHEN SUM($cantidadNetaExpr) <> 0
+             THEN SUM(COALESCE(m.COSTO_ENT, 0) * $cantidadNetaExpr) / SUM($cantidadNetaExpr)
+             ELSE AVG(m.COSTO_ENT) END AS costo_promedio
     FROM movs m
     LEFT JOIN producto p
         ON TRIM(p.CVE_PROD) = TRIM(m.CVE_PROD)
     WHERE $campoFechaMovsSql >= ?
-      AND TRIM(m.TIPO_MOV) = 'S'
+      AND UPPER(TRIM(m.TIPO_MOV)) IN ('E', 'S')
       AND m.LUGAR = 'QUIMICOS'
-
       AND m.CVE_PROD <> 'DIES01'
 ";
 
@@ -113,9 +159,10 @@ if (!$usarTodosLosProductos && !empty($productosQuimicos)) {
   $paramsPivot = array_merge($paramsPivot, $productosQuimicos);
 }
 
-if ($cveMov !== null && $cveMov !== '') {
-  $sqlPivot .= " AND m.CVE_MOV = ? ";
-  $paramsPivot[] = $cveMov;
+if (!empty($cveMovReporte)) {
+  $placeholdersMov = createPlaceholders($cveMovReporte);
+  $sqlPivot .= " AND TRIM(m.CVE_MOV) IN ($placeholdersMov) ";
+  $paramsPivot = array_merge($paramsPivot, $cveMovReporte);
 }
 
 $sqlPivot .= "
@@ -157,7 +204,7 @@ foreach ($rowsPivot as $row) {
   }
   $quimicosPorPeriodo[$periodo]['quimicos_kg'] += (float)$row['quimicos_kg'];
   $impactoEconomicoPorPeriodo[$periodo] = ($impactoEconomicoPorPeriodo[$periodo] ?? 0.0)
-    + ((float)$row['quimicos_kg'] * (float)($row['costo_promedio'] ?? 0.0));
+    + (float)($row['impacto_economico'] ?? 0.0);
 }
 
 /*
@@ -192,6 +239,7 @@ foreach ($rowsPivot as $row) {
   $descProd = trim((string)$row['desc_prod']);
   $kg = (float)$row['quimicos_kg'];
   $costo = (float)($row['costo_promedio'] ?? 0.0);
+  $impacto = (float)($row['impacto_economico'] ?? ($kg * $costo));
 
   $quimicoKey = $grupoPorProducto[$cveProd] ?? $cveProd;
   $quimicoLabel = $grupoTitulos[$quimicoKey] ?? ($descProd !== '' ? $descProd : $cveProd);
@@ -215,7 +263,7 @@ foreach ($rowsPivot as $row) {
   }
 
   $matrizQuimicos[$quimicoKey][$semanaLabel] += $kg;
-  $matrizImpactoAcumulado[$quimicoKey][$semanaLabel] += $kg * $costo;
+  $matrizImpactoAcumulado[$quimicoKey][$semanaLabel] += $impacto;
 }
 
 sort($quimicosCatalogo);
@@ -528,24 +576,18 @@ $costoPromedioAnioActual    = [];
 $impactoEconomicoAnioAnterior = [];
 $impactoEconomicoAnioActual   = [];
 
-$kgExpr = "
-    CASE
-        WHEN UPPER(TRIM(m.UNIUSU)) IN ('KG','KGS','KILO','KILOS') THEN m.CANT_PROD
-        WHEN UPPER(TRIM(m.UNIUSU)) IN ('G','GR','GRAMO','GRAMOS') THEN m.CANT_PROD / 1000
-        ELSE m.CANT_PROD
-    END";
-
 $sqlAnual = "
     SELECT
         CAST(DATE_FORMAT(" . $campoFechaMovsSql . ", '%x') AS UNSIGNED) AS anio_iso,
         TRIM(m.CVE_PROD) AS cve_prod,
-        SUM($kgExpr) AS consumo_kg,
-        CASE WHEN SUM($kgExpr) > 0
-             THEN SUM(m.COSTO_ENT * ($kgExpr)) / SUM($kgExpr)
+        SUM($cantidadNetaExpr) AS consumo_kg,
+        SUM(COALESCE(m.COSTO_ENT, 0) * $cantidadNetaExpr) AS impacto_economico,
+        CASE WHEN SUM($cantidadNetaExpr) <> 0
+             THEN SUM(COALESCE(m.COSTO_ENT, 0) * $cantidadNetaExpr) / SUM($cantidadNetaExpr)
              ELSE 0 END AS costo_ponderado
     FROM movs m
     WHERE CAST(DATE_FORMAT(" . $campoFechaMovsSql . ", '%x') AS UNSIGNED) IN (?, ?)
-      AND TRIM(m.TIPO_MOV) = 'S'
+      AND UPPER(TRIM(m.TIPO_MOV)) IN ('E', 'S')
       AND m.LUGAR = 'QUIMICOS'
       AND m.CVE_PROD <> 'DIES01'
 ";
@@ -558,9 +600,10 @@ if (!$usarTodosLosProductos && !empty($productosQuimicos)) {
   $paramsAnual = array_merge($paramsAnual, $productosQuimicos);
 }
 
-if ($cveMov !== null && $cveMov !== '') {
-  $sqlAnual .= " AND m.CVE_MOV = ? ";
-  $paramsAnual[] = $cveMov;
+if (!empty($cveMovReporte)) {
+  $placeholdersMov = createPlaceholders($cveMovReporte);
+  $sqlAnual .= " AND TRIM(m.CVE_MOV) IN ($placeholdersMov) ";
+  $paramsAnual = array_merge($paramsAnual, $cveMovReporte);
 }
 
 $sqlAnual .= " GROUP BY CAST(DATE_FORMAT(" . $campoFechaMovsSql . ", '%x') AS UNSIGNED), TRIM(m.CVE_PROD) ";
@@ -573,15 +616,16 @@ while ($row = $stmtAnual->fetch()) {
   $anio   = (int)$row['anio_iso'];
   $consumo = (float)$row['consumo_kg'];
   $costo   = (float)$row['costo_ponderado'];
+  $impacto = (float)($row['impacto_economico'] ?? ($consumo * $costo));
 
   if ($anio === $anioAnterior) {
     $consumoQuimicoAnioAnterior[$cve]   = $consumo;
     $costoPromedioAnioAnterior[$cve]    = $costo;
-    $impactoEconomicoAnioAnterior[$cve] = $consumo * $costo;
+    $impactoEconomicoAnioAnterior[$cve] = $impacto;
   } else {
     $consumoQuimicoAnioActual[$cve]   = $consumo;
     $costoPromedioAnioActual[$cve]    = $costo;
-    $impactoEconomicoAnioActual[$cve] = $consumo * $costo;
+    $impactoEconomicoAnioActual[$cve] = $impacto;
   }
 }
 
@@ -1057,7 +1101,9 @@ $result = [
     'filasPorPagina' => $filasPorPagina,
     'toleranciaPct' => $toleranciaPct,
     'intervaloActualizacion' => $intervaloActualizacion,
-    'cveMov' => $cveMov,
+    'cveMovConsumo' => $cveMovConsumo,
+    'cveMovAjuste' => $cveMovAjuste,
+    'cveMovReporte' => $cveMovReporte,
     'grupo_estructura' => $grupoEstructura,
   ],
 ];

@@ -37,7 +37,14 @@ return [
   'productos' => [$productoSeleccionado],
 
   'tolerancia_pct' => $tolerancia_pct,
-  'cve_mov' => '17',
+  'cve_mov_consumo' => ['17'],
+  'cve_mov_ajuste' => ['15'],
+  'conversiones_unidad_producto' => [
+    'TOROHY1' => [
+      'SACO' => 25,
+      'SACOS' => 25,
+    ],
+  ],
 
   'campo_costo' => 'COSTO_ENT',
 ];

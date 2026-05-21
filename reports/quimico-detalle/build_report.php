@@ -32,7 +32,24 @@ $toleranciaPct = (float)($config['tolerancia_pct'] ?? 10);
 if ($modo === 'impacto') {
   $toleranciaPct = 6.0;
 }
-$cveMov = $config['cve_mov'] ?? null;
+$normalizarCveMov = static function ($valor): array {
+  $valores = is_array($valor) ? $valor : [$valor];
+  $normalizados = [];
+
+  foreach ($valores as $item) {
+    $item = trim((string)$item);
+    if ($item !== '' && !in_array($item, $normalizados, true)) {
+      $normalizados[] = $item;
+    }
+  }
+
+  return $normalizados;
+};
+
+$cveMovConsumo = $normalizarCveMov($config['cve_mov_consumo'] ?? ($config['cve_mov'] ?? '17'));
+$cveMovAjuste = $normalizarCveMov($config['cve_mov_ajuste'] ?? '15');
+$cveMovReporte = array_values(array_unique(array_merge($cveMovConsumo, $cveMovAjuste)));
+$conversionesUnidadProducto = $config['conversiones_unidad_producto'] ?? [];
 $productoSeleccionado = $config['producto_seleccionado'] ?? ($productos[0] ?? null);
 $campoCosto = $config['campo_costo'] ?? 'COST_ENT';
 
@@ -67,9 +84,43 @@ $pdoProd = $state['pdoProd'];
 $campoFechaMovsSql = $state['campoFechaMovsSql'];
 $weekFields = $state['weekFields'];
 $campoCostoSql = "m.`{$campoCosto}`";
+$conversionCases = [];
 
-$consumoExpr = getConsumoExpression();
-$costoPromedioExpr = getCostoExpression($campoCosto);
+foreach ($conversionesUnidadProducto as $productoConversion => $unidadesConversion) {
+  foreach ((array)$unidadesConversion as $unidadConversion => $factorConversion) {
+    $productoConversion = trim((string)$productoConversion);
+    $unidadConversion = trim((string)$unidadConversion);
+    $factorConversion = (float)$factorConversion;
+
+    if ($productoConversion === '' || $unidadConversion === '' || $factorConversion <= 0) {
+      continue;
+    }
+
+    $conversionCases[] = "WHEN TRIM(m.CVE_PROD) = " . $pdoMovs->quote($productoConversion)
+      . " AND UPPER(TRIM(m.UNIUSU)) = " . $pdoMovs->quote(strtoupper($unidadConversion))
+      . " THEN m.CANT_PROD * " . $factorConversion;
+  }
+}
+
+$conversionCasesSql = $conversionCases !== [] ? implode("\n                ", $conversionCases) . "\n                " : '';
+$cantidadQuimicoExpr = "
+            CASE
+                $conversionCasesSql
+                WHEN UPPER(TRIM(m.UNIUSU)) IN ('KG','KGS','KILO','KILOS') THEN m.CANT_PROD
+                WHEN UPPER(TRIM(m.UNIUSU)) IN ('G','GR','GRAMO','GRAMOS') THEN m.CANT_PROD / 1000
+                ELSE m.CANT_PROD
+            END";
+$signoMovimientoExpr = "
+            CASE
+                WHEN UPPER(TRIM(m.TIPO_MOV)) = 'E' THEN -1
+                WHEN UPPER(TRIM(m.TIPO_MOV)) = 'S' THEN 1
+                ELSE 0
+            END";
+$consumoNetoExpr = "(($cantidadQuimicoExpr) * ($signoMovimientoExpr))";
+
+$consumoExpr = "SUM($consumoNetoExpr)";
+$impactoExpr = "SUM(COALESCE($campoCostoSql, 0) * $consumoNetoExpr)";
+$costoPromedioExpr = "CASE WHEN SUM($consumoNetoExpr) <> 0 THEN $impactoExpr / SUM($consumoNetoExpr) ELSE AVG($campoCostoSql) END";
 
 /*
 |--------------------------------------------------------------------------
@@ -112,7 +163,7 @@ if ($modo === 'consumo') {
             $consumoExpr AS consumo_kg
         FROM movs m
         WHERE $campoFechaMovsSql >= ?
-          AND TRIM(m.TIPO_MOV) = 'S'
+          AND UPPER(TRIM(m.TIPO_MOV)) IN ('E', 'S')
           AND TRIM(m.CVE_PROD) = ?
     ";
 } elseif ($modo === 'costo') {
@@ -123,7 +174,7 @@ if ($modo === 'consumo') {
             $costoPromedioExpr AS costo_promedio
         FROM movs m
         WHERE $campoFechaMovsSql >= ?
-          AND TRIM(m.TIPO_MOV) = 'S'
+          AND UPPER(TRIM(m.TIPO_MOV)) IN ('E', 'S')
           AND TRIM(m.CVE_PROD) = ?
     ";
 } else {
@@ -136,16 +187,17 @@ if ($modo === 'consumo') {
             $costoPromedioExpr AS costo_promedio
         FROM movs m
         WHERE $campoFechaMovsSql >= ?
-          AND TRIM(m.TIPO_MOV) = 'S'
+          AND UPPER(TRIM(m.TIPO_MOV)) IN ('E', 'S')
           AND TRIM(m.CVE_PROD) = ?
     ";
 }
 
 $paramsDetalle = [$fechaDesde, $productoSeleccionado];
 
-if ($cveMov !== null && $cveMov !== '') {
-  $sqlDetalle .= " AND m.CVE_MOV = ? ";
-  $paramsDetalle[] = $cveMov;
+if (!empty($cveMovReporte)) {
+  $placeholdersMov = createPlaceholders($cveMovReporte);
+  $sqlDetalle .= " AND TRIM(m.CVE_MOV) IN ($placeholdersMov) ";
+  $paramsDetalle = array_merge($paramsDetalle, $cveMovReporte);
 }
 
 $sqlDetalle .= "
@@ -185,15 +237,16 @@ if ($modo === 'costo' || $modo === 'impacto') {
             AVG(CASE WHEN CAST(DATE_FORMAT($campoFechaMovsSql, '%x') AS UNSIGNED) = ? THEN $campoCostoSql END) AS promedio_anio_actual
         FROM movs m
         WHERE $campoFechaMovsSql >= ?
-          AND TRIM(m.TIPO_MOV) = 'S'
+          AND UPPER(TRIM(m.TIPO_MOV)) IN ('E', 'S')
           AND TRIM(m.CVE_PROD) = ?
     ";
 
   $paramsCostoBase = [$anioAnterior, $anioActual, $fechaDesde, $productoSeleccionado];
 
-  if ($cveMov !== null && $cveMov !== '') {
-    $sqlCostoBase .= " AND m.CVE_MOV = ? ";
-    $paramsCostoBase[] = $cveMov;
+  if (!empty($cveMovReporte)) {
+    $placeholdersMov = createPlaceholders($cveMovReporte);
+    $sqlCostoBase .= " AND TRIM(m.CVE_MOV) IN ($placeholdersMov) ";
+    $paramsCostoBase = array_merge($paramsCostoBase, $cveMovReporte);
   }
 
   $stmtCostoBase = $pdoMovs->prepare($sqlCostoBase);
@@ -446,7 +499,9 @@ $result = [
     'filasPorPagina' => $filasPorPagina,
     'toleranciaPct' => $toleranciaPct,
     'intervaloActualizacion' => $intervaloActualizacion,
-    'cveMov' => $cveMov,
+    'cveMovConsumo' => $cveMovConsumo,
+    'cveMovAjuste' => $cveMovAjuste,
+    'cveMovReporte' => $cveMovReporte,
     'modo' => $modo,
     'campoCosto' => $campoCosto,
     'metricaTitulo' => $metricaTitulo,
