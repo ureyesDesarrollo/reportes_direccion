@@ -11,7 +11,135 @@ header('Expires: 0');
 
 $appConfig = require __DIR__ . '/../../config/app.php';
 $config = require __DIR__ . '/config.php';
+$databaseConfig = require __DIR__ . '/../../config/database.php';
 require __DIR__ . '/../../shared/helpers.php';
+
+$connectMysqlForHighlights = static function (array $cfg): PDO {
+  $host = (string)($cfg['host'] ?? 'localhost:3306');
+  $parts = explode(':', $host, 2);
+  $hostname = $parts[0] !== '' ? $parts[0] : 'localhost';
+  $port = $parts[1] ?? '3306';
+  $dbname = (string)($cfg['dbname'] ?? '');
+  $charset = (string)($cfg['charset'] ?? 'utf8mb4');
+  $dsn = 'mysql:host=' . $hostname . ';port=' . $port . ';dbname=' . $dbname . ';charset=' . $charset;
+
+  return new PDO($dsn, (string)($cfg['user'] ?? ''), (string)($cfg['pass'] ?? ''), [
+    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+  ]);
+};
+
+$ensureHighlightsTable = static function (PDO $pdo): void {
+  $pdo->exec("
+    CREATE TABLE IF NOT EXISTS reportes_proyectos_destacados (
+      empresa_id INT NOT NULL,
+      milestone_id INT NOT NULL,
+      orden TINYINT UNSIGNED NOT NULL DEFAULT 1,
+      creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      actualizado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (empresa_id, milestone_id),
+      KEY idx_reportes_proyectos_destacados_orden (empresa_id, orden)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  ");
+};
+
+$normalizeHighlightOrders = static function (PDO $pdo, int $empresaId): void {
+  $stmt = $pdo->prepare("
+    SELECT milestone_id
+    FROM reportes_proyectos_destacados
+    WHERE empresa_id = ?
+    ORDER BY orden ASC, actualizado_en DESC
+    LIMIT 3
+  ");
+  $stmt->execute([$empresaId]);
+  $rows = $stmt->fetchAll() ?: [];
+  $deleteExtra = $pdo->prepare("
+    DELETE FROM reportes_proyectos_destacados
+    WHERE empresa_id = ? AND milestone_id NOT IN (
+      SELECT milestone_id FROM (
+        SELECT milestone_id
+        FROM reportes_proyectos_destacados
+        WHERE empresa_id = ?
+        ORDER BY orden ASC, actualizado_en DESC
+        LIMIT 3
+      ) keepers
+    )
+  ");
+  $deleteExtra->execute([$empresaId, $empresaId]);
+
+  $update = $pdo->prepare("
+    UPDATE reportes_proyectos_destacados
+    SET orden = ?
+    WHERE empresa_id = ? AND milestone_id = ?
+  ");
+  foreach ($rows as $index => $row) {
+    $update->execute([$index + 1, $empresaId, (int)($row['milestone_id'] ?? 0)]);
+  }
+};
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['highlight_action'])) {
+  try {
+    $empresaId = (int)($config['empresa_id'] ?? 0);
+    $milestoneId = (int)($_POST['milestone_id'] ?? 0);
+    $action = (string)($_POST['highlight_action'] ?? '');
+    if ($empresaId > 0 && $milestoneId > 0 && in_array($action, ['add', 'remove'], true)) {
+      $pdoHighlights = $connectMysqlForHighlights((array)($databaseConfig[$config['database_key']] ?? []));
+      $ensureHighlightsTable($pdoHighlights);
+
+      if ($action === 'remove') {
+        $stmt = $pdoHighlights->prepare("
+          DELETE FROM reportes_proyectos_destacados
+          WHERE empresa_id = ? AND milestone_id = ?
+        ");
+        $stmt->execute([$empresaId, $milestoneId]);
+        $normalizeHighlightOrders($pdoHighlights, $empresaId);
+      } else {
+        $existingStmt = $pdoHighlights->prepare("
+          SELECT COUNT(*) AS total
+          FROM reportes_proyectos_destacados
+          WHERE empresa_id = ? AND milestone_id = ?
+        ");
+        $existingStmt->execute([$empresaId, $milestoneId]);
+        $existingRow = $existingStmt->fetch() ?: [];
+        $alreadyFeatured = (int)($existingRow['total'] ?? 0) > 0;
+
+        $countStmt = $pdoHighlights->prepare("
+          SELECT COUNT(*) AS total
+          FROM reportes_proyectos_destacados
+          WHERE empresa_id = ?
+        ");
+        $countStmt->execute([$empresaId]);
+        $countRow = $countStmt->fetch() ?: [];
+        $featuredCount = (int)($countRow['total'] ?? 0);
+
+        if (!$alreadyFeatured && $featuredCount < 3) {
+          $orderStmt = $pdoHighlights->prepare("
+            SELECT orden
+            FROM reportes_proyectos_destacados
+            WHERE empresa_id = ?
+          ");
+          $orderStmt->execute([$empresaId]);
+          $usedOrders = array_map('intval', array_column($orderStmt->fetchAll() ?: [], 'orden'));
+          $nextOrder = 1;
+          while (in_array($nextOrder, $usedOrders, true) && $nextOrder < 3) {
+            $nextOrder++;
+          }
+
+          $insertStmt = $pdoHighlights->prepare("
+            INSERT INTO reportes_proyectos_destacados (empresa_id, milestone_id, orden)
+            VALUES (?, ?, ?)
+          ");
+          $insertStmt->execute([$empresaId, $milestoneId, $nextOrder]);
+          $normalizeHighlightOrders($pdoHighlights, $empresaId);
+        }
+      }
+    }
+  } catch (Throwable $e) {
+  }
+
+  header('Location: ' . ($_SERVER['REQUEST_URI'] ?: './index.php'));
+  exit;
+}
 
 try {
   $report = require __DIR__ . '/build_report.php';
@@ -46,6 +174,21 @@ $prioridades = (array)($meta['prioridades'] ?? []);
 $selectedMilestone = (int)($meta['selectedMilestone'] ?? 0);
 $hasDetail = false;
 $currentStatusFilter = $statusFilter !== '' ? (string)$statusFilter : 'all';
+$proyectosDestacados = (array)($proyectos_destacados ?? []);
+$destacadosCount = count($proyectosDestacados);
+
+$formatDateLabel = static function (?string $value): string {
+  $value = trim((string)$value);
+  if ($value === '') {
+    return '-';
+  }
+
+  try {
+    return (new DateTimeImmutable(substr($value, 0, 10)))->format('d/m/Y');
+  } catch (Throwable $e) {
+    return $value;
+  }
+};
 
 $baseQuery = [];
 if ($statusFilter !== '' && $statusFilter !== 'all') {
@@ -140,6 +283,151 @@ $topBackLabel = 'Regresar al inicio';
       margin-top: 10px;
       color: #64748b;
       font-size: 0.9rem;
+    }
+
+    .projects-highlights {
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 18px;
+      box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
+      padding: 20px;
+      margin-bottom: 22px;
+    }
+
+    .projects-highlight-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: flex-end;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+
+    .projects-highlight-title {
+      color: #0f172a;
+      font-size: 1.05rem;
+      font-weight: 800;
+      margin-bottom: 4px;
+    }
+
+    .projects-highlight-sub {
+      color: #64748b;
+      font-size: 0.9rem;
+      line-height: 1.45;
+    }
+
+    .projects-highlight-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .projects-highlight-card {
+      display: grid;
+      gap: 14px;
+      border: 1px solid #e2e8f0;
+      border-radius: 16px;
+      background: #f8fafc;
+      padding: 16px;
+      min-height: 230px;
+    }
+
+    .projects-highlight-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: flex-start;
+    }
+
+    .projects-highlight-rank {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      border-radius: 999px;
+      background: #0f172a;
+      color: #fff;
+      font-size: 0.8rem;
+      font-weight: 800;
+      flex: 0 0 auto;
+    }
+
+    .projects-highlight-name {
+      color: #0f172a;
+      font-size: 1rem;
+      font-weight: 800;
+      line-height: 1.35;
+      margin-bottom: 6px;
+    }
+
+    .projects-highlight-meta {
+      color: #64748b;
+      font-size: 0.82rem;
+      line-height: 1.5;
+    }
+
+    .projects-highlight-pills {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .projects-highlight-foot {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+      align-self: end;
+      flex-wrap: wrap;
+    }
+
+    .projects-highlight-date {
+      color: #475569;
+      font-size: 0.82rem;
+      font-weight: 700;
+    }
+
+    .projects-highlight-actions,
+    .projects-inline-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .projects-star-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      border: 1px solid #dbe2ea;
+      border-radius: 999px;
+      background: #fff;
+      color: #334155;
+      cursor: pointer;
+      font: inherit;
+      font-size: 0.78rem;
+      font-weight: 800;
+      padding: 7px 10px;
+      text-decoration: none;
+      transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+    }
+
+    .projects-star-btn:hover {
+      background: #fffbeb;
+      border-color: #fde68a;
+      color: #b45309;
+    }
+
+    .projects-star-btn.is-active {
+      background: #fffbeb;
+      border-color: #facc15;
+      color: #a16207;
+    }
+
+    .projects-star-btn:disabled {
+      cursor: not-allowed;
+      opacity: 0.52;
     }
 
     .projects-filter-form {
@@ -437,6 +725,7 @@ $topBackLabel = 'Regresar al inicio';
 
     @media (max-width: 1200px) {
       .projects-kpis,
+      .projects-highlight-grid,
       .projects-detail-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
@@ -444,6 +733,7 @@ $topBackLabel = 'Regresar al inicio';
 
     @media (max-width: 760px) {
       .projects-kpis,
+      .projects-highlight-grid,
       .projects-detail-grid {
         grid-template-columns: 1fr;
       }
@@ -497,6 +787,99 @@ $topBackLabel = 'Regresar al inicio';
           <div class="projects-kpi-sub">Promedio general del portafolio</div>
         </div>
       </div>
+    <?php endif; ?>
+
+    <?php if (!$hasDetail): ?>
+      <section class="projects-highlights">
+        <div class="projects-highlight-head">
+          <div>
+            <div class="projects-highlight-title">Proyectos destacados</div>
+            <div class="projects-highlight-sub">Marca hasta 3 proyectos desde la tabla para tenerlos siempre a la vista.</div>
+          </div>
+          <div class="projects-shell-sub"><?= n((float)$destacadosCount, 0) ?> de 3 destacado(s)</div>
+        </div>
+        <?php if (!empty($proyectosDestacados)): ?>
+          <div class="projects-highlight-grid">
+            <?php foreach ($proyectosDestacados as $highlightIndex => $project): ?>
+              <?php
+              $projectStatus = (array)($project['milestone_status'] ?? ['label' => 'Sin estatus', 'color' => '#94a3b8']);
+              $projectHealth = (array)($project['health'] ?? ['label' => 'Sin dato', 'color' => '#94a3b8']);
+              $projectPriority = trim((string)($project['prioridad_display'] ?? 'Sin prioridad'));
+              $priorityColor = '#64748b';
+              if (stripos($projectPriority, 'alta') !== false || stripos($projectPriority, 'urg') !== false || stripos($projectPriority, 'cr') !== false) {
+                $priorityColor = '#ef4444';
+              } elseif (stripos($projectPriority, 'media') !== false || stripos($projectPriority, 'normal') !== false) {
+                $priorityColor = '#f59e0b';
+              } elseif (stripos($projectPriority, 'baja') !== false) {
+                $priorityColor = '#10b981';
+              }
+              $detailUrl = './detail.php?' . http_build_query(array_merge($baseQuery, ['milestone' => $project['milestone_id']]));
+              ?>
+              <article class="projects-highlight-card">
+                <div class="projects-highlight-top">
+                  <div>
+                    <div class="projects-highlight-name"><?= htmlspecialchars((string)($project['milestone'] ?? 'Proyecto')) ?></div>
+                    <div class="projects-highlight-meta">
+                      <?= htmlspecialchars((string)($project['zona'] ?? 'Sin zona')) ?> ·
+                      <?= htmlspecialchars((string)($project['area'] ?? 'Sin área')) ?><br>
+                      Responsable: <?= htmlspecialchars((string)($project['responsable'] ?? 'Sin responsable')) ?>
+                    </div>
+                  </div>
+                  <span class="projects-highlight-rank"><?= (int)$highlightIndex + 1 ?></span>
+                </div>
+
+                <div class="projects-highlight-pills">
+                  <span class="project-priority" style="background:<?= htmlspecialchars($priorityColor) ?>1A; color:<?= htmlspecialchars($priorityColor) ?>; border-color:<?= htmlspecialchars($priorityColor) ?>33;">
+                    <i class="fas fa-flag"></i><?= htmlspecialchars($projectPriority !== '' ? $projectPriority : 'Sin prioridad') ?>
+                  </span>
+                  <span class="project-status" style="background:<?= htmlspecialchars($projectHealth['color']) ?>1A; color:<?= htmlspecialchars($projectHealth['color']) ?>;">
+                    <i class="fas fa-signal"></i><?= htmlspecialchars((string)($projectHealth['label'] ?? '')) ?>
+                  </span>
+                </div>
+
+                <div class="project-progress-wrap">
+                  <div class="project-progress-head">
+                    <span>Avance</span>
+                    <strong><?= n((float)($project['avance_real'] ?? 0), 0) ?>%</strong>
+                  </div>
+                  <div class="project-progress-bar">
+                    <div
+                      class="project-progress-fill"
+                      style="width:<?= max(0, min(100, (float)($project['avance_real'] ?? 0))) ?>%; background:<?= htmlspecialchars((string)($projectHealth['color'] ?? '#2563eb')) ?>;">
+                    </div>
+                  </div>
+                </div>
+
+                <div class="projects-highlight-foot">
+                  <div class="projects-highlight-date">
+                    <i class="fas fa-calendar-day"></i>
+                    <?= htmlspecialchars($formatDateLabel((string)($project['fecha_fin'] ?? ''))) ?>
+                  </div>
+                  <div class="projects-highlight-actions">
+                    <a href="<?= htmlspecialchars($detailUrl) ?>" class="project-card-link">
+                      Ver detalle
+                      <i class="fas fa-arrow-right"></i>
+                    </a>
+                    <form method="post">
+                      <input type="hidden" name="highlight_action" value="remove">
+                      <input type="hidden" name="milestone_id" value="<?= (int)($project['milestone_id'] ?? 0) ?>">
+                      <button type="submit" class="projects-star-btn is-active">
+                        <i class="fas fa-star"></i>
+                        Quitar
+                      </button>
+                    </form>
+                  </div>
+                </div>
+              </article>
+            <?php endforeach; ?>
+          </div>
+        <?php else: ?>
+          <div class="projects-empty" style="border-top:0; padding:18px;">
+            <i class="fas fa-star" style="color:#facc15; margin-right:8px;"></i>
+            Todavía no hay proyectos destacados. Usa el botón “Destacar” en la tabla.
+          </div>
+        <?php endif; ?>
+      </section>
     <?php endif; ?>
 
     <div class="projects-filters">
@@ -673,12 +1056,26 @@ $topBackLabel = 'Regresar al inicio';
                     </span>
                   </td>
                   <td><?= n((float)($project['avance_real'] ?? 0), 0) ?>%</td>
-                  <td><?= htmlspecialchars((string)($project['fecha_fin'] ?: '-')) ?></td>
+                  <td><?= htmlspecialchars($formatDateLabel((string)($project['fecha_fin'] ?? ''))) ?></td>
                   <td>
-                    <a href="<?= htmlspecialchars($detailUrl) ?>" class="projects-summary-link">
-                      Ver detalle
-                      <i class="fas fa-arrow-up-right-from-square"></i>
-                    </a>
+                    <div class="projects-inline-actions">
+                      <a href="<?= htmlspecialchars($detailUrl) ?>" class="projects-summary-link">
+                        Ver detalle
+                        <i class="fas fa-arrow-up-right-from-square"></i>
+                      </a>
+                      <form method="post">
+                        <?php $isFeatured = (int)($project['destacado_orden'] ?? 0) > 0; ?>
+                        <input type="hidden" name="highlight_action" value="<?= $isFeatured ? 'remove' : 'add' ?>">
+                        <input type="hidden" name="milestone_id" value="<?= (int)($project['milestone_id'] ?? 0) ?>">
+                        <button
+                          type="submit"
+                          class="projects-star-btn<?= $isFeatured ? ' is-active' : '' ?>"
+                          <?= (!$isFeatured && $destacadosCount >= 3) ? 'disabled' : '' ?>>
+                          <i class="<?= $isFeatured ? 'fas' : 'far' ?> fa-star"></i>
+                          <?= $isFeatured ? 'Quitar destacado' : 'Destacar' ?>
+                        </button>
+                      </form>
+                    </div>
                   </td>
                 </tr>
               <?php endforeach; ?>
@@ -694,6 +1091,48 @@ $topBackLabel = 'Regresar al inicio';
     </div>
   </div>
 
+  <script>
+    (function() {
+      const scrollKey = 'proyectosMilestonesScrollY';
+
+      if ('scrollRestoration' in history) {
+        history.scrollRestoration = 'manual';
+      }
+
+      const saveScroll = function() {
+        sessionStorage.setItem(scrollKey, String(window.scrollY || document.documentElement.scrollTop || 0));
+      };
+
+      const restoreScroll = function() {
+        const storedScroll = sessionStorage.getItem(scrollKey);
+        if (storedScroll === null) {
+          return;
+        }
+
+        sessionStorage.removeItem(scrollKey);
+        const scrollY = Math.max(0, parseInt(storedScroll, 10) || 0);
+        requestAnimationFrame(function() {
+          window.scrollTo({ top: scrollY, left: 0, behavior: 'auto' });
+          setTimeout(function() {
+            window.scrollTo({ top: scrollY, left: 0, behavior: 'auto' });
+          }, 80);
+        });
+      };
+
+      document.addEventListener('DOMContentLoaded', function() {
+        restoreScroll();
+
+        const filterForm = document.querySelector('.projects-filter-form');
+        if (filterForm) {
+          filterForm.addEventListener('submit', saveScroll);
+        }
+
+        document.querySelectorAll('.projects-status-pill, .projects-btn-muted').forEach(function(link) {
+          link.addEventListener('click', saveScroll);
+        });
+      });
+    })();
+  </script>
 </body>
 
 </html>

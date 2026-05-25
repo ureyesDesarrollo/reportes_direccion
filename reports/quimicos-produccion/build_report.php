@@ -63,6 +63,7 @@ $cacheKey = 'report_' . md5(serialize([
   $appConfig['cards_por_pagina'] ?? 9,
   $appConfig['filas_por_pagina'] ?? 15,
   filemtime(__FILE__),
+  filesize(__FILE__),
   date('Y-m-d'),
 ]));
 $cached = getCache($cacheKey);
@@ -79,6 +80,7 @@ $pdoCompras = conectar($dbCompras);
 $campoFechaMovsSql = $state['campoFechaMovsSql'];
 $weekFields = $state['weekFields'];
 $conversionCases = [];
+$costQuantityConversionCases = [];
 
 foreach ($conversionesUnidadProducto as $productoConversion => $unidadesConversion) {
   foreach ((array)$unidadesConversion as $unidadConversion => $factorConversion) {
@@ -93,13 +95,24 @@ foreach ($conversionesUnidadProducto as $productoConversion => $unidadesConversi
     $conversionCases[] = "WHEN TRIM(m.CVE_PROD) = " . $pdoMovs->quote($productoConversion)
       . " AND UPPER(TRIM(m.UNIUSU)) = " . $pdoMovs->quote(strtoupper($unidadConversion))
       . " THEN m.CANT_PROD * " . $factorConversion;
+    $costQuantityConversionCases[] = "WHEN TRIM(m.CVE_PROD) = " . $pdoMovs->quote($productoConversion)
+      . " AND UPPER(TRIM(m.UNIUSU)) = " . $pdoMovs->quote(strtoupper($unidadConversion))
+      . " THEN m.CANT_PROD";
   }
 }
 
 $conversionCasesSql = $conversionCases !== [] ? implode("\n                ", $conversionCases) . "\n                " : '';
+$costQuantityConversionCasesSql = $costQuantityConversionCases !== [] ? implode("\n                ", $costQuantityConversionCases) . "\n                " : '';
 $cantidadQuimicoExpr = "
             CASE
                 $conversionCasesSql
+                WHEN UPPER(TRIM(m.UNIUSU)) IN ('KG','KGS','KILO','KILOS') THEN m.CANT_PROD
+                WHEN UPPER(TRIM(m.UNIUSU)) IN ('G','GR','GRAMO','GRAMOS') THEN m.CANT_PROD / 1000
+                ELSE m.CANT_PROD
+            END";
+$cantidadCostoExpr = "
+            CASE
+                $costQuantityConversionCasesSql
                 WHEN UPPER(TRIM(m.UNIUSU)) IN ('KG','KGS','KILO','KILOS') THEN m.CANT_PROD
                 WHEN UPPER(TRIM(m.UNIUSU)) IN ('G','GR','GRAMO','GRAMOS') THEN m.CANT_PROD / 1000
                 ELSE m.CANT_PROD
@@ -111,6 +124,8 @@ $signoMovimientoExpr = "
                 ELSE 0
             END";
 $cantidadNetaExpr = "(($cantidadQuimicoExpr) * ($signoMovimientoExpr))";
+$cantidadCostoNetaExpr = "(($cantidadCostoExpr) * ($signoMovimientoExpr))";
+$impactoEconomicoExpr = "(COALESCE(m.COSTO_ENT, 0) * $cantidadCostoNetaExpr)";
 $grupoEstructura = $config['grupo_estructura'] ?? [];
 $grupoPorProducto = [];
 $grupoTitulos = [];
@@ -138,9 +153,9 @@ $sqlPivot = "
         TRIM(m.CVE_PROD) AS cve_prod,
         COALESCE(TRIM(p.DESC_PROD), '') AS desc_prod,
         SUM($cantidadNetaExpr) AS quimicos_kg,
-        SUM(COALESCE(m.COSTO_ENT, 0) * $cantidadNetaExpr) AS impacto_economico,
+        SUM($impactoEconomicoExpr) AS impacto_economico,
         CASE WHEN SUM($cantidadNetaExpr) <> 0
-             THEN SUM(COALESCE(m.COSTO_ENT, 0) * $cantidadNetaExpr) / SUM($cantidadNetaExpr)
+             THEN SUM($impactoEconomicoExpr) / SUM($cantidadNetaExpr)
              ELSE AVG(m.COSTO_ENT) END AS costo_promedio
     FROM movs m
     LEFT JOIN producto p
@@ -581,18 +596,19 @@ $sqlAnual = "
         CAST(DATE_FORMAT(" . $campoFechaMovsSql . ", '%x') AS UNSIGNED) AS anio_iso,
         TRIM(m.CVE_PROD) AS cve_prod,
         SUM($cantidadNetaExpr) AS consumo_kg,
-        SUM(COALESCE(m.COSTO_ENT, 0) * $cantidadNetaExpr) AS impacto_economico,
+        SUM($impactoEconomicoExpr) AS impacto_economico,
         CASE WHEN SUM($cantidadNetaExpr) <> 0
-             THEN SUM(COALESCE(m.COSTO_ENT, 0) * $cantidadNetaExpr) / SUM($cantidadNetaExpr)
+             THEN SUM($impactoEconomicoExpr) / SUM($cantidadNetaExpr)
              ELSE 0 END AS costo_ponderado
     FROM movs m
-    WHERE CAST(DATE_FORMAT(" . $campoFechaMovsSql . ", '%x') AS UNSIGNED) IN (?, ?)
+    WHERE $campoFechaMovsSql >= ?
+      AND CAST(DATE_FORMAT(" . $campoFechaMovsSql . ", '%x') AS UNSIGNED) IN (?, ?)
       AND UPPER(TRIM(m.TIPO_MOV)) IN ('E', 'S')
       AND m.LUGAR = 'QUIMICOS'
       AND m.CVE_PROD <> 'DIES01'
 ";
 
-$paramsAnual = [$anioAnterior, $anioActual];
+$paramsAnual = [$fechaDesde, $anioAnterior, $anioActual];
 
 if (!$usarTodosLosProductos && !empty($productosQuimicos)) {
   $placeholders = createPlaceholders($productosQuimicos);

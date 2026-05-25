@@ -123,6 +123,34 @@ $normalizeTaskStatus = static function (array $task): array {
 
 $pdo = $connectMysql((array)($databaseConfig[$config['database_key']] ?? []));
 
+$ensureHighlightsTable = static function (PDO $pdo): void {
+  $pdo->exec("
+    CREATE TABLE IF NOT EXISTS reportes_proyectos_destacados (
+      empresa_id INT NOT NULL,
+      milestone_id INT NOT NULL,
+      orden TINYINT UNSIGNED NOT NULL DEFAULT 1,
+      creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      actualizado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (empresa_id, milestone_id),
+      KEY idx_reportes_proyectos_destacados_orden (empresa_id, orden)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  ");
+};
+
+$ensureHighlightsTable($pdo);
+
+$highlightOrders = [];
+$highlightStmt = $pdo->prepare("
+  SELECT milestone_id, orden
+  FROM reportes_proyectos_destacados
+  WHERE empresa_id = ?
+  ORDER BY orden ASC, actualizado_en DESC
+");
+$highlightStmt->execute([$empresaId]);
+foreach (($highlightStmt->fetchAll() ?: []) as $highlightRow) {
+  $highlightOrders[(int)($highlightRow['milestone_id'] ?? 0)] = (int)($highlightRow['orden'] ?? 0);
+}
+
 $summarySql = "
 SELECT
   v.proyecto_directivo_id,
@@ -217,6 +245,8 @@ foreach (($stmt->fetchAll() ?: []) as $row) {
   $row['tareas_vencidas'] = (int)($row['tareas_vencidas'] ?? 0);
   $row['tareas_completadas_tarde'] = (int)($row['tareas_completadas_tarde'] ?? 0);
   $row['avance_real'] = (float)($row['avance_real'] ?? 0);
+  $row['destacado_orden'] = $highlightOrders[(int)($row['milestone_id'] ?? 0)] ?? 0;
+  $row['es_destacado'] = (int)$row['destacado_orden'] > 0;
   $row['milestone_status'] = $resolveMilestoneStatus($row['milestone_estatus']);
   $row['health'] = $resolveProjectHealth($row);
   $row['pendientes'] = max(0, $row['total_tareas'] - $row['tareas_finalizadas']);
@@ -336,6 +366,20 @@ $projects = array_values(array_filter($projectsAll, static function (array $proj
   return (string)($project['prioridad_display'] ?? 'Sin prioridad') === $prioridadFilter;
 }));
 
+$featuredProjects = array_values(array_filter($projectsAll, static function (array $project): bool {
+  return (int)($project['destacado_orden'] ?? 0) > 0;
+}));
+usort($featuredProjects, static function (array $a, array $b): int {
+  $orderA = (int)($a['destacado_orden'] ?? 0);
+  $orderB = (int)($b['destacado_orden'] ?? 0);
+  if ($orderA === $orderB) {
+    return strcasecmp((string)($a['milestone'] ?? ''), (string)($b['milestone'] ?? ''));
+  }
+
+  return $orderA <=> $orderB;
+});
+$featuredProjects = array_slice($featuredProjects, 0, 3);
+
 $totalProjects = count($projectsAll);
 $activeProjects = 0;
 $closedProjects = 0;
@@ -357,6 +401,7 @@ $averageProgress = $totalProjects > 0 ? round($averageProgress / $totalProjects,
 
 $detailProject = null;
 $detailTasks = [];
+$detailDependencies = [];
 if ($milestoneSelected > 0) {
   foreach ($projectsAll as $project) {
     if ((int)($project['milestone_id'] ?? 0) === $milestoneSelected) {
@@ -395,6 +440,35 @@ if ($milestoneSelected > 0) {
   foreach (($taskStmt->fetchAll() ?: []) as $task) {
     $task['status_visual'] = $normalizeTaskStatus($task);
     $detailTasks[] = $task;
+  }
+
+  if (!empty($detailTasks)) {
+    $dependenciesSql = "
+    SELECT
+      td.tarea_dependencia_id,
+      td.tarea_id,
+      td.tarea_dependiente_id,
+      COALESCE(NULLIF(td.tipo_relacion, ''), 'FS') AS tipo_relacion,
+      COALESCE(td.dias_desfase, 0) AS dias_desfase
+    FROM tarea_dependencias td
+    JOIN tareas t
+      ON t.tarea_id = td.tarea_id
+      AND t.milestone_id = ?
+    JOIN tareas tp
+      ON tp.tarea_id = td.tarea_dependiente_id
+      AND tp.milestone_id = ?
+    ORDER BY td.tarea_dependiente_id ASC, td.tarea_id ASC
+    ";
+    $dependencyStmt = $pdo->prepare($dependenciesSql);
+    $dependencyStmt->execute([$milestoneSelected, $milestoneSelected]);
+    foreach (($dependencyStmt->fetchAll() ?: []) as $dependency) {
+      $dependency['tarea_dependencia_id'] = (int)($dependency['tarea_dependencia_id'] ?? 0);
+      $dependency['tarea_id'] = (int)($dependency['tarea_id'] ?? 0);
+      $dependency['tarea_dependiente_id'] = (int)($dependency['tarea_dependiente_id'] ?? 0);
+      $dependency['tipo_relacion'] = strtoupper((string)($dependency['tipo_relacion'] ?? 'FS'));
+      $dependency['dias_desfase'] = (int)($dependency['dias_desfase'] ?? 0);
+      $detailDependencies[] = $dependency;
+    }
   }
 }
 
@@ -438,6 +512,7 @@ $meta = [
 return [
   'titulo' => (string)($config['titulo'] ?? 'Proyectos / Milestones'),
   'proyectos' => $projects,
+  'proyectos_destacados' => $featuredProjects,
   'proyectos_total' => $totalProjects,
   'proyectos_activos' => $activeProjects,
   'proyectos_cerrados' => $closedProjects,
@@ -445,6 +520,7 @@ return [
   'avance_promedio' => $averageProgress,
   'detalle_proyecto' => $detailProject,
   'detalle_tareas' => $detailTasks,
+  'detalle_dependencias' => $detailDependencies,
   'meta' => $meta,
   'version' => max(
     @filemtime(__FILE__) ?: time(),

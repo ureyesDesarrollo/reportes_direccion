@@ -13,6 +13,15 @@ return [
       'SACO' => 25,
       'SACOS' => 25,
     ],
+    'SAL02' => [
+      'BULTO' => 20,
+      'BULTOS' => 20,
+    ],
+    'PASTIL1' => [
+      'CUBET' => 4,
+      'CUBETA' => 4,
+      'CUBETAS' => 4,
+    ],
   ],
   'usar_todos_los_productos' => true,
   'anio_pivot' => (int)date('Y'),
