@@ -30,4 +30,13 @@ return [
   'filas_por_pagina' => (int)($bioTimeConfig['filas_por_pagina'] ?? 15),
   'empleados_permitidos' => (array)($bioTimeConfig['empleados_permitidos'] ?? []),
   'dias_festivos' => (array)($bioTimeConfig['dias_festivos'] ?? []),
+  'vacaciones' => [
+    // Ejemplo:
+    // [
+    //   'emp_code' => '99973',
+    //   'inicio' => '2026-07-20',
+    //   'fin' => '2026-07-24',
+    //   'label' => 'Vacaciones',
+    // ],
+  ],
 ];

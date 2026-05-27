@@ -5,12 +5,97 @@ declare(strict_types=1);
 ini_set('display_errors', '1');
 error_reporting(E_ALL);
 
-$reports = require __DIR__ . '/../config/reports_registry.php';
+$registry = require __DIR__ . '/../config/reports_registry.php';
+$groupCatalog = (array)($registry['groups'] ?? []);
+$reports = (array)($registry['reports'] ?? []);
 $reports = array_values(array_filter($reports, fn($r) => !isset($r['enabled']) || $r['enabled'] === true));
+$selectedGroupKey = trim((string)($_GET['grupo'] ?? ''));
+$currentMode = trim((string)($_GET['modo'] ?? ''));
 
 function e(string $value): string
 {
   return htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
+}
+
+function isExternalUrl(string $value): bool
+{
+  return preg_match('/^https?:\/\//i', $value) === 1;
+}
+
+function groupVisibleInMode(array $groupMeta, string $mode): bool
+{
+  $visibleModes = array_values(array_filter(array_map(
+    static fn($value): string => trim((string)$value),
+    (array)($groupMeta['visible_modes'] ?? [])
+  )));
+
+  if (empty($visibleModes)) {
+    return true;
+  }
+
+  return $mode !== '' && in_array($mode, $visibleModes, true);
+}
+
+$groups = [];
+foreach ($groupCatalog as $groupKey => $groupMeta) {
+  if (!groupVisibleInMode((array)$groupMeta, $currentMode)) {
+    continue;
+  }
+
+  $groups[(string)$groupKey] = [
+    'key' => (string)$groupKey,
+    'title' => (string)($groupMeta['title'] ?? 'Otros reportes'),
+    'description' => (string)($groupMeta['description'] ?? 'Reportes disponibles.'),
+    'icon' => (string)($groupMeta['icon'] ?? 'fa-folder-open'),
+    'color' => (string)($groupMeta['color'] ?? '#475569'),
+    'reports' => [],
+  ];
+}
+
+foreach ($reports as $report) {
+  $reportGroupKeys = (array)($report['groups'] ?? []);
+  if (empty($reportGroupKeys)) {
+    $reportGroupKeys = ['otros'];
+  }
+
+  foreach ($reportGroupKeys as $rawGroupKey) {
+    $groupKey = trim((string)$rawGroupKey);
+    if ($groupKey === '') {
+      $groupKey = 'otros';
+    }
+
+    $groupMeta = (array)($groupCatalog[$groupKey] ?? []);
+    if (!groupVisibleInMode($groupMeta, $currentMode)) {
+      continue;
+    }
+
+    if (!isset($groups[$groupKey])) {
+      $groups[$groupKey] = [
+        'key' => $groupKey,
+        'title' => (string)($groupMeta['title'] ?? 'Otros reportes'),
+        'description' => (string)($groupMeta['description'] ?? 'Reportes disponibles.'),
+        'icon' => (string)($groupMeta['icon'] ?? 'fa-folder-open'),
+        'color' => (string)($groupMeta['color'] ?? '#475569'),
+        'reports' => [],
+      ];
+    }
+
+    $groups[$groupKey]['reports'][] = $report;
+  }
+}
+
+$groups = array_values(array_filter($groups, static function (array $group): bool {
+  return !empty($group['reports']);
+}));
+
+$selectedGroup = null;
+if ($selectedGroupKey !== '') {
+  foreach ($groups as $group) {
+    if ((string)($group['key'] ?? '') === $selectedGroupKey) {
+      $selectedGroup = $group;
+      break;
+    }
+  }
 }
 ?>
 <!DOCTYPE html>
@@ -113,13 +198,13 @@ function e(string $value): string
       white-space: nowrap;
     }
 
-    .grid {
+    .group-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
       gap: 22px;
     }
 
-    .card {
+    .group-card {
       background: #ffffff;
       border: 1px solid #e2e8f0;
       border-radius: 24px;
@@ -128,16 +213,16 @@ function e(string $value): string
       transition: all 0.25s ease;
       display: flex;
       flex-direction: column;
-      min-height: 220px;
+      min-height: 180px;
     }
 
-    .card:hover {
+    .group-card:hover {
       transform: translateY(-4px);
       box-shadow: 0 18px 38px rgba(15, 23, 42, 0.10);
       border-color: #cbd5e1;
     }
 
-    .card-top {
+    .group-card-top {
       display: flex;
       align-items: center;
       gap: 14px;
@@ -157,20 +242,20 @@ function e(string $value): string
       flex-shrink: 0;
     }
 
-    .card h2 {
+    .group-card h2 {
       font-size: 1.1rem;
       font-weight: 700;
       line-height: 1.25;
       margin-bottom: 4px;
     }
 
-    .slug {
+    .group-meta {
       color: #94a3b8;
       font-size: 0.8rem;
       font-weight: 600;
     }
 
-    .description {
+    .group-description {
       color: #475569;
       font-size: 0.94rem;
       line-height: 1.6;
@@ -178,7 +263,129 @@ function e(string $value): string
       flex: 1;
     }
 
-    .actions {
+    .group-actions {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-top: auto;
+    }
+
+    .group-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border: 0;
+      border-radius: 999px;
+      padding: 10px 16px;
+      font-size: 0.9rem;
+      font-weight: 700;
+      color: white;
+      cursor: pointer;
+      transition: opacity 0.2s ease;
+    }
+
+    .group-toggle:hover {
+      opacity: 0.9;
+    }
+
+    .reports-panel {
+      grid-column: 1 / -1;
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 24px;
+      padding: 24px;
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05);
+      display: none;
+    }
+
+    .reports-panel.active {
+      display: block;
+    }
+
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 16px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+
+    .panel-title {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .panel-title h3 {
+      font-size: 1.2rem;
+      font-weight: 800;
+      margin-bottom: 4px;
+    }
+
+    .panel-title p {
+      color: #64748b;
+      font-size: 0.92rem;
+      line-height: 1.5;
+      max-width: 720px;
+    }
+
+    .panel-close {
+      border: 1px solid #dbe2ea;
+      background: #ffffff;
+      color: #334155;
+      border-radius: 999px;
+      padding: 10px 14px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .reports-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 18px;
+    }
+
+    .report-card {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 20px;
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      min-height: 210px;
+    }
+
+    .report-card-top {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .report-card h4 {
+      font-size: 1rem;
+      font-weight: 700;
+      margin-bottom: 4px;
+      line-height: 1.3;
+    }
+
+    .report-slug {
+      color: #94a3b8;
+      font-size: 0.78rem;
+      font-weight: 600;
+    }
+
+    .report-description {
+      color: #475569;
+      font-size: 0.92rem;
+      line-height: 1.55;
+      margin-bottom: 16px;
+      flex: 1;
+    }
+
+    .report-actions {
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -220,7 +427,6 @@ function e(string $value): string
     }
 
     .empty {
-      grid-column: 1 / -1;
       background: #ffffff;
       border: 1px dashed #cbd5e1;
       border-radius: 22px;
@@ -251,7 +457,8 @@ function e(string $value): string
         font-size: 1.8rem;
       }
 
-      .grid {
+      .group-grid,
+      .reports-grid {
         grid-template-columns: 1fr;
       }
     }
@@ -275,63 +482,151 @@ function e(string $value): string
       </div>
 
       <div class="count-badge">
-        <span id="reportCount"><?= count($reports) ?></span> reporte(s)
+        <span id="reportCount"><?= $selectedGroup !== null ? count((array)($selectedGroup['reports'] ?? [])) : count($groups) ?></span>
+        <?= $selectedGroup !== null ? 'sitio(s)' : 'grupo(s)' ?>
       </div>
     </section>
 
-    <section class="grid" id="reportsGrid">
-      <?php foreach ($reports as $report): ?>
-        <article class="card report-card"
-          data-search="<?= e(mb_strtolower(($report['title'] ?? '') . ' ' . ($report['description'] ?? '') . ' ' . ($report['slug'] ?? ''))) ?>">
-          <div class="card-top">
-            <div class="icon-wrap" style="background: <?= e($report['color'] ?? '#10b981') ?>;">
-              <i class="fas <?= e($report['icon'] ?? 'fa-chart-line') ?>"></i>
+    <?php if ($selectedGroup !== null): ?>
+      <section class="reports-panel active" id="reportsGrid">
+        <div class="panel-header">
+          <div class="panel-title">
+            <div class="icon-wrap" style="background: <?= e($selectedGroup['color']) ?>; width: 48px; height: 48px; border-radius: 14px; font-size: 1.15rem;">
+              <i class="fas <?= e($selectedGroup['icon']) ?>"></i>
             </div>
             <div>
-              <h2><?= e($report['title'] ?? 'Reporte') ?></h2>
-              <div class="slug"><?= e($report['slug'] ?? '') ?></div>
+              <h3><?= e($selectedGroup['title']) ?></h3>
+              <p><?= e($selectedGroup['description']) ?></p>
             </div>
           </div>
+          <?php $backGroupHref = './index.php' . ($currentMode !== '' ? ('?modo=' . urlencode($currentMode)) : ''); ?>
+          <a href="<?= e($backGroupHref) ?>" class="panel-close" style="text-decoration:none;">
+            <i class="fas fa-arrow-left" style="margin-right: 8px;"></i>
+            Regresar
+          </a>
+        </div>
 
-          <div class="description">
-            <?= e($report['description'] ?? 'Sin descripción.') ?>
-          </div>
+        <div class="reports-grid">
+          <?php foreach ($selectedGroup['reports'] as $report): ?>
+            <?php
+            $reportUrl = (string)($report['url'] ?? '#');
+            $isExternalReport = isExternalUrl($reportUrl) || !empty($report['external']);
+            $reportCtaLabel = trim((string)($report['cta_label'] ?? ''));
+            if ($reportCtaLabel === '') {
+              $reportCtaLabel = $isExternalReport ? 'Ir al sitio' : 'Ver reporte';
+            }
+            ?>
+            <article class="report-card report-item-card" data-search="<?= e(mb_strtolower(($report['title'] ?? '') . ' ' . ($report['description'] ?? '') . ' ' . ($report['slug'] ?? ''))) ?>">
+              <div class="report-card-top">
+                <div class="icon-wrap" style="background: <?= e($report['color'] ?? '#10b981') ?>; width: 50px; height: 50px; border-radius: 14px; font-size: 1.2rem;">
+                  <i class="fas <?= e($report['icon'] ?? 'fa-chart-line') ?>"></i>
+                </div>
+                <div>
+                  <h4><?= e($report['title'] ?? 'Reporte') ?></h4>
+                  <div class="report-slug"><?= e($report['slug'] ?? '') ?></div>
+                </div>
+              </div>
 
-          <div class="actions">
-            <div class="status">
-              <span class="status-dot"></span>
-              Disponible
+              <div class="report-description">
+                <?= e($report['description'] ?? 'Sin descripción.') ?>
+              </div>
+
+              <div class="report-actions">
+                <div class="status">
+                  <span class="status-dot"></span>
+                  Disponible
+                </div>
+
+                <a
+                  class="btn"
+                  href="<?= e($reportUrl) ?>"
+                  style="background: <?= e($report['color'] ?? '#10b981') ?>;"
+                  <?= $isExternalReport ? 'target="_blank" rel="noopener noreferrer"' : '' ?>>
+                  <?= e($reportCtaLabel) ?>
+                  <i class="fas <?= $isExternalReport ? 'fa-arrow-up-right-from-square' : 'fa-arrow-right' ?>"></i>
+                </a>
+              </div>
+            </article>
+          <?php endforeach; ?>
+        </div>
+
+        <div class="empty" id="emptyState" style="display:none; margin-top:18px;">
+          <i class="fas fa-folder-open"></i>
+          <div>No se encontraron reportes con ese criterio.</div>
+        </div>
+      </section>
+    <?php else: ?>
+      <section class="group-grid" id="reportsGrid">
+          <?php foreach ($groups as $group): ?>
+          <?php
+          $groupSearch = mb_strtolower($group['title'] . ' ' . $group['description'] . ' ' . implode(' ', array_map(
+            static fn(array $report): string => (($report['title'] ?? '') . ' ' . ($report['description'] ?? '') . ' ' . ($report['slug'] ?? '')),
+            $group['reports']
+          )));
+          ?>
+          <article
+            class="group-card report-group-card"
+            data-group-key="<?= e($group['key']) ?>"
+            data-search="<?= e($groupSearch) ?>">
+            <div class="group-card-top">
+              <div class="icon-wrap" style="background: <?= e($group['color'] ?? '#10b981') ?>;">
+                <i class="fas <?= e($group['icon'] ?? 'fa-folder-open') ?>"></i>
+              </div>
+              <div>
+                <h2><?= e($group['title']) ?></h2>
+                <div class="group-meta"><?= count($group['reports']) ?> sitio(s)</div>
+              </div>
             </div>
 
-            <a class="btn" href="<?= e($report['url'] ?? '#') ?>" style="background: <?= e($report['color'] ?? '#10b981') ?>;">
-              Ver reporte
-              <i class="fas fa-arrow-right"></i>
-            </a>
-          </div>
-        </article>
-      <?php endforeach; ?>
+            <div class="group-description">
+              <?= e($group['description']) ?>
+            </div>
 
-      <div class="empty" id="emptyState" style="display:none;">
-        <i class="fas fa-folder-open"></i>
-        <div>No se encontraron reportes con ese criterio.</div>
-      </div>
-    </section>
+            <div class="group-actions">
+              <div class="status">
+                <span class="status-dot"></span>
+                Disponible
+              </div>
+
+              <a
+                class="group-toggle"
+                href="./index.php?<?= e(http_build_query(array_filter([
+                  'grupo' => (string)$group['key'],
+                  'modo' => $currentMode !== '' ? $currentMode : null,
+                ], static fn($value) => $value !== null && $value !== ''))) ?>"
+                style="background: <?= e($group['color']) ?>; text-decoration:none;">
+                Abrir
+                <i class="fas fa-arrow-right"></i>
+              </a>
+            </div>
+          </article>
+          <?php endforeach; ?>
+
+        <div class="empty" id="emptyState" style="display:none; grid-column: 1 / -1;">
+          <i class="fas fa-folder-open"></i>
+          <div>No se encontraron reportes con ese criterio.</div>
+        </div>
+      </section>
+    <?php endif; ?>
   </div>
 
   <script>
     (function() {
       const input = document.getElementById('searchReports');
-      const cards = Array.from(document.querySelectorAll('.report-card'));
+      const groupCards = Array.from(document.querySelectorAll('.report-group-card'));
+      const reportCards = Array.from(document.querySelectorAll('.report-item-card'));
       const count = document.getElementById('reportCount');
       const empty = document.getElementById('emptyState');
+      const inGroupScreen = <?= $selectedGroup !== null ? 'true' : 'false' ?>;
 
       function filterReports() {
         const term = (input.value || '').trim().toLowerCase();
         let visible = 0;
 
+        const cards = inGroupScreen ? reportCards : groupCards;
         cards.forEach(card => {
-          const haystack = card.dataset.search || '';
-          const show = haystack.includes(term);
+          const haystack = (card.dataset.search || '').toLowerCase();
+          const show = term === '' || haystack.includes(term);
           card.style.display = show ? '' : 'none';
           if (show) visible++;
         });

@@ -21,6 +21,7 @@ $filasPorPagina = (int)($config['filas_por_pagina'] ?? 15);
 $intervaloActualizacion = (int)($config['intervalo_actualizacion_ms'] ?? 1800000);
 $empleadosPermitidos = array_values(array_filter(array_map('strval', (array)($config['empleados_permitidos'] ?? [])), 'strlen'));
 $diasFestivos = array_values(array_filter(array_map('strval', (array)($config['dias_festivos'] ?? [])), 'strlen'));
+$vacacionesConfig = (array)($config['vacaciones'] ?? []);
 $verifySsl = (bool)($config['verify_ssl'] ?? false);
 $curlTimeout = (int)($config['curl_timeout'] ?? 60);
 $pageSize = max(1, (int)($config['page_size'] ?? 30));
@@ -45,6 +46,26 @@ $normalizarEmpCode = static function (string $value): string {
 
 $empleadosPermitidos = array_values(array_unique(array_filter(array_map($normalizarEmpCode, $empleadosPermitidos), 'strlen')));
 $diasFestivosMap = array_fill_keys($diasFestivos, true);
+$vacaciones = [];
+foreach ($vacacionesConfig as $periodo) {
+  if (!is_array($periodo)) {
+    continue;
+  }
+
+  $empCodeVac = $normalizarEmpCode((string)($periodo['emp_code'] ?? ''));
+  $inicioVac = trim((string)($periodo['inicio'] ?? ''));
+  $finVac = trim((string)($periodo['fin'] ?? ''));
+  if ($inicioVac === '' || $finVac === '') {
+    continue;
+  }
+
+  $vacaciones[] = [
+    'emp_code' => $empCodeVac,
+    'inicio' => $inicioVac,
+    'fin' => $finVac,
+    'label' => trim((string)($periodo['label'] ?? 'Vacaciones')),
+  ];
+}
 
 $fechaInicio = isset($_GET['inicio']) && is_string($_GET['inicio']) && $_GET['inicio'] !== ''
   ? $_GET['inicio']
@@ -201,7 +222,9 @@ $buildCacheKey = static function (
   int $minor,
   array $empleadosPermitidos,
   string $empCodeFiltro,
-  string $detalleEmp
+  string $detalleEmp,
+  array $vacaciones,
+  array $diasFestivos
 ): string {
   return sha1(json_encode([
     'base' => $baseUrl,
@@ -213,6 +236,10 @@ $buildCacheKey = static function (
     'empleados' => array_values($empleadosPermitidos),
     'emp' => $empCodeFiltro,
     'detalle' => $detalleEmp,
+    'vacaciones' => $vacaciones,
+    'dias_festivos' => array_values($diasFestivos),
+    'build_version' => @filemtime(__FILE__) ?: 0,
+    'config_version' => @filemtime(__DIR__ . '/config.php') ?: 0,
   ], JSON_UNESCAPED_SLASHES));
 };
 
@@ -297,6 +324,27 @@ $minutosAHoras = static function (int $minutos): string {
   $horas = floor($minutos / 60);
   $mins = $minutos % 60;
   return sprintf('%02d:%02d', $horas, $mins);
+};
+
+$resolverVacacion = static function (string $empCode, string $fecha, array $vacaciones): ?array {
+  foreach ($vacaciones as $periodo) {
+    $periodoEmp = (string)($periodo['emp_code'] ?? '');
+    if ($periodoEmp !== '' && $periodoEmp !== $empCode) {
+      continue;
+    }
+
+    $inicio = (string)($periodo['inicio'] ?? '');
+    $fin = (string)($periodo['fin'] ?? '');
+    if ($inicio === '' || $fin === '') {
+      continue;
+    }
+
+    if ($fecha >= $inicio && $fecha <= $fin) {
+      return $periodo;
+    }
+  }
+
+  return null;
 };
 
 $resolverHorario = static function (string $empCode, array $empleado, ?DateTime $fecha = null) use ($horaEntrada, $horaSalida, $minutosComida, $toleranciaRetardoMin, $horariosConfig): array {
@@ -390,7 +438,9 @@ if ($baseUrl === '' || $hikUser === '' || $hikPass === '') {
         $minorDefault,
         $empleadosPermitidos,
         $empCodeFiltro,
-        $detalleEmp
+        $detalleEmp,
+        $vacaciones,
+        $diasFestivos
       );
       $cacheFile = rtrim($cacheDir, '\\/') . DIRECTORY_SEPARATOR . $cacheKey . '.json';
       $eventos = $loadCachedEventos($cacheFile, $cacheTtlSegundos);
@@ -484,7 +534,9 @@ if ($baseUrl === '' || $hikUser === '' || $hikPass === '') {
       $dayNumber = (int)$primero['datetime']->format('N');
       $esFinDeSemana = $dayNumber >= 6;
       $esFestivo = isset($diasFestivosMap[$fecha]);
-      $esDiaFlexible = $esFinDeSemana || $esFestivo;
+      $periodoVacacion = $resolverVacacion($grupo['emp_code'], $fecha, $vacaciones);
+      $esVacacion = $periodoVacacion !== null;
+      $esDiaFlexible = $esFinDeSemana || $esFestivo || $esVacacion;
       $empleadoInfo = [
         'departamento' => '',
         'rol' => '',
@@ -523,11 +575,16 @@ if ($baseUrl === '' || $hikUser === '' || $hikPass === '') {
       }
 
       $minutosExtra = 0;
-      if ($calcularHorasExtraDespuesDeSalida && $totalEventos > 1 && $dtUltima > $dtSalidaProgramada) {
+      if (($esFinDeSemana || $esFestivo) && $totalEventos > 1) {
+        $minutosExtra = $minutosTrabajadosNetos;
+      } elseif ($calcularHorasExtraDespuesDeSalida && $totalEventos > 1 && $dtUltima > $dtSalidaProgramada) {
         $minutosExtra = $minutosEntre($dtSalidaProgramada, $dtUltima);
       }
 
       $minutosFaltantes = max(0, $minutosJornada - $minutosTrabajadosNetos);
+      if ($esDiaFlexible) {
+        $minutosFaltantes = 0;
+      }
       $estatus = 'OK';
       $semaforoKey = 'verde';
       $semaforoLabel = 'Completo';
@@ -562,6 +619,8 @@ if ($baseUrl === '' || $hikUser === '' || $hikPass === '') {
         'horario_salida' => $horarioEmpleado['salida'],
         'horario_origen' => $horarioEmpleado['origen'],
         'es_dia_flexible' => $esDiaFlexible,
+        'es_vacacion' => $esVacacion,
+        'vacacion_label' => $esVacacion ? (string)($periodoVacacion['label'] ?? 'Vacaciones') : '',
         'primera' => $primero['hora'],
         'ultima' => $totalEventos > 1 ? $ultimo['hora'] : 'Sin segunda checada',
         'primera_tipo' => (string)($primero['tipo'] ?? 'Checada'),
