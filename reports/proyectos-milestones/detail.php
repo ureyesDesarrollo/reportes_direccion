@@ -496,6 +496,7 @@ foreach ($dependencias as $dependency) {
 ?>
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
@@ -1227,13 +1228,11 @@ foreach ($dependencias as $dependency) {
       position: relative;
       height: var(--gantt-row-height);
       background:
-        repeating-linear-gradient(
-          to right,
+        repeating-linear-gradient(to right,
           rgba(148, 163, 184, 0.18) 0,
           rgba(148, 163, 184, 0.18) 1px,
           transparent 1px,
-          transparent var(--gantt-day-width)
-        ),
+          transparent var(--gantt-day-width)),
         linear-gradient(#fff, #fff);
     }
 
@@ -1300,6 +1299,7 @@ foreach ($dependencias as $dependency) {
     }
 
     @media (max-width: 1180px) {
+
       .project-detail-top,
       .project-detail-lower,
       .project-percent-wrap,
@@ -1309,6 +1309,7 @@ foreach ($dependencias as $dependency) {
     }
   </style>
 </head>
+
 <body>
   <div class="dashboard">
     <div class="header">
@@ -1347,63 +1348,63 @@ foreach ($dependencias as $dependency) {
       <div class="project-detail-top">
         <div style="display:grid; gap:20px;">
           <section class="project-detail-panel">
-          <div class="project-detail-title"><?= htmlspecialchars((string)$detalle['milestone']) ?></div>
-          <div class="project-detail-sub">
-            <?= trim((string)($detalle['milestone_descripcion'] ?? '')) !== '' ? htmlspecialchars((string)$detalle['milestone_descripcion']) : 'Ficha ejecutiva del milestone con su avance, actividades recientes y plan de trabajo.' ?>
-          </div>
-          <div class="project-detail-pill-row">
-            <span class="project-detail-pill" style="background:<?= htmlspecialchars($projectStatus['color']) ?>1A; color:<?= htmlspecialchars($projectStatus['color']) ?>;">
-              <i class="fas fa-circle"></i><?= htmlspecialchars((string)$projectStatus['label']) ?>
-            </span>
-            <span class="project-detail-pill" style="background:<?= htmlspecialchars($projectHealth['color']) ?>1A; color:<?= htmlspecialchars($projectHealth['color']) ?>;">
-              <i class="fas fa-signal"></i><?= htmlspecialchars((string)$projectHealth['label']) ?>
-            </span>
-          </div>
+            <div class="project-detail-title"><?= htmlspecialchars((string)$detalle['milestone']) ?></div>
+            <div class="project-detail-sub">
+              <?= trim((string)($detalle['milestone_descripcion'] ?? '')) !== '' ? htmlspecialchars((string)$detalle['milestone_descripcion']) : 'Ficha ejecutiva del milestone con su avance, actividades recientes y plan de trabajo.' ?>
+            </div>
+            <div class="project-detail-pill-row">
+              <span class="project-detail-pill" style="background:<?= htmlspecialchars($projectStatus['color']) ?>1A; color:<?= htmlspecialchars($projectStatus['color']) ?>;">
+                <i class="fas fa-circle"></i><?= htmlspecialchars((string)$projectStatus['label']) ?>
+              </span>
+              <span class="project-detail-pill" style="background:<?= htmlspecialchars($projectHealth['color']) ?>1A; color:<?= htmlspecialchars($projectHealth['color']) ?>;">
+                <i class="fas fa-signal"></i><?= htmlspecialchars((string)$projectHealth['label']) ?>
+              </span>
+            </div>
           </section>
 
           <section class="project-detail-panel">
-          <div class="project-percent-wrap">
-            <div class="project-percent-box">
-              <div class="project-percent-label">Completado</div>
-              <div class="project-percent-value"><?= n((float)($detalle['avance_real'] ?? 0), 0) ?>%</div>
-              <div class="project-percent-meta">
-                <?= n((float)($detalle['tareas_finalizadas'] ?? 0), 0) ?> de <?= n((float)($detalle['total_tareas'] ?? 0), 0) ?> tareas
+            <div class="project-percent-wrap">
+              <div class="project-percent-box">
+                <div class="project-percent-label">Completado</div>
+                <div class="project-percent-value"><?= n((float)($detalle['avance_real'] ?? 0), 0) ?>%</div>
+                <div class="project-percent-meta">
+                  <?= n((float)($detalle['tareas_finalizadas'] ?? 0), 0) ?> de <?= n((float)($detalle['total_tareas'] ?? 0), 0) ?> tareas
+                </div>
+                <div class="project-percent-progress" aria-hidden="true">
+                  <div
+                    class="project-percent-progress-fill"
+                    style="width:<?= max(0, min(100, (float)($detalle['avance_real'] ?? 0))) ?>%; background:<?= htmlspecialchars((string)($projectHealth['color'] ?? '#2563eb')) ?>;">
+                  </div>
+                </div>
               </div>
-              <div class="project-percent-progress" aria-hidden="true">
-                <div
-                  class="project-percent-progress-fill"
-                  style="width:<?= max(0, min(100, (float)($detalle['avance_real'] ?? 0))) ?>%; background:<?= htmlspecialchars((string)($projectHealth['color'] ?? '#2563eb')) ?>;">
+              <div class="project-info-grid">
+                <div class="project-info-card">
+                  <div class="project-info-label">Responsable</div>
+                  <div class="project-info-value"><?= htmlspecialchars((string)($detalle['responsable'] ?? 'Sin responsable')) ?></div>
+                </div>
+                <div class="project-info-card">
+                  <div class="project-info-label">Fecha estimada de cierre</div>
+                  <div class="project-date-main"><?= htmlspecialchars($relativeDateLabel((string)($detalle['fecha_fin'] ?? ''))) ?></div>
+                  <div class="project-date-sub"><?= htmlspecialchars($shortDateLabel((string)($detalle['fecha_fin'] ?? ''))) ?></div>
+                </div>
+                <div class="project-info-card">
+                  <div class="project-info-label">Urgencia / mora</div>
+                  <div class="project-info-value"><?= n((float)($detalle['tareas_vencidas'] ?? 0), 0) ?> vencidas</div>
+                </div>
+                <div class="project-info-card">
+                  <div class="project-info-label">Estado actual</div>
+                  <div class="project-info-value"><?= htmlspecialchars((string)$projectHealth['label']) ?></div>
+                </div>
+                <div class="project-info-card">
+                  <div class="project-info-label">Zona</div>
+                  <div class="project-info-value"><?= htmlspecialchars((string)($detalle['zona'] ?? 'Sin zona')) ?></div>
+                </div>
+                <div class="project-info-card">
+                  <div class="project-info-label">Área</div>
+                  <div class="project-info-value"><?= htmlspecialchars((string)($detalle['area'] ?? 'Sin área')) ?></div>
                 </div>
               </div>
             </div>
-            <div class="project-info-grid">
-              <div class="project-info-card">
-                <div class="project-info-label">Responsable</div>
-                <div class="project-info-value"><?= htmlspecialchars((string)($detalle['responsable'] ?? 'Sin responsable')) ?></div>
-              </div>
-              <div class="project-info-card">
-                <div class="project-info-label">Fecha estimada de cierre</div>
-                <div class="project-date-main"><?= htmlspecialchars($relativeDateLabel((string)($detalle['fecha_fin'] ?? ''))) ?></div>
-                <div class="project-date-sub"><?= htmlspecialchars($shortDateLabel((string)($detalle['fecha_fin'] ?? ''))) ?></div>
-              </div>
-              <div class="project-info-card">
-                <div class="project-info-label">Urgencia / mora</div>
-                <div class="project-info-value"><?= n((float)($detalle['tareas_vencidas'] ?? 0), 0) ?> vencidas</div>
-              </div>
-              <div class="project-info-card">
-                <div class="project-info-label">Estado actual</div>
-                <div class="project-info-value"><?= htmlspecialchars((string)$projectHealth['label']) ?></div>
-              </div>
-              <div class="project-info-card">
-                <div class="project-info-label">Zona</div>
-                <div class="project-info-value"><?= htmlspecialchars((string)($detalle['zona'] ?? 'Sin zona')) ?></div>
-              </div>
-              <div class="project-info-card">
-                <div class="project-info-label">Área</div>
-                <div class="project-info-value"><?= htmlspecialchars((string)($detalle['area'] ?? 'Sin área')) ?></div>
-              </div>
-            </div>
-          </div>
           </section>
         </div>
 
@@ -1682,4 +1683,5 @@ foreach ($dependencias as $dependency) {
     });
   </script>
 </body>
+
 </html>
