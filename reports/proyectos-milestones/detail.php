@@ -237,6 +237,38 @@ usort($timelineActividad, static function (array $a, array $b): int {
   return strcmp($dateA, $dateB);
 });
 
+$compareTasksBySchedule = static function (array $a, array $b): int {
+  $startA = trim((string)($a['fecha_inicio'] ?? ''));
+  $startB = trim((string)($b['fecha_inicio'] ?? ''));
+  $endA = trim((string)($a['fecha_fin'] ?? ''));
+  $endB = trim((string)($b['fecha_fin'] ?? ''));
+
+  if ($startA === '' && $startB !== '') {
+    return 1;
+  }
+  if ($startA !== '' && $startB === '') {
+    return -1;
+  }
+  if ($startA !== $startB) {
+    return strcmp($startA, $startB);
+  }
+
+  if ($endA === '' && $endB !== '') {
+    return 1;
+  }
+  if ($endA !== '' && $endB === '') {
+    return -1;
+  }
+  if ($endA !== $endB) {
+    return strcmp($endA, $endB);
+  }
+
+  return strcmp((string)($a['titulo'] ?? ''), (string)($b['titulo'] ?? ''));
+};
+
+$tareasGantt = $tareas;
+usort($tareasGantt, $compareTasksBySchedule);
+
 $parseDate = static function (?string $value): ?DateTimeImmutable {
   $value = trim((string)$value);
   if ($value === '') {
@@ -300,7 +332,7 @@ $shortDateLabel = static function (?string $value) use ($parseDateTime): string 
 $timelineStart = $parseDate((string)($detalle['fecha_inicio'] ?? ''));
 $timelineEnd = $parseDate((string)($detalle['fecha_fin'] ?? ''));
 
-foreach ($tareas as $task) {
+foreach ($tareasGantt as $task) {
   $taskStart = $parseDate((string)($task['fecha_inicio'] ?? ''));
   $taskEnd = $parseDate((string)($task['fecha_fin'] ?? ''));
   if ($timelineStart === null || ($taskStart !== null && $taskStart < $timelineStart)) {
@@ -393,7 +425,7 @@ if ($todayDate !== null && $todayDate >= $timelineStart && $todayDate <= $timeli
 $ganttRows = [];
 $ganttTaskIndex = [];
 
-foreach ($tareas as $taskIndex => $task) {
+foreach ($tareasGantt as $taskIndex => $task) {
   $taskStart = $parseDate((string)($task['fecha_inicio'] ?? ''));
   $taskEnd = $parseDate((string)($task['fecha_fin'] ?? ''));
   if ($taskStart === null && $taskEnd !== null) {
@@ -1198,20 +1230,19 @@ foreach ($dependencias as $dependency) {
       position: sticky;
       left: 0;
       z-index: 20;
-      overflow: hidden;
+      overflow: visible;
       box-shadow: 8px 0 14px rgba(15, 23, 42, 0.05);
     }
 
     .project-gantt-task {
-      display: -webkit-box;
+      display: block;
       color: #0f172a;
       font-size: 0.9rem;
       font-weight: 800;
       line-height: 1.25;
       margin-bottom: 4px;
-      overflow: hidden;
-      -webkit-box-orient: vertical;
-      -webkit-line-clamp: 2;
+      white-space: normal;
+      word-break: break-word;
     }
 
     .project-gantt-meta {
@@ -1219,9 +1250,8 @@ foreach ($dependencias as $dependency) {
       color: #64748b;
       font-size: 0.78rem;
       line-height: 1.3;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      white-space: normal;
+      word-break: break-word;
     }
 
     .project-gantt-timeline {
@@ -1502,7 +1532,7 @@ foreach ($dependencias as $dependency) {
                 <?php $task = (array)$row['task']; ?>
                 <div class="project-gantt-row">
                   <div class="project-gantt-info">
-                    <span class="project-gantt-task"><?= htmlspecialchars((string)($task['titulo'] ?? 'Tarea')) ?></span>
+                    <span class="project-gantt-task" title="<?= htmlspecialchars((string)($task['titulo'] ?? 'Tarea')) ?>"><?= htmlspecialchars((string)($task['titulo'] ?? 'Tarea')) ?></span>
                     <span class="project-gantt-meta">
                       <?= htmlspecialchars((string)($task['responsable'] ?? 'Sin responsable')) ?><br>
                       <?= htmlspecialchars($shortDateLabel((string)($task['fecha_inicio'] ?? ''))) ?> a <?= htmlspecialchars($shortDateLabel((string)($task['fecha_fin'] ?? ''))) ?>
