@@ -577,8 +577,19 @@ if ($baseUrl === '' || $hikUser === '' || $hikPass === '') {
       $minutosExtra = 0;
       if (($esFinDeSemana || $esFestivo) && $totalEventos > 1) {
         $minutosExtra = $minutosTrabajadosNetos;
-      } elseif ($calcularHorasExtraDespuesDeSalida && $totalEventos > 1 && $dtUltima > $dtSalidaProgramada) {
-        $minutosExtra = $minutosEntre($dtSalidaProgramada, $dtUltima);
+      } elseif (!$esVacacion) {
+        $minutosExtraAntes = 0;
+        $minutosExtraDespues = 0;
+
+        if ($dtPrimera < $dtEntradaProgramada) {
+          $minutosExtraAntes = $minutosEntre($dtPrimera, $dtEntradaProgramada);
+        }
+
+        if ($calcularHorasExtraDespuesDeSalida && $totalEventos > 1 && $dtUltima > $dtSalidaProgramada) {
+          $minutosExtraDespues = $minutosEntre($dtSalidaProgramada, $dtUltima);
+        }
+
+        $minutosExtra = $minutosExtraAntes + $minutosExtraDespues;
       }
 
       $minutosFaltantes = max(0, $minutosJornada - $minutosTrabajadosNetos);
