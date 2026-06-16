@@ -535,7 +535,8 @@ foreach ($dependencias as $dependency) {
   <title><?= htmlspecialchars((string)$detalle['milestone']) ?></title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-  <link rel="stylesheet" href="../../assets/css/dashboard.css?v=<?= urlencode((string)$version) ?>">
+  <link rel="stylesheet" href="../../assets/css/dashboard.css?v=<?= urlencode((string)max((int)$version, (int)(@filemtime(__DIR__ . "/../../assets/css/dashboard.css") ?: 0))) ?>">
+  <script src="../../assets/js/display-mode.js?v=<?= urlencode((string)max((int)$version, (int)(@filemtime(__DIR__ . "/../../assets/js/display-mode.js") ?: 0))) ?>"></script>
   <style>
     .project-detail-page,
     .project-detail-panel,
@@ -1326,6 +1327,54 @@ foreach ($dependencias as $dependency) {
 
     .project-gantt-bar.pending {
       background: #d97706;
+    }
+
+    @media (min-width: 1800px) {
+      .project-detail-page {
+        padding: 28px;
+        border-radius: 24px;
+      }
+
+      .project-detail-layout,
+      .project-detail-top,
+      .project-detail-lower {
+        gap: 26px;
+      }
+
+      .project-detail-panel {
+        padding: 28px;
+        border-radius: 24px;
+      }
+
+      .project-detail-title {
+        font-size: 2.25rem;
+      }
+
+      .project-info-card,
+      .project-task-item {
+        padding: 18px;
+      }
+
+      .project-detail-table th,
+      .project-detail-table td {
+        padding: 15px 16px;
+      }
+
+      .project-gantt-wrap {
+        --gantt-left: 320px;
+        --gantt-day-width: 34px;
+      }
+    }
+
+    @media (min-width: 2560px) {
+      .project-detail-top {
+        grid-template-columns: minmax(0, 1.25fr) minmax(420px, 0.75fr);
+      }
+
+      .project-gantt-wrap {
+        --gantt-left: 360px;
+        --gantt-day-width: 38px;
+      }
     }
 
     @media (max-width: 1180px) {

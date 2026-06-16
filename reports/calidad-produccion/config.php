@@ -1,0 +1,121 @@
+<?php
+
+return [
+  'titulo' => 'CALIDAD / Producción',
+  'timezone' => 'America/Mazatlan',
+  'default_periodo' => 'dia',
+  'hora_corte' => '07:00:00',
+  'productos_excluidos' => [1, 2, 3],
+  'filas_por_pagina' => 20,
+  'intervalo_actualizacion_ms' => 300000,
+  'targets' => [
+    'Azul' => 35.0,
+    'Dorada' => 50.0,
+    'Verde' => 10.0,
+    'Morada' => 5.0,
+  ],
+  'semaforo_calidades' => [
+    'Azul' => [
+      ['estado_key' => 'rojo', 'estado' => 'Rojo', 'max' => 15, 'max_inclusive' => false, 'label' => '< 15%'],
+      ['estado_key' => 'amarillo', 'estado' => 'Amarillo', 'min' => 15, 'max' => 20, 'label' => '15 - 20%'],
+      ['estado_key' => 'verde', 'estado' => 'Verde', 'min' => 20, 'max' => 30, 'label' => '20 - 30%'],
+      ['estado_key' => 'amarillo', 'estado' => 'Amarillo', 'min' => 30, 'max' => 35, 'label' => '30 - 35%'],
+      ['estado_key' => 'rojo', 'estado' => 'Rojo', 'min' => 35, 'min_inclusive' => false, 'label' => '> 35%'],
+    ],
+    'Dorada' => [
+      ['estado_key' => 'rojo', 'estado' => 'Rojo', 'max' => 25, 'max_inclusive' => false, 'label' => '< 25%'],
+      ['estado_key' => 'amarillo', 'estado' => 'Amarillo', 'min' => 25, 'max' => 30, 'label' => '25 - 30%'],
+      ['estado_key' => 'verde', 'estado' => 'Verde', 'min' => 30, 'max' => 40, 'label' => '30 - 40%'],
+      ['estado_key' => 'amarillo', 'estado' => 'Amarillo', 'min' => 40, 'max' => 45, 'label' => '40 - 45%'],
+      ['estado_key' => 'rojo', 'estado' => 'Rojo', 'min' => 45, 'min_inclusive' => false, 'label' => '> 45%'],
+    ],
+    'Verde' => [
+      ['estado_key' => 'rojo', 'estado' => 'Rojo', 'max' => 5, 'max_inclusive' => false, 'label' => '< 5%'],
+      ['estado_key' => 'amarillo', 'estado' => 'Amarillo', 'min' => 5, 'max' => 10, 'label' => '5 - 10%'],
+      ['estado_key' => 'verde', 'estado' => 'Verde', 'min' => 10, 'max' => 15, 'label' => '10 - 15%'],
+      ['estado_key' => 'amarillo', 'estado' => 'Amarillo', 'min' => 15, 'max' => 20, 'label' => '15 - 20%'],
+      ['estado_key' => 'rojo', 'estado' => 'Rojo', 'min' => 20, 'min_inclusive' => false, 'label' => '> 20%'],
+    ],
+    'Morada' => [
+      ['estado_key' => 'rojo', 'estado' => 'Rojo', 'max' => 1, 'max_inclusive' => false, 'label' => '< 1%'],
+      ['estado_key' => 'amarillo', 'estado' => 'Amarillo', 'min' => 1, 'max' => 3, 'label' => '1 - 3%'],
+      ['estado_key' => 'verde', 'estado' => 'Verde', 'min' => 3, 'max' => 5, 'label' => '3 - 5%'],
+      ['estado_key' => 'amarillo', 'estado' => 'Amarillo', 'min' => 5, 'max' => 7, 'label' => '5 - 7%'],
+      ['estado_key' => 'rojo', 'estado' => 'Rojo', 'min' => 7, 'min_inclusive' => false, 'label' => '> 7%'],
+    ],
+  ],
+  'semaforo_fisicoquimicos' => [
+    'tar_malla_30' => [
+      ['estado_key' => 'rojo', 'estado' => 'Rojo', 'max' => 1, 'label' => '0 - 1'],
+      ['estado_key' => 'amarillo', 'estado' => 'Amarillo', 'min' => 1, 'min_inclusive' => false, 'max' => 3, 'max_inclusive' => false, 'label' => '1 - 2'],
+      ['estado_key' => 'verde', 'estado' => 'Verde', 'min' => 3, 'max' => 9, 'label' => '3 - 9'],
+      ['estado_key' => 'amarillo', 'estado' => 'Amarillo', 'min' => 9, 'min_inclusive' => false, 'max' => 12, 'label' => '10 - 12'],
+      ['estado_key' => 'rojo', 'estado' => 'Rojo', 'min' => 12, 'min_inclusive' => false, 'label' => '> 12'],
+    ],
+    'tar_malla_45' => [
+      ['estado_key' => 'rojo', 'estado' => 'Rojo', 'max' => 0, 'label' => '0'],
+      ['estado_key' => 'amarillo', 'estado' => 'Amarillo', 'min' => 0, 'min_inclusive' => false, 'max' => 48, 'label' => '0 - 48'],
+      ['estado_key' => 'verde', 'estado' => 'Verde', 'min' => 48, 'min_inclusive' => false, 'max' => 55, 'label' => '> 48 - 55'],
+      ['estado_key' => 'amarillo', 'estado' => 'Amarillo', 'min' => 55, 'min_inclusive' => false, 'max' => 60, 'label' => '55 - 60'],
+      ['estado_key' => 'rojo', 'estado' => 'Rojo', 'min' => 60, 'min_inclusive' => false, 'label' => '> 60'],
+    ],
+    'tar_trans' => [
+      ['estado_key' => 'rojo', 'estado' => 'Rojo', 'max' => 18, 'max_inclusive' => false, 'label' => '< 18'],
+      ['estado_key' => 'amarillo', 'estado' => 'Amarillo', 'min' => 18, 'max' => 18.5, 'label' => '18 - 18.5'],
+      ['estado_key' => 'verde', 'estado' => 'Verde', 'min' => 18.5, 'min_inclusive' => false, 'label' => '> 18.5'],
+    ],
+    'tar_porcentaje_t' => [
+      ['estado_key' => 'rojo', 'estado' => 'Rojo', 'max' => 80, 'max_inclusive' => false, 'label' => '< 80'],
+      ['estado_key' => 'amarillo', 'estado' => 'Amarillo', 'min' => 80, 'max' => 88, 'label' => '85 - 88'],
+      ['estado_key' => 'verde', 'estado' => 'Verde', 'min' => 88, 'min_inclusive' => false, 'label' => '> 88'],
+    ],
+    'tar_color' => [
+      ['estado_key' => 'verde', 'estado' => 'Verde', 'min' => 0, 'max' => 2, 'label' => '0 - 2.0'],
+      ['estado_key' => 'amarillo', 'estado' => 'Amarillo', 'min' => 2, 'min_inclusive' => false, 'max' => 2.5, 'label' => '2 - 2.5'],
+      ['estado_key' => 'rojo', 'estado' => 'Rojo', 'min' => 2.5, 'min_inclusive' => false, 'label' => '> 2.5'],
+    ],
+    'tar_olor' => [
+      ['estado_key' => 'verde', 'estado' => 'Verde', 'max' => 2, 'max_inclusive' => false, 'label' => '< 2.0'],
+      ['estado_key' => 'amarillo', 'estado' => 'Amarillo', 'min' => 2, 'max' => 2.5, 'label' => '2 - 2.5'],
+      ['estado_key' => 'rojo', 'estado' => 'Rojo', 'min' => 2.5, 'min_inclusive' => false, 'label' => '> 2.5'],
+    ],
+    'tar_redox' => [
+      ['estado_key' => 'verde', 'estado' => 'Verde', 'max' => 0.5, 'max_inclusive' => false, 'label' => '< 0.500'],
+      ['estado_key' => 'amarillo', 'estado' => 'Amarillo', 'min' => 0.5, 'max' => 0.7, 'label' => '0.500 - 0.700'],
+      ['estado_key' => 'rojo', 'estado' => 'Rojo', 'min' => 0.7, 'min_inclusive' => false, 'label' => '> 0.700'],
+    ],
+    'tar_ph' => [
+      ['estado_key' => 'rojo', 'estado' => 'Rojo', 'max' => 5.5, 'max_inclusive' => false, 'label' => '< 5.5'],
+      ['estado_key' => 'amarillo', 'estado' => 'Amarillo', 'min' => 5.5, 'max' => 5.6, 'label' => '5.5 - 5.6'],
+      ['estado_key' => 'verde', 'estado' => 'Verde', 'min' => 5.6, 'min_inclusive' => false, 'max' => 5.9, 'label' => '5.6 - 5.9'],
+      ['estado_key' => 'amarillo', 'estado' => 'Amarillo', 'min' => 5.9, 'min_inclusive' => false, 'max' => 6, 'label' => '5.9 - 6'],
+      ['estado_key' => 'rojo', 'estado' => 'Rojo', 'min' => 6, 'min_inclusive' => false, 'label' => '> 6'],
+    ],
+    'tar_ce' => [
+      ['estado_key' => 'verde', 'estado' => 'Verde', 'min' => 0, 'max' => 2, 'label' => '0 - 2'],
+      ['estado_key' => 'amarillo', 'estado' => 'Amarillo', 'min' => 2, 'min_inclusive' => false, 'max' => 3.5, 'label' => '2 - 3.5'],
+      ['estado_key' => 'rojo', 'estado' => 'Rojo', 'min' => 3.5, 'min_inclusive' => false, 'label' => '> 3.5'],
+    ],
+    'tar_humedad' => [
+      ['estado_key' => 'rojo', 'estado' => 'Rojo', 'max' => 8, 'max_inclusive' => false, 'label' => '< 8'],
+      ['estado_key' => 'amarillo', 'estado' => 'Amarillo', 'min' => 8, 'max' => 9, 'label' => '8 - 9'],
+      ['estado_key' => 'verde', 'estado' => 'Verde', 'min' => 9, 'min_inclusive' => false, 'max' => 11, 'label' => '9 - 11'],
+      ['estado_key' => 'amarillo', 'estado' => 'Amarillo', 'min' => 11, 'min_inclusive' => false, 'max' => 12, 'label' => '11 - 12'],
+      ['estado_key' => 'rojo', 'estado' => 'Rojo', 'min' => 12, 'min_inclusive' => false, 'label' => '> 12'],
+    ],
+    'tar_cenizas' => [
+      ['estado_key' => 'verde', 'estado' => 'Verde', 'min' => 0, 'max' => 1, 'label' => '0 - 1.0'],
+      ['estado_key' => 'amarillo', 'estado' => 'Amarillo', 'min' => 1, 'min_inclusive' => false, 'max' => 1.5, 'label' => '1.0 - 1.5'],
+      ['estado_key' => 'rojo', 'estado' => 'Rojo', 'min' => 1.5, 'min_inclusive' => false, 'label' => '> 1.5'],
+    ],
+  ],
+  'colores' => [
+    'Azul' => '#3b82f6',
+    'Dorada' => '#d4a017',
+    'Verde' => '#10b981',
+    'Morada' => '#8b5cf6',
+    'Otros' => '#64748b',
+    'Sin Calidad' => '#ef4444',
+    'Por Definir' => '#9ca3af',
+  ],
+];

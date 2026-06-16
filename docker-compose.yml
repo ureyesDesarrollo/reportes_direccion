@@ -1,0 +1,36 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: reportes_direccion_app
+    restart: unless-stopped
+    command: >
+      sh -lc "mkdir -p /var/www/html/reports/hikvision-administrativos/cache
+      && chown -R www-data:www-data /var/www/html/reports/hikvision-administrativos/cache
+      && apache2-foreground"
+    ports:
+      - "8081:80"
+    environment:
+      TZ: America/Mazatlan
+      PROD_DB_HOST: sis_preparacion-db-1
+      PROD_DB_PORT: 3306
+      PROD_DB_NAME: bd_sis_preparacion
+      PROD_DB_USER: root
+      PROD_DB_PASS: root
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./:/var/www/html
+      - hikvision_cache:/var/www/html/reports/hikvision-administrativos/cache
+    networks:
+      - default
+      - sis_preparacion
+
+volumes:
+  hikvision_cache:
+
+networks:
+  sis_preparacion:
+    external: true
+    name: sis_preparacion_default

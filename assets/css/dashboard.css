@@ -1168,28 +1168,91 @@ tbody tr:hover {
 .table-pivot-quimicos {
   width: 100%;
   white-space: nowrap;
+  --pivot-product-width: 260px;
+  --pivot-prev-width: 92px;
+  --pivot-current-width: 120px;
+  --pivot-cost-width: 104px;
+}
+
+.table-pivot-empaques,
+.table-pivot-enzimas {
+  width: 100%;
+  white-space: nowrap;
+  --pivot-product-width: 260px;
+  --pivot-prev-width: 92px;
+  --pivot-current-width: 120px;
+  --pivot-cost-width: 104px;
 }
 
 .table-pivot-quimicos th,
-.table-pivot-quimicos td {
+.table-pivot-quimicos td,
+.table-pivot-empaques th,
+.table-pivot-empaques td,
+.table-pivot-enzimas th,
+.table-pivot-enzimas td {
   text-align: center;
   vertical-align: middle;
 }
 
 .table-pivot-quimicos th.sticky-col,
-.table-pivot-quimicos td.sticky-col {
+.table-pivot-quimicos td.sticky-col,
+.table-pivot-empaques th.sticky-col,
+.table-pivot-empaques td.sticky-col,
+.table-pivot-enzimas th.sticky-col,
+.table-pivot-enzimas td.sticky-col {
   position: sticky;
-  left: 0;
   background: #ffffff;
   z-index: 2;
-  text-align: left;
-  min-width: 260px;
-  max-width: 260px;
   white-space: normal;
   box-shadow: 2px 0 0 rgba(226, 232, 240, 0.8);
 }
 
-.table-pivot-quimicos thead th.sticky-col {
+.table-pivot-quimicos th.sticky-col:nth-child(1),
+.table-pivot-quimicos td.sticky-col:nth-child(1),
+.table-pivot-empaques th.sticky-col:nth-child(1),
+.table-pivot-empaques td.sticky-col:nth-child(1),
+.table-pivot-enzimas th.sticky-col:nth-child(1),
+.table-pivot-enzimas td.sticky-col:nth-child(1) {
+  left: 0;
+  min-width: var(--pivot-product-width);
+  max-width: var(--pivot-product-width);
+  text-align: left;
+}
+
+.table-pivot-quimicos th.sticky-col:nth-child(2),
+.table-pivot-quimicos td.sticky-col:nth-child(2),
+.table-pivot-empaques th.sticky-col:nth-child(2),
+.table-pivot-empaques td.sticky-col:nth-child(2),
+.table-pivot-enzimas th.sticky-col:nth-child(2),
+.table-pivot-enzimas td.sticky-col:nth-child(2) {
+  left: var(--pivot-product-width);
+  min-width: var(--pivot-prev-width);
+  max-width: var(--pivot-prev-width);
+}
+
+.table-pivot-quimicos th.sticky-col:nth-child(3),
+.table-pivot-quimicos td.sticky-col:nth-child(3),
+.table-pivot-empaques th.sticky-col:nth-child(3),
+.table-pivot-empaques td.sticky-col:nth-child(3),
+.table-pivot-enzimas th.sticky-col:nth-child(3),
+.table-pivot-enzimas td.sticky-col:nth-child(3) {
+  left: calc(var(--pivot-product-width) + var(--pivot-prev-width));
+  min-width: var(--pivot-current-width);
+  max-width: var(--pivot-current-width);
+}
+
+.table-pivot-quimicos th.sticky-col:nth-child(4),
+.table-pivot-quimicos td.sticky-col:nth-child(4),
+.table-pivot-empaques th.sticky-col:nth-child(4),
+.table-pivot-empaques td.sticky-col:nth-child(4) {
+  left: calc(var(--pivot-product-width) + var(--pivot-prev-width) + var(--pivot-current-width));
+  min-width: var(--pivot-cost-width);
+  max-width: var(--pivot-cost-width);
+}
+
+.table-pivot-quimicos thead th.sticky-col,
+.table-pivot-empaques thead th.sticky-col,
+.table-pivot-enzimas thead th.sticky-col {
   z-index: 3;
 }
 
@@ -1238,12 +1301,14 @@ tbody tr:hover {
   background: #f0fdfa !important;
 }
 
-.table-pivot-quimicos .row-total td {
+.table-pivot-quimicos .row-total td,
+.table-pivot-empaques .row-total td {
   background: #f8fafc;
   font-weight: 700;
 }
 
-.table-pivot-quimicos .row-semaforo td {
+.table-pivot-quimicos .row-semaforo td,
+.table-pivot-empaques .row-semaforo td {
   background: #fcfcfd;
 }
 
@@ -1584,4 +1649,428 @@ tbody tr:hover {
   .ventas-month-strip {
     grid-template-columns: 1fr;
   }
+}
+
+@media (min-width: 1800px) {
+  .dashboard {
+    max-width: min(96vw, 2360px);
+    padding: 36px 48px;
+  }
+
+  .header {
+    margin-bottom: 36px;
+    gap: 28px;
+  }
+
+  .header h1 {
+    font-size: 2.9rem;
+    line-height: 1.08;
+  }
+
+  .header .sub {
+    font-size: 1rem;
+    gap: 14px;
+  }
+
+  .badge,
+  .year-badge,
+  .update-status,
+  .auto-update-toggle {
+    font-size: 0.88rem;
+  }
+
+  .update-panel {
+    padding: 10px 18px;
+    gap: 14px;
+  }
+
+  .kpi-grid {
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 24px;
+    margin-bottom: 36px;
+  }
+
+  .kpi-card {
+    padding: 26px;
+    min-height: 158px;
+  }
+
+  .kpi-icon {
+    font-size: 2.2rem;
+  }
+
+  .kpi-label,
+  .kpi-trend {
+    font-size: 0.84rem;
+  }
+
+  .kpi-value {
+    font-size: 2.85rem;
+    line-height: 1.05;
+  }
+
+  .chart-container,
+  .cards-section,
+  .filters,
+  .toggle-container {
+    border-radius: 26px;
+    padding: 28px;
+    margin-bottom: 36px;
+  }
+
+  .chart-header h3,
+  .cards-section h2 {
+    font-size: 1.42rem;
+  }
+
+  canvas {
+    max-height: 520px;
+  }
+
+  .weeks {
+    grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+    gap: 24px;
+  }
+
+  .week-card {
+    padding: 24px;
+  }
+
+  .table-wrapper {
+    border-radius: 26px;
+  }
+
+  th {
+    padding: 18px 20px;
+    font-size: 0.84rem;
+  }
+
+  td {
+    padding: 16px 20px;
+    font-size: 0.96rem;
+  }
+
+  .pivot-header,
+  .pivot-window-bar,
+  .pivot-legend {
+    margin-bottom: 20px;
+  }
+
+  .toggle-semaforo,
+  .sort-btn,
+  .pivot-nav-btn,
+  .pivot-window-info {
+    font-size: 0.96rem;
+  }
+
+  .table-pivot-quimicos,
+  .table-pivot-empaques,
+  .table-pivot-enzimas {
+    --pivot-product-width: 320px;
+    --pivot-prev-width: 104px;
+    --pivot-current-width: 138px;
+    --pivot-cost-width: 118px;
+  }
+
+  .pivot-product-col {
+    font-size: 0.95rem;
+  }
+
+  .week-col-header {
+    min-width: 96px;
+    max-width: 112px;
+  }
+
+  .week-pill-top {
+    font-size: 1rem;
+  }
+
+  .week-pill-bottom,
+  .ratio-base-cell {
+    font-size: 0.76rem;
+  }
+
+  .cell-semaforo {
+    min-width: 170px;
+  }
+
+  .progress-bar {
+    width: 130px;
+  }
+
+  #ventasClienteDetailChart {
+    height: 460px !important;
+    max-height: 460px;
+  }
+}
+
+@media (min-width: 2560px) {
+  .dashboard {
+    max-width: min(94vw, 3000px);
+    padding: 44px 64px;
+  }
+
+  .header h1 {
+    font-size: 3.15rem;
+  }
+
+  .kpi-grid {
+    gap: 28px;
+  }
+
+  .kpi-card {
+    padding: 30px;
+    min-height: 176px;
+  }
+
+  .kpi-value {
+    font-size: 3.1rem;
+  }
+
+  canvas {
+    max-height: 620px;
+  }
+
+  th {
+    padding: 20px 22px;
+    font-size: 0.9rem;
+  }
+
+  td {
+    padding: 18px 22px;
+    font-size: 1rem;
+  }
+
+  .table-pivot-quimicos,
+  .table-pivot-empaques,
+  .table-pivot-enzimas {
+    --pivot-product-width: 360px;
+    --pivot-prev-width: 116px;
+    --pivot-current-width: 152px;
+    --pivot-cost-width: 128px;
+  }
+
+  .week-col-header {
+    min-width: 112px;
+    max-width: 128px;
+  }
+
+  .cell-semaforo {
+    min-width: 190px;
+  }
+
+  .ventas-clientes-table th,
+  .ventas-clientes-table td {
+    padding: 14px 12px;
+  }
+
+  #ventasClienteDetailChart {
+    height: 540px !important;
+    max-height: 540px;
+  }
+}
+
+@media (min-width: 3400px) {
+  .dashboard {
+    max-width: min(94vw, 3400px);
+  }
+
+  .kpi-grid {
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  }
+
+  canvas {
+    max-height: 700px;
+  }
+}
+
+html.executive-display body {
+  overflow-x: hidden;
+}
+
+html.executive-display .dashboard {
+  max-width: 1600px;
+  width: 100%;
+  padding: 18px 24px 22px;
+}
+
+html.executive-display .header {
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+html.executive-display .header h1 {
+  font-size: 1.85rem;
+  line-height: 1.12;
+  margin-bottom: 5px;
+}
+
+html.executive-display .header .sub {
+  gap: 9px;
+  font-size: 0.8rem;
+}
+
+html.executive-display .badge,
+html.executive-display .year-badge,
+html.executive-display .update-status,
+html.executive-display .auto-update-toggle,
+html.executive-display .last-update {
+  font-size: 0.72rem;
+  padding: 6px 9px;
+}
+
+html.executive-display .update-panel {
+  gap: 10px;
+  padding: 8px 13px;
+  border-radius: 22px;
+}
+
+html.executive-display .update-timer {
+  font-size: 0.86rem;
+  min-width: 52px;
+}
+
+html.executive-display .update-btn,
+html.executive-display .back-btn,
+html.executive-display .mode-tab {
+  padding: 8px 10px !important;
+  font-size: 0.78rem !important;
+}
+
+html.executive-display .kpi-grid {
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)) !important;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+html.executive-display .kpi-card {
+  min-height: auto;
+  padding: 14px 16px;
+  border-radius: 16px;
+}
+
+html.executive-display .kpi-icon {
+  font-size: 1.35rem;
+  margin-bottom: 7px;
+}
+
+html.executive-display .kpi-label,
+html.executive-display .kpi-trend {
+  font-size: 0.72rem;
+}
+
+html.executive-display .kpi-value {
+  font-size: 1.72rem;
+  line-height: 1.08;
+  margin: 2px 0;
+}
+
+html.executive-display .chart-container,
+html.executive-display .cards-section,
+html.executive-display .filters,
+html.executive-display .toggle-container {
+  border-radius: 16px;
+  padding: 16px;
+  margin-bottom: 14px;
+}
+
+html.executive-display .chart-header {
+  margin-bottom: 10px;
+}
+
+html.executive-display .chart-header h3,
+html.executive-display .cards-section h2 {
+  font-size: 1.08rem;
+}
+
+html.executive-display canvas {
+  max-height: 320px;
+}
+
+html.executive-display .weeks {
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 10px;
+}
+
+html.executive-display .week-card {
+  padding: 12px;
+  border-radius: 14px;
+}
+
+html.executive-display .table-wrapper {
+  border-radius: 16px;
+  max-height: calc(100vh - 340px);
+  overflow: auto;
+}
+
+html.executive-display th {
+  padding: 9px 11px;
+  font-size: 0.72rem;
+}
+
+html.executive-display td {
+  padding: 8px 11px;
+  font-size: 0.82rem;
+}
+
+html.executive-display .pivot-header,
+html.executive-display .pivot-window-bar,
+html.executive-display .pivot-legend {
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+html.executive-display .toggle-semaforo,
+html.executive-display .sort-btn,
+html.executive-display .pivot-nav-btn,
+html.executive-display .pivot-window-info {
+  padding: 7px 9px;
+  font-size: 0.74rem;
+}
+
+html.executive-display .table-pivot-quimicos,
+html.executive-display .table-pivot-empaques,
+html.executive-display .table-pivot-enzimas {
+  --pivot-product-width: 250px;
+  --pivot-prev-width: 84px;
+  --pivot-current-width: 104px;
+  --pivot-cost-width: 94px;
+}
+
+html.executive-display .pivot-product-col {
+  font-size: 0.82rem;
+}
+
+html.executive-display .week-col-header {
+  min-width: 78px;
+  max-width: 90px;
+}
+
+html.executive-display .week-pill-top {
+  font-size: 0.82rem;
+}
+
+html.executive-display .week-pill-bottom,
+html.executive-display .ratio-base-cell {
+  font-size: 0.66rem;
+}
+
+html.executive-display .cell-semaforo {
+  min-width: 132px;
+}
+
+html.executive-display .progress-bar {
+  width: 106px;
+}
+
+html.executive-display .pagination,
+html.executive-display .table-info {
+  margin-top: 8px;
+  font-size: 0.74rem;
+}
+
+html.executive-display .footer-note,
+html.executive-display .nota {
+  display: none !important;
 }

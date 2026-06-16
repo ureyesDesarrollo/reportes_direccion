@@ -228,7 +228,8 @@ $topBackLabel = 'Regresar al inicio';
   <title><?= htmlspecialchars($titulo) ?></title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-  <link rel="stylesheet" href="../../assets/css/dashboard.css?v=<?= urlencode((string)$version) ?>">
+  <link rel="stylesheet" href="../../assets/css/dashboard.css?v=<?= urlencode((string)max((int)$version, (int)(@filemtime(__DIR__ . "/../../assets/css/dashboard.css") ?: 0))) ?>">
+  <script src="../../assets/js/display-mode.js?v=<?= urlencode((string)max((int)$version, (int)(@filemtime(__DIR__ . "/../../assets/js/display-mode.js") ?: 0))) ?>"></script>
   <style>
     .projects-shell,
     .projects-filters,
@@ -721,6 +722,56 @@ $topBackLabel = 'Regresar al inicio';
     .projects-table-progress .project-progress-wrap {
       padding: 10px 12px;
       border-radius: 14px;
+    }
+
+    @media (min-width: 1800px) {
+      .projects-shell,
+      .projects-filters,
+      .projects-detail,
+      .projects-highlights {
+        border-radius: 24px;
+        margin-bottom: 28px;
+      }
+
+      .projects-filters,
+      .projects-detail,
+      .projects-highlights {
+        padding: 24px;
+      }
+
+      .projects-kpis {
+        gap: 22px;
+        margin-bottom: 28px;
+      }
+
+      .projects-kpi {
+        padding: 24px;
+        min-height: 148px;
+      }
+
+      .projects-highlight-grid {
+        gap: 20px;
+      }
+
+      .projects-detail-grid {
+        gap: 18px;
+      }
+
+      .projects-table th,
+      .projects-table td {
+        padding: 15px 16px;
+      }
+    }
+
+    @media (min-width: 2560px) {
+      .projects-kpis,
+      .projects-detail-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+
+      .projects-highlight-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
     }
 
     @media (max-width: 1200px) {

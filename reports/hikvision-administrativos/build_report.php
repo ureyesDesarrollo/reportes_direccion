@@ -44,6 +44,15 @@ $normalizarEmpCode = static function (string $value): string {
   return $value;
 };
 
+$parsearFechaEventoLocal = static function (string $value, DateTimeZone $tz): DateTime {
+  $value = trim($value);
+  if (preg_match('/^(\d{4}-\d{2}-\d{2})[T\s](\d{2}:\d{2}:\d{2})/', $value, $matches) === 1) {
+    return new DateTime($matches[1] . ' ' . $matches[2], $tz);
+  }
+
+  return new DateTime($value, $tz);
+};
+
 $empleadosPermitidos = array_values(array_unique(array_filter(array_map($normalizarEmpCode, $empleadosPermitidos), 'strlen')));
 $diasFestivosMap = array_fill_keys($diasFestivos, true);
 $vacaciones = [];
@@ -492,7 +501,7 @@ if ($baseUrl === '' || $hikUser === '' || $hikPass === '') {
       }
 
       try {
-        $dt = new DateTime($timeValue, $tz);
+        $dt = $parsearFechaEventoLocal($timeValue, $tz);
       } catch (Throwable $e) {
         continue;
       }
@@ -542,7 +551,15 @@ if ($baseUrl === '' || $hikUser === '' || $hikPass === '') {
         'rol' => '',
         'turno' => '',
       ];
-      $horarioEmpleado = $resolverHorario($grupo['emp_code'], $empleadoInfo, $primero['datetime']);
+      $fechaHorario = $primero['datetime'];
+      if ($grupo['emp_code'] === '9999' && $dayNumber === 4) {
+        $horaPrimera = (string)($primero['hora'] ?? '');
+        if ($horaPrimera >= '07:30:00' && $horaPrimera <= '08:30:00') {
+          $fechaHorario = clone $primero['datetime'];
+          $fechaHorario->modify('-2 days');
+        }
+      }
+      $horarioEmpleado = $resolverHorario($grupo['emp_code'], $empleadoInfo, $fechaHorario);
 
       $dtEntradaProgramada = new DateTime($fecha . ' ' . $horarioEmpleado['entrada'], $tz);
       $dtSalidaProgramada = new DateTime($fecha . ' ' . $horarioEmpleado['salida'], $tz);
@@ -568,6 +585,7 @@ if ($baseUrl === '' || $hikUser === '' || $hikPass === '') {
       if (!$esDiaFlexible && !$horarioEmpleado['ignorar_retardo'] && $dtPrimera > $entradaConTolerancia) {
         $minutosRetardo = $minutosEntre($entradaConTolerancia, $dtPrimera);
       }
+      $tuvoRetardoReal = $minutosRetardo > 0;
 
       $minutosSalidaAnticipada = 0;
       if (!$esDiaFlexible && $totalEventos > 1 && $dtUltima < $dtSalidaProgramada) {
@@ -575,6 +593,7 @@ if ($baseUrl === '' || $hikUser === '' || $hikPass === '') {
       }
 
       $minutosExtra = 0;
+      $minutosExtraSalidaTarde = 0;
       if (($esFinDeSemana || $esFestivo) && $totalEventos > 1) {
         $minutosExtra = $minutosTrabajadosNetos;
       } elseif (!$esVacacion) {
@@ -587,6 +606,7 @@ if ($baseUrl === '' || $hikUser === '' || $hikPass === '') {
 
         if ($calcularHorasExtraDespuesDeSalida && $totalEventos > 1 && $dtUltima > $dtSalidaProgramada) {
           $minutosExtraDespues = $minutosEntre($dtSalidaProgramada, $dtUltima);
+          $minutosExtraSalidaTarde = $minutosExtraDespues;
         }
 
         $minutosExtra = $minutosExtraAntes + $minutosExtraDespues;
@@ -595,6 +615,25 @@ if ($baseUrl === '' || $hikUser === '' || $hikPass === '') {
       $minutosFaltantes = max(0, $minutosJornada - $minutosTrabajadosNetos);
       if ($esDiaFlexible) {
         $minutosFaltantes = 0;
+      }
+      if (!$esDiaFlexible && $minutosExtraSalidaTarde > 0) {
+        $minutosCompensacionSalidaTarde = $minutosExtraSalidaTarde;
+        $minutosExtraConsumidos = 0;
+
+        if ($minutosFaltantes > 0) {
+          $minutosCompensados = min($minutosFaltantes, $minutosCompensacionSalidaTarde);
+          $minutosFaltantes -= $minutosCompensados;
+          $minutosCompensacionSalidaTarde -= $minutosCompensados;
+          $minutosExtraConsumidos += $minutosCompensados;
+        }
+
+        if ($minutosCompensacionSalidaTarde > 0 && $minutosRetardo > 0) {
+          $minutosCompensados = min($minutosRetardo, $minutosCompensacionSalidaTarde);
+          $minutosCompensacionSalidaTarde -= $minutosCompensados;
+          $minutosExtraConsumidos += $minutosCompensados;
+        }
+
+        $minutosExtra = max(0, $minutosExtra - $minutosExtraConsumidos);
       }
       $estatus = 'OK';
       $semaforoKey = 'verde';
@@ -611,7 +650,7 @@ if ($baseUrl === '' || $hikUser === '' || $hikPass === '') {
         $semaforoKey = 'rojo';
         $semaforoLabel = 'Salida antes';
         $semaforoColor = '#ef4444';
-      } elseif ($minutosRetardo > 0) {
+      } elseif ($tuvoRetardoReal) {
         $estatus = 'Retardo';
         $semaforoKey = 'amarillo';
         $semaforoLabel = 'Retardo';
@@ -685,21 +724,22 @@ if ($baseUrl === '' || $hikUser === '' || $hikPass === '') {
       }
 
       $resumen[$emp]['dias']++;
-      $resumen[$emp]['minutos_trabajados'] += $minutosTrabajadosNetos;
-      $resumen[$emp]['minutos_retardo'] += $minutosRetardo;
-      $resumen[$emp]['minutos_salida_anticipada'] += $minutosSalidaAnticipada;
-      $resumen[$emp]['minutos_extra'] += $minutosExtra;
-      $resumen[$emp]['minutos_faltantes'] += $minutosFaltantes;
-      if ($minutosRetardo > 0) {
+      $resumen[$emp]['minutos_trabajados'] += (int)$row['minutos_trabajados'];
+      $resumen[$emp]['minutos_retardo'] += (int)$row['minutos_retardo'];
+      $resumen[$emp]['minutos_salida_anticipada'] += (int)$row['minutos_salida_anticipada'];
+      $resumen[$emp]['minutos_extra'] += (int)$row['minutos_extra'];
+      $resumen[$emp]['minutos_faltantes'] += (int)$row['minutos_faltantes'];
+      if ((int)$row['minutos_retardo'] > 0) {
         $resumen[$emp]['dias_con_retardo']++;
       }
 
-      if ($estatus === 'OK') {
+      $estatusResumen = (string)$row['estatus'];
+      if ($estatusResumen === 'OK') {
         $resumen[$emp]['dias_ok']++;
-      } elseif ($estatus === 'Retardo') {
+      } elseif ($estatusResumen === 'Retardo') {
         $resumen[$emp]['dias_retardo']++;
         $resumen[$emp]['incidencias']++;
-      } elseif ($estatus === 'Salida antes') {
+      } elseif ($estatusResumen === 'Salida antes') {
         $resumen[$emp]['dias_salida_antes']++;
         $resumen[$emp]['incidencias']++;
       } else {
@@ -718,6 +758,14 @@ if ($baseUrl === '' || $hikUser === '' || $hikPass === '') {
     });
 
     foreach ($resumen as &$r) {
+      $minutosExtraResumen = (int)$r['minutos_extra'];
+      $minutosFaltantesResumen = (int)$r['minutos_faltantes'];
+      if ($minutosExtraResumen > 0 && $minutosFaltantesResumen > 0) {
+        $minutosCompensadosResumen = min($minutosExtraResumen, $minutosFaltantesResumen);
+        $r['minutos_extra'] = $minutosExtraResumen - $minutosCompensadosResumen;
+        $r['minutos_faltantes'] = $minutosFaltantesResumen - $minutosCompensadosResumen;
+      }
+
       $r['horas_trabajadas'] = $minutosAHoras((int)$r['minutos_trabajados']);
       $r['retardo'] = $minutosAHoras((int)$r['minutos_retardo']);
       $r['salida_anticipada'] = $minutosAHoras((int)$r['minutos_salida_anticipada']);

@@ -44,6 +44,13 @@ $groups = [
     'color' => '#7c2d12',
     'visible_modes' => ['muro'],
   ],
+  'direccion-general' => [
+    'title' => 'Dirección General',
+    'description' => 'Tablero ejecutivo para dirección general.',
+    'icon' => 'fa-building-columns',
+    'color' => '#0f766e',
+    'visible_modes' => ['direccion-general'],
+  ],
 ];
 
 return [
@@ -105,7 +112,7 @@ return [
       'description' => 'Monitoreo en tiempo real del avance de producción.',
       'icon' => 'fa-gauge-high',
       'color' => '#10b981',
-      'groups' => ['produccion'],
+      'groups' => ['produccion', 'direccion-general'],
       'url' => 'https://app.powerbi.com/groups/me/reports/687c41bb-280f-452a-a2fc-5352d016fa7d/d975c692600783437863?language=es-MX&experience=power-bi',
       'external' => true,
       'enabled' => true,
@@ -118,6 +125,16 @@ return [
       'color' => '#10b981',
       'groups' => ['produccion'],
       'url' => './secadores/index.php',
+      'enabled' => true,
+    ],
+    [
+      'slug' => 'calidad-produccion',
+      'title' => 'CALIDAD / Producción',
+      'description' => 'Distribución de calidad por día, semana o mes con topes por color, pastel por kilos y comportamiento por periodo.',
+      'icon' => 'fa-vial-circle-check',
+      'color' => '#10b981',
+      'groups' => ['produccion', 'direccion-general'],
+      'url' => './calidad-produccion/index.php',
       'enabled' => true,
     ],
     [

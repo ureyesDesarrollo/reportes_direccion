@@ -9,11 +9,12 @@ return [
     'charset' => 'utf8mb4',
   ],
   'prod' => [
-    'host' => 'localhost:3306',
-    'dbname' => 'bd_sis_preparacion',
-    'user' => 'root',
-    'pass' => '',
-    'charset' => 'utf8mb4',
+    'host' => getenv('PROD_DB_HOST') ?: 'sis_preparacion-db-1',
+    'port' => (int)(getenv('PROD_DB_PORT') ?: 3306),
+    'dbname' => getenv('PROD_DB_NAME') ?: 'bd_sis_preparacion',
+    'user' => getenv('PROD_DB_USER') ?: 'root',
+    'pass' => getenv('PROD_DB_PASS') ?: 'root',
+    'charset' => getenv('PROD_DB_CHARSET') ?: 'utf8mb4',
   ],
   'hoshin' => [
     'host' => 'localhost:3306',

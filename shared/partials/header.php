@@ -85,26 +85,27 @@ $urlImpacto = $basePath . '?' . http_build_query(array_merge($queryBase, ['modo'
 
 <div class="dashboard">
   <div class="header">
-    <div class="header-left">
+      <div class="header-left">
+      <?php $isDireccionGeneral = (
+        (isset($_GET['mode']) && (string)$_GET['mode'] === 'direccion-general') ||
+        (isset($_GET['modo']) && (string)$_GET['modo'] === 'direccion-general') ||
+        ($modoActual === 'direccion-general')
+      ); ?>
       <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:10px;">
-        <a
-          href="<?= htmlspecialchars($urlVolverIndex) ?>"
-          class="back-btn"
-          style="
-            display:inline-flex;
-            align-items:center;
-            gap:8px;
-            padding:10px 14px;
-            border-radius:999px;
-            text-decoration:none;
-            font-weight:700;
-            border:1px solid #e2e8f0;
-            background:#ffffff;
-            color:#334155;
-          ">
-          <i class="fas fa-arrow-left"></i>
-          <?= htmlspecialchars($urlVolverLabel ?? 'Regresar al inicio') ?>
-        </a>
+        <?php if ($isDireccionGeneral): ?>
+          <a href="#" class="back-btn" onclick="history.back(); return false;" style="display:inline-flex; align-items:center; gap:8px; padding:10px 14px; border-radius:999px; text-decoration:none; font-weight:700; border:1px solid #e2e8f0; background:#ffffff; color:#334155;">
+            <i class="fas fa-arrow-left"></i>
+            <?= htmlspecialchars($urlVolverLabel ?? 'Regresar') ?>
+          </a>
+        <?php else: ?>
+          <a
+            href="<?= htmlspecialchars($urlVolverIndex) ?>"
+            class="back-btn"
+            style="display:inline-flex; align-items:center; gap:8px; padding:10px 14px; border-radius:999px; text-decoration:none; font-weight:700; border:1px solid #e2e8f0; background:#ffffff; color:#334155;">
+            <i class="fas fa-arrow-left"></i>
+            <?= htmlspecialchars($urlVolverLabel ?? 'Regresar al inicio') ?>
+          </a>
+        <?php endif; ?>
       </div>
 
       <h1>
@@ -135,6 +136,31 @@ $urlImpacto = $basePath . '?' . http_build_query(array_merge($queryBase, ['modo'
               Seleccionado: <?= htmlspecialchars($productoSeleccionado) ?>
             </span>
           <?php endif; ?>
+        <script>
+          (function() {
+            try {
+              const params = new URLSearchParams(window.location.search);
+              const serverModeKey = <?= json_encode(isset($_GET['mode']) ? 'mode' : (isset($_GET['modo']) ? 'modo' : null)) ?>;
+              const modoValue = serverModeKey ? params.get(serverModeKey) || params.get('modo') || params.get('mode') : (params.get('modo') || params.get('mode'));
+              if (!modoValue) return;
+
+              document.addEventListener('click', function (ev) {
+                const a = ev.target.closest && ev.target.closest('a');
+                if (!a) return;
+                const href = a.getAttribute('href');
+                if (!href) return;
+                if (/^(https?:|mailto:|javascript:|#)/i.test(href)) return;
+                if (href.indexOf('modo=') !== -1 || href.indexOf('mode=') !== -1) return;
+                ev.preventDefault();
+                const sep = href.indexOf('?') === -1 ? '?' : '&';
+                const key = serverModeKey || 'modo';
+                window.location.href = href + sep + key + '=' + encodeURIComponent(modoValue);
+              }, true);
+            } catch (e) {
+              // fail silently
+            }
+          })();
+        </script>
         <?php else: ?>
           <span>
             <i class="fas fa-flask"></i>

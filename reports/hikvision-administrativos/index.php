@@ -57,7 +57,8 @@ $topBackLabel = $isDetalleEmpleado ? 'Volver a Hikvision' : 'Regresar al inicio'
   <title><?= htmlspecialchars($titulo) ?></title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-  <link rel="stylesheet" href="../../assets/css/dashboard.css?v=<?= urlencode((string)$version) ?>">
+  <link rel="stylesheet" href="../../assets/css/dashboard.css?v=<?= urlencode((string)max((int)$version, (int)(@filemtime(__DIR__ . "/../../assets/css/dashboard.css") ?: 0))) ?>">
+  <script src="../../assets/js/display-mode.js?v=<?= urlencode((string)max((int)$version, (int)(@filemtime(__DIR__ . "/../../assets/js/display-mode.js") ?: 0))) ?>"></script>
   <style>
     .filters-shell, .detail-shell, .table-shell, .preview-modal-card {
       background: #fff;
@@ -143,6 +144,17 @@ $topBackLabel = $isDetalleEmpleado ? 'Volver a Hikvision' : 'Regresar al inicio'
       margin-top:12px;
       color:#64748b;
       font-size:0.9rem;
+    }
+    @media (min-width: 1800px) {
+      .filters-shell, .detail-shell { padding: 24px; margin-bottom: 28px; }
+      .filters-grid { gap: 16px; }
+      .field-group { min-width: 190px; }
+      .field-group label, .status-pill { font-size: 0.9rem; }
+      .field-group input, .action-btn, .detail-back, .photo-btn { padding: 12px 16px; }
+      .table-toolbar, .detail-header, .pagination { padding: 20px 24px; }
+      .table-search { max-width: 520px; }
+      .table-search input { padding: 12px 16px 12px 42px; }
+      .page-btn { min-width: 44px; height: 44px; }
     }
     @media (max-width: 900px) { .dashboard { padding:22px 16px; } .table-wrapper { overflow-x:auto; } }
   </style>

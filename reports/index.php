@@ -10,7 +10,8 @@ $groupCatalog = (array)($registry['groups'] ?? []);
 $reports = (array)($registry['reports'] ?? []);
 $reports = array_values(array_filter($reports, fn($r) => !isset($r['enabled']) || $r['enabled'] === true));
 $selectedGroupKey = trim((string)($_GET['grupo'] ?? ''));
-$currentMode = trim((string)($_GET['modo'] ?? ''));
+$currentMode = trim((string)($_GET['modo'] ?? ($_GET['mode'] ?? '')));
+$modeKey = isset($_GET['mode']) ? 'mode' : 'modo';
 
 function e(string $value): string
 {
@@ -22,18 +23,25 @@ function isExternalUrl(string $value): bool
   return preg_match('/^https?:\/\//i', $value) === 1;
 }
 
-function groupVisibleInMode(array $groupMeta, string $mode): bool
+function groupVisibleInMode(array $groupMeta, string $mode, string $groupKey = ''): bool
 {
   $visibleModes = array_values(array_filter(array_map(
     static fn($value): string => trim((string)$value),
     (array)($groupMeta['visible_modes'] ?? [])
   )));
 
-  if (empty($visibleModes)) {
-    return true;
+  // Si modo es vacio, mostrar grupos sin visible_modes
+  if ($mode === '') {
+    return empty($visibleModes);
   }
 
-  return $mode !== '' && in_array($mode, $visibleModes, true);
+  // Si modo es 'muro', mostrar grupos sin visible_modes + grupos con 'muro'
+  if ($mode === 'muro') {
+    return empty($visibleModes) || in_array('muro', $visibleModes, true);
+  }
+
+  // Para otros modos (como 'direccion-general'), mostrar solo los grupos configurados para ese modo
+  return in_array($mode, $visibleModes, true);
 }
 
 $groups = [];
@@ -108,6 +116,7 @@ if ($selectedGroupKey !== '') {
 
   <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <script src="../assets/js/display-mode.js?v=<?= urlencode((string)(@filemtime(__DIR__ . '/../assets/js/display-mode.js') ?: time())) ?>"></script>
 
   <style>
     * {
@@ -448,6 +457,75 @@ if ($selectedGroupKey !== '') {
       line-height: 1.6;
     }
 
+    @media (min-width: 1800px) {
+      .page {
+        max-width: min(96vw, 2360px);
+        padding: 40px 48px 60px;
+      }
+
+      .hero {
+        margin-bottom: 38px;
+      }
+
+      .hero h1 {
+        font-size: 3rem;
+      }
+
+      .hero p {
+        max-width: 1080px;
+        font-size: 1.08rem;
+      }
+
+      .toolbar {
+        margin-bottom: 30px;
+      }
+
+      .search-box input {
+        padding: 14px 18px 14px 46px;
+        font-size: 1rem;
+      }
+
+      .count-badge {
+        font-size: 0.95rem;
+        padding: 12px 16px;
+      }
+
+      .group-grid {
+        grid-template-columns: repeat(auto-fill, minmax(430px, 1fr));
+        gap: 26px;
+      }
+
+      .reports-grid {
+        grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+        gap: 18px;
+      }
+
+      .group-card,
+      .report-card {
+        border-radius: 26px;
+      }
+
+      .group-card {
+        padding: 26px;
+      }
+    }
+
+    @media (min-width: 2560px) {
+      .page {
+        max-width: min(94vw, 3000px);
+        padding: 48px 64px 72px;
+      }
+
+      .group-grid {
+        grid-template-columns: repeat(auto-fill, minmax(480px, 1fr));
+        gap: 30px;
+      }
+
+      .reports-grid {
+        grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+      }
+    }
+
     @media (max-width: 768px) {
       .page {
         padding: 20px 16px 36px;
@@ -461,6 +539,109 @@ if ($selectedGroupKey !== '') {
       .reports-grid {
         grid-template-columns: 1fr;
       }
+    }
+
+    html.executive-display .page {
+      max-width: none;
+      width: 100%;
+      padding: 14px 18px 20px;
+    }
+
+    html.executive-display .hero {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 14px;
+    }
+
+    html.executive-display .hero h1 {
+      font-size: 1.55rem;
+      line-height: 1.1;
+      margin-bottom: 0;
+    }
+
+    html.executive-display .hero p,
+    html.executive-display .footer-note {
+      display: none;
+    }
+
+    html.executive-display .toolbar {
+      margin-bottom: 12px;
+      gap: 10px;
+    }
+
+    html.executive-display .search-box input {
+      padding: 10px 14px 10px 40px;
+      min-height: 42px;
+      font-size: 0.86rem;
+    }
+
+    html.executive-display .count-badge,
+    html.executive-display .back-link,
+    html.executive-display .btn {
+      padding: 9px 12px;
+      font-size: 0.8rem;
+    }
+
+    html.executive-display .group-grid {
+      grid-template-columns: repeat(auto-fit, minmax(245px, 1fr));
+      gap: 10px;
+    }
+
+    html.executive-display .reports-grid {
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 10px;
+    }
+
+    html.executive-display .group-card,
+    html.executive-display .report-card {
+      border-radius: 14px;
+      padding: 14px;
+      min-height: auto;
+    }
+
+    html.executive-display .group-card-top,
+    html.executive-display .report-card-top {
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    html.executive-display .icon-wrap {
+      width: 40px;
+      height: 40px;
+      min-width: 40px;
+      border-radius: 12px;
+      font-size: 1rem;
+    }
+
+    html.executive-display .group-card h2,
+    html.executive-display .report-card h2 {
+      font-size: 1rem;
+      line-height: 1.18;
+    }
+
+    html.executive-display .group-description,
+    html.executive-display .report-description {
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      font-size: 0.78rem;
+      line-height: 1.35;
+      margin-bottom: 10px;
+    }
+
+    html.executive-display .group-actions,
+    html.executive-display .report-actions {
+      margin-top: 8px;
+      gap: 8px;
+    }
+
+    html.executive-display .group-toggle,
+    html.executive-display .report-link {
+      padding: 8px 10px;
+      font-size: 0.78rem;
     }
   </style>
 </head>
@@ -499,7 +680,7 @@ if ($selectedGroupKey !== '') {
               <p><?= e($selectedGroup['description']) ?></p>
             </div>
           </div>
-          <?php $backGroupHref = './index.php' . ($currentMode !== '' ? ('?modo=' . urlencode($currentMode)) : ''); ?>
+          <?php $backGroupHref = './index.php' . ($currentMode !== '' ? ('?' . $modeKey . '=' . urlencode($currentMode)) : ''); ?>
           <a href="<?= e($backGroupHref) ?>" class="panel-close" style="text-decoration:none;">
             <i class="fas fa-arrow-left" style="margin-right: 8px;"></i>
             Regresar
@@ -511,6 +692,12 @@ if ($selectedGroupKey !== '') {
             <?php
             $reportUrl = (string)($report['url'] ?? '#');
             $isExternalReport = isExternalUrl($reportUrl) || !empty($report['external']);
+            // Preserve current mode when opening internal reports from group view
+            $reportHref = $reportUrl;
+            if (!$isExternalReport && $currentMode !== '') {
+              $reportHref .= (strpos($reportUrl, '?') === false ? '?' : '&') . $modeKey . '=' . urlencode($currentMode);
+            }
+
             $reportCtaLabel = trim((string)($report['cta_label'] ?? ''));
             if ($reportCtaLabel === '') {
               $reportCtaLabel = $isExternalReport ? 'Ir al sitio' : 'Ver reporte';
@@ -539,7 +726,7 @@ if ($selectedGroupKey !== '') {
 
                 <a
                   class="btn"
-                  href="<?= e($reportUrl) ?>"
+                  href="<?= e($reportHref) ?>"
                   style="background: <?= e($report['color'] ?? '#10b981') ?>;"
                   <?= $isExternalReport ? 'target="_blank" rel="noopener noreferrer"' : '' ?>>
                   <?= e($reportCtaLabel) ?>
@@ -591,9 +778,9 @@ if ($selectedGroupKey !== '') {
               <a
                 class="group-toggle"
                 href="./index.php?<?= e(http_build_query(array_filter([
-                  'grupo' => (string)$group['key'],
-                  'modo' => $currentMode !== '' ? $currentMode : null,
-                ], static fn($value) => $value !== null && $value !== ''))) ?>"
+                    'grupo' => (string)$group['key'],
+                    $modeKey => $currentMode !== '' ? $currentMode : null,
+                  ], static fn($value) => $value !== null && $value !== ''))) ?>"
                 style="background: <?= e($group['color']) ?>; text-decoration:none;">
                 Abrir
                 <i class="fas fa-arrow-right"></i>

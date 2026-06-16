@@ -2,7 +2,16 @@
 
 function conectar(array $cfg): PDO
 {
-    $dsn = "mysql:host={$cfg['host']};dbname={$cfg['dbname']};charset={$cfg['charset']}";
+    $host = (string)($cfg['host'] ?? 'localhost');
+    $port = $cfg['port'] ?? null;
+    if ($port === null && preg_match('/^(.+):(\d+)$/', $host, $matches) === 1) {
+        $host = $matches[1];
+        $port = (int)$matches[2];
+    }
+
+    $dsn = "mysql:host={$host};"
+        . ($port !== null ? "port={$port};" : '')
+        . "dbname={$cfg['dbname']};charset={$cfg['charset']}";
     return new PDO($dsn, $cfg['user'], $cfg['pass'], [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,

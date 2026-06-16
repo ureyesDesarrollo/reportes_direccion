@@ -203,8 +203,17 @@ $startIndex    = max(0, $totalSemanas - $windowSize);
 <script>
   (function() {
     const semanas = <?= json_encode(array_values($semanasCatalogo), JSON_UNESCAPED_UNICODE) ?>;
-    const windowSize = 5;
-    let startIndex = <?= (int)$startIndex ?>;
+    const getPivotWindowSize = () => {
+      const executivePanel = document.documentElement.classList.contains('executive-display');
+      const screenWide = Math.max((window.screen && window.screen.width) || 0, (window.screen && window.screen.height) || 0) >= 1920;
+      if (window.matchMedia('(min-width: 2560px)').matches) return 9;
+      if (executivePanel && screenWide) return 9;
+      if (window.matchMedia('(min-width: 1800px)').matches) return 7;
+      if (executivePanel) return 7;
+      return 5;
+    };
+    const windowSize = Math.min(semanas.length || 5, getPivotWindowSize());
+    let startIndex = Math.max(0, semanas.length - windowSize);
 
     const prevBtn = document.getElementById('pivotPrevBtn');
     const nextBtn = document.getElementById('pivotNextBtn');
