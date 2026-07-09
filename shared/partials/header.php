@@ -92,20 +92,13 @@ $urlImpacto = $basePath . '?' . http_build_query(array_merge($queryBase, ['modo'
         ($modoActual === 'direccion-general')
       ); ?>
       <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:10px;">
-        <?php if ($isDireccionGeneral): ?>
-          <a href="#" class="back-btn" onclick="history.back(); return false;" style="display:inline-flex; align-items:center; gap:8px; padding:10px 14px; border-radius:999px; text-decoration:none; font-weight:700; border:1px solid #e2e8f0; background:#ffffff; color:#334155;">
-            <i class="fas fa-arrow-left"></i>
-            <?= htmlspecialchars($urlVolverLabel ?? 'Regresar') ?>
-          </a>
-        <?php else: ?>
-          <a
-            href="<?= htmlspecialchars($urlVolverIndex) ?>"
-            class="back-btn"
-            style="display:inline-flex; align-items:center; gap:8px; padding:10px 14px; border-radius:999px; text-decoration:none; font-weight:700; border:1px solid #e2e8f0; background:#ffffff; color:#334155;">
-            <i class="fas fa-arrow-left"></i>
-            <?= htmlspecialchars($urlVolverLabel ?? 'Regresar al inicio') ?>
-          </a>
-        <?php endif; ?>
+        <a
+          href="<?= htmlspecialchars($urlVolverIndex) ?>"
+          class="back-btn"
+          style="display:inline-flex; align-items:center; gap:8px; padding:10px 14px; border-radius:999px; text-decoration:none; font-weight:700; border:1px solid #e2e8f0; background:#ffffff; color:#334155;">
+          <i class="fas fa-arrow-left"></i>
+          <?= htmlspecialchars($urlVolverLabel ?? 'Regresar al inicio') ?>
+        </a>
       </div>
 
       <h1>

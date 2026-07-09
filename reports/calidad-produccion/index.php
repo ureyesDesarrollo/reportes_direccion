@@ -704,37 +704,35 @@ $formatAvg = static fn(?float $value): string => $value === null ? '-' : n($valu
     .physchem-value-box strong {
       font-size: 1rem;
       font-weight: 700;
-      color: #1a3a4f;
+      color: #ffff;
       display: block;
     }
 
     .physchem-value-box span {
       font-size: 0.6rem;
       font-weight: 600;
-      color: #7a8e9c;
+      color: #ffff;
       text-transform: uppercase;
     }
 
     .physchem-value-cell.verde .physchem-value-box,
     .physchem-value-cell.dentro .physchem-value-box {
-      background: #eafaf0;
-      border-color: #b8e0c6;
+      background: #2e8b57;
+      color: white;
+      border-color: #257447;
     }
 
     .physchem-value-cell.amarillo .physchem-value-box {
-      background: #fff4e6;
-      border-color: #ffdeb3;
+      background: #e49a32;
+      color: white;
+      border-color: #c47b1c;
     }
 
     .physchem-value-cell.rojo .physchem-value-box,
     .physchem-value-cell.fuera .physchem-value-box {
-      background: #fee9e7;
-      border-color: #fbc5bd;
-    }
-
-    .physchem-value-cell.rojo strong,
-    .physchem-value-cell.fuera strong {
-      color: #c73a2b;
+      background: #c94436;
+      color: white;
+      border-color: #a9362c;
     }
 
     /* Responsive */
@@ -823,15 +821,7 @@ $formatAvg = static fn(?float $value): string => $value === null ? '-' : n($valu
   <div class="dashboard">
     <div class="header">
       <div class="header-left">
-        <?php $isDireccionGeneral = (
-          (isset($_GET['mode']) && (string)$_GET['mode'] === 'direccion-general') ||
-          (isset($_GET['modo']) && (string)$_GET['modo'] === 'direccion-general')
-        ); ?>
-        <?php if ($isDireccionGeneral): ?>
-          <a href="#" class="back-btn" onclick="history.back(); return false;"><i class="fas fa-arrow-left"></i> Regresar</a>
-        <?php else: ?>
-          <a href="../index.php" class="back-btn"><i class="fas fa-arrow-left"></i> Regresar al inicio</a>
-        <?php endif; ?>
+        <a href="../index.php" class="back-btn"><i class="fas fa-arrow-left"></i> Regresar al inicio</a>
         <h1><i class="fas fa-chart-line"></i><?= htmlspecialchars($titulo) ?></h1>
         <div class="sub">
           <span><i class="fas fa-calendar-alt"></i> <?= htmlspecialchars($periodoRangoLabel) ?></span>

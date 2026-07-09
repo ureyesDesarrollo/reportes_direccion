@@ -22,6 +22,7 @@ $corteSegundos = (int)$corteMatches[3];
 $corteSegundosTotales = ($corteHoras * 3600) + ($corteMinutos * 60) + $corteSegundos;
 $productosExcluidos = array_values(array_filter(array_map('intval', (array)($config['productos_excluidos'] ?? [])), static fn(int $id): bool => $id > 0));
 $productosExcluidosSql = !empty($productosExcluidos) ? 'AND t.pro_id NOT IN (' . implode(',', $productosExcluidos) . ')' : '';
+$calidadAsignadaSql = 'AND t.cal_id IS NOT NULL AND t.cal_id <> 0';
 
 $setHoraCorte = static function (DateTimeImmutable $date) use ($corteHoras, $corteMinutos, $corteSegundos): DateTimeImmutable {
   return $date->setTime($corteHoras, $corteMinutos, $corteSegundos);
@@ -234,6 +235,7 @@ $sql = "
   WHERE t.tar_fecha >= ?
     AND t.tar_fecha < ?
     {$productosExcluidosSql}
+    {$calidadAsignadaSql}
   ORDER BY t.tar_fecha ASC, t.tar_id ASC
 ";
 
@@ -378,6 +380,7 @@ $trendSql = "
   WHERE t.tar_fecha >= ?
     AND t.tar_fecha < ?
     {$productosExcluidosSql}
+    {$calidadAsignadaSql}
   ORDER BY t.tar_fecha ASC, t.tar_id ASC
 ";
 
@@ -524,6 +527,7 @@ $fisicoSql = "
   WHERE t.tar_fecha >= ?
     AND t.tar_fecha < ?
     {$productosExcluidosSql}
+    {$calidadAsignadaSql}
   ORDER BY t.tar_fecha ASC, t.tar_id ASC
 ";
 

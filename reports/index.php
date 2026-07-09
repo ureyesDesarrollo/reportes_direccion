@@ -29,6 +29,14 @@ function groupVisibleInMode(array $groupMeta, string $mode, string $groupKey = '
     static fn($value): string => trim((string)$value),
     (array)($groupMeta['visible_modes'] ?? [])
   )));
+  $hiddenModes = array_values(array_filter(array_map(
+    static fn($value): string => trim((string)$value),
+    (array)($groupMeta['hidden_modes'] ?? [])
+  )));
+
+  if ($mode !== '' && in_array($mode, $hiddenModes, true)) {
+    return false;
+  }
 
   // Si modo es vacio, mostrar grupos sin visible_modes
   if ($mode === '') {
@@ -205,6 +213,44 @@ if ($selectedGroupKey !== '') {
       font-size: 0.85rem;
       font-weight: 600;
       white-space: nowrap;
+    }
+
+    .display-mode-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      border: 1px solid #dbe2ea;
+      border-radius: 999px;
+      background: #ffffff;
+      color: #475569;
+      padding: 10px 14px;
+      font-size: 0.85rem;
+      font-weight: 700;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.2s ease;
+    }
+
+    .display-mode-toggle i {
+      color: #64748b;
+    }
+
+    .display-mode-toggle:hover {
+      border-color: #93c5fd;
+      color: #1d4ed8;
+      box-shadow: 0 8px 18px rgba(37, 99, 235, 0.10);
+      transform: translateY(-1px);
+    }
+
+    .display-mode-toggle.is-active {
+      background: #1d4ed8;
+      border-color: #1d4ed8;
+      color: #ffffff;
+      box-shadow: 0 10px 22px rgba(37, 99, 235, 0.18);
+    }
+
+    .display-mode-toggle.is-active i {
+      color: #ffffff;
     }
 
     .group-grid {
@@ -666,6 +712,11 @@ if ($selectedGroupKey !== '') {
         <span id="reportCount"><?= $selectedGroup !== null ? count((array)($selectedGroup['reports'] ?? [])) : count($groups) ?></span>
         <?= $selectedGroup !== null ? 'sitio(s)' : 'grupo(s)' ?>
       </div>
+
+      <button type="button" class="display-mode-toggle" id="displayModeToggle" aria-pressed="false">
+        <i class="fas fa-display"></i>
+        <span>Modo pantalla</span>
+      </button>
     </section>
 
     <?php if ($selectedGroup !== null): ?>
@@ -823,6 +874,34 @@ if ($selectedGroupKey !== '') {
       }
 
       input.addEventListener('input', filterReports);
+    })();
+
+    (function() {
+      const button = document.getElementById('displayModeToggle');
+      if (!button) return;
+
+      const label = button.querySelector('span');
+
+      function syncButton(mode) {
+        const active = mode === 'executive';
+        button.classList.toggle('is-active', active);
+        button.setAttribute('aria-pressed', active ? 'true' : 'false');
+        if (label) {
+          label.textContent = active ? 'Modo pantalla activo' : 'Modo pantalla';
+        }
+      }
+
+      syncButton(document.documentElement.dataset.displayMode || 'normal');
+
+      button.addEventListener('click', function() {
+        if (window.ReportDisplayMode && typeof window.ReportDisplayMode.toggle === 'function') {
+          syncButton(window.ReportDisplayMode.toggle());
+        }
+      });
+
+      window.addEventListener('report-display-mode-change', function(event) {
+        syncButton(event.detail && event.detail.mode ? event.detail.mode : 'normal');
+      });
     })();
   </script>
 </body>

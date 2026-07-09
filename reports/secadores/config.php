@@ -1,193 +1,392 @@
 <?php
 
-return [
+$detailConfig = require __DIR__ . '/../secadores-temperatura/config.php';
+
+return array_replace_recursive($detailConfig, [
   'titulo' => 'Secadores',
-  'fecha_desde' => date('Y-m-d'),
-  'intervalo_actualizacion_ms' => 1800000,
-  'limite_registros' => 120,
-  'intervalo_muestreo_minutos' => 30,
-  'tunel_default' => 'tunel_1',
-  'timezone' => 'America/Mexico_City',
-  'formato_fecha' => 'Y-m-d H:i:s',
-  'formato_fecha_grafica' => 'H:i:s',
-
-  // Ajusta esta conexión con los datos reales del SQL Server.
-  'sqlserver' => [
-    'server' => '192.168.1.105',
-    'port' => 1433,
-    'database' => 'AVEVA_TAGS',
-    'user' => 'pbi',
-    'pass' => 'Fer_Zam@2025',
-    'encrypt' => false,
-    'trust_server_certificate' => true,
-    'login_timeout' => 5,
+  'intervalo_actualizacion_ms' => 600000,
+  'intervalo_actualizacion_rapida_ms' => 60000,
+  'mysql_secadores' => [
+    'host' => 'localhost',
+    'port' => 3306,
+    'dbname' => 'bd_secadores',
+    'user' => 'root',
+    'pass' => 'Pr0gel+2024',
+    'charset' => 'utf8mb4',
   ],
-
-  // Ajusta este campo al nombre real de fecha/hora en TREND001.
-  'tabla' => 'TREND001',
-  'campo_fecha' => 'Time_Stamp',
-
-  'tuneles' => [
+  'metricas_por_tunel' => [
     'tunel_1' => [
-      'titulo' => 'Túnel 1',
-      'campos' => [
-        'TEMPERATURA_RECAMARA_2_TUNEL_1' => [
-          'label' => 'Recámara 2',
-          'semaforo' => [
-            'modo' => 'rango',
-            'verde_min' => 34.4,
-            'verde_max' => 37.6,
-            'amarillo_min' => 34,
-            'amarillo_max' => 38
+      'velocidad_banda' => [
+        'group' => 'Banda',
+        'label' => 'Velocidad de banda',
+        'field' => null,
+        'unit' => '',
+        'available' => false,
+        'empty_label' => 'Sin medición',
+      ],
+      'caudal_aire' => [
+        'group' => 'Banda',
+        'label' => 'Caudal de aire',
+        'source' => 'mysql_secadores',
+        'field' => 'caudal',
+        'unit' => 'm³/h',
+        'available' => true,
+        'empty_label' => 'Sin dato',
+        'lookup' => [
+          'table' => 'secadores_caudal_registros',
+          'key_column' => 'tunel_key',
+          'key_value' => 'tunel_1',
+          'timestamp_column' => 'fecha_hora',
+        ],
+        'leyenda' => 'Lectura actual | Rango pendiente de definir',
+      ],
+      'agua_caliente_suministro' => [
+        'group' => 'Agua y vapor',
+        'label' => 'Agua caliente / suministro',
+        'field' => null,
+        'unit' => '°C',
+        'available' => false,
+        'empty_label' => 'Sin medición',
+      ],
+      'agua_caliente_retorno' => [
+        'group' => 'Agua y vapor',
+        'label' => 'Agua caliente / retorno',
+        'field' => null,
+        'unit' => '°C',
+        'available' => false,
+        'empty_label' => 'Sin medición',
+      ],
+      'presion_vapor' => [
+        'group' => 'Agua y vapor',
+        'label' => 'Presión de vapor',
+        'field' => null,
+        'unit' => 'bar(a)',
+        'available' => false,
+        'empty_label' => 'Sin medición',
+      ],
+      'humedad_zona_1_inferior' => [
+        'group' => 'Humedades',
+        'label' => 'Humedad zona 1 inferior',
+        'field' => 'SECADOR_AS_HUMEDAD_ZONA_1_INFERIOR',
+        'unit' => '%',
+        'available' => true,
+        'empty_label' => 'Sin dato',
+        'leyenda' => 'Lectura actual | Rango pendiente de definir',
+      ],
+      'humedad_zona_2_inferior' => [
+        'group' => 'Humedades',
+        'label' => 'Humedad zona 2 inferior',
+        'field' => 'SECADOR_AS_HUMEDAD_ZONA_2_INFERIOR',
+        'unit' => '%',
+        'available' => true,
+        'empty_label' => 'Sin dato',
+        'leyenda' => 'Lectura actual | Rango pendiente de definir',
+      ],
+      'humedad_zona_3_inferior' => [
+        'group' => 'Humedades',
+        'label' => 'Humedad zona 3 inferior',
+        'field' => 'SECADOR_AS_HUMEDAD_ZONA_3_INFERIOR',
+        'unit' => '%',
+        'available' => true,
+        'empty_label' => 'Sin dato',
+        'leyenda' => 'Lectura actual | Rango pendiente de definir',
+      ],
+      'humedad_zona_4_inferior' => [
+        'group' => 'Humedades',
+        'label' => 'Humedad zona 4 inferior',
+        'field' => 'SECADOR_AS_HUMEDAD_ZONA_4_INFERIOR',
+        'unit' => '%',
+        'available' => true,
+        'empty_label' => 'Sin dato',
+        'leyenda' => 'Lectura actual | Rango pendiente de definir',
+      ],
+      'humedad_zona_5_inferior' => [
+        'group' => 'Humedades',
+        'label' => 'Humedad zona 5 inferior',
+        'field' => 'SECADOR_AS_HUMEDAD_ZONA_5_INFERIOR',
+        'unit' => '%',
+        'available' => true,
+        'empty_label' => 'Sin dato',
+        'leyenda' => 'Lectura actual | Rango pendiente de definir',
+      ],
+      'humedad_zona_6_inferior' => [
+        'group' => 'Humedades',
+        'label' => 'Humedad zona 6 inferior',
+        'field' => 'SECADOR_AS_HUMEDAD_ZONA_6_INFERIOR',
+        'unit' => '%',
+        'available' => true,
+        'empty_label' => 'Sin dato',
+        'leyenda' => 'Lectura actual | Rango pendiente de definir',
+      ],
+      'humedad_zona_7_inferior' => [
+        'group' => 'Humedades',
+        'label' => 'Humedad zona 7 inferior',
+        'field' => 'SECADOR_AS_HUMEDAD_ZONA_7_INFERIOR',
+        'unit' => '%',
+        'available' => true,
+        'empty_label' => 'Sin dato',
+        'leyenda' => 'Lectura actual | Rango pendiente de definir',
+      ],
+      'humedad_zona_8_inferior' => [
+        'group' => 'Humedades',
+        'label' => 'Humedad zona 8 inferior',
+        'field' => 'SECADOR_AS_HUMEDAD_ZONA_8_INFERIOR',
+        'unit' => '%',
+        'available' => true,
+        'empty_label' => 'Sin dato',
+        'leyenda' => 'Lectura actual | Rango pendiente de definir',
+      ],
+      'humedad_zona_9_inferior' => [
+        'group' => 'Humedades',
+        'label' => 'Humedad zona 9 inferior',
+        'field' => 'SECADOR_AS_HUMEDAD_ZONA_9_INFERIOR',
+        'unit' => '%',
+        'available' => true,
+        'empty_label' => 'Sin dato',
+        'leyenda' => 'Lectura actual | Rango pendiente de definir',
+      ],
+    ],
+    'tunel_2' => [
+      'velocidad_banda' => [
+        'group' => 'Banda',
+        'label' => 'Velocidad de banda',
+        'field' => 'T5VELB',
+        'unit' => '',
+        'available' => true,
+        'empty_label' => 'Sin dato',
+      ],
+      'caudal_aire' => [
+        'group' => 'Banda',
+        'label' => 'Caudal de aire',
+        'source' => 'mysql_secadores',
+        'field' => 'caudal',
+        'unit' => 'm³/h',
+        'available' => true,
+        'empty_label' => 'Sin dato',
+        'lookup' => [
+          'table' => 'secadores_caudal_registros',
+          'key_column' => 'tunel_key',
+          'key_value' => 'tunel_2',
+          'timestamp_column' => 'fecha_hora',
+        ],
+        'semaforo' => [
+          'modo' => 'rango',
+          'verde_min' => 74000,
+          'verde_max' => 82500,
+          'amarillo_min' => 70000,
+          'amarillo_max' => 83999.99,
+        ],
+        'leyenda' => 'Ideal 75,000 m³/h | Verde 74,000-82,500 | Atención 70,000-73,999 | Crítico <70,000 o >82,500',
+      ],
+      'agua_caliente_suministro' => [
+        'group' => 'Agua y vapor',
+        'label' => 'Agua caliente / suministro',
+        'field' => 'ENTRADA_DE_AGUA_CALIENTE_DE_TUNEL_1',
+        'unit' => '°C',
+        'available' => true,
+        'empty_label' => 'Sin dato',
+        'semaforo' => [
+          'modo' => 'rango',
+          'verde_min' => 88,
+          'verde_max' => 92,
+          'amarillo_min' => 85,
+          'amarillo_max' => 87.99,
+        ],
+        'leyenda' => 'Ideal 90 °C | Verde 88-92 | Atención 85-87 | Crítico <85',
+      ],
+      'agua_caliente_retorno' => [
+        'group' => 'Agua y vapor',
+        'label' => 'Agua caliente / retorno',
+        'field' => 'RETORNO_DE_AGUA_CALIENTE_DE_TUNEL_1',
+        'unit' => '°C',
+        'available' => true,
+        'empty_label' => 'Sin dato',
+        'semaforo' => [
+          'modo' => 'rango',
+          'verde_min' => 68,
+          'verde_max' => 72,
+        ],
+        'leyenda' => 'Ideal 70 °C | Verde 68-72',
+      ],
+      'presion_vapor' => [
+        'group' => 'Agua y vapor',
+        'label' => 'Presión de vapor',
+        'field' => 'PRESION_DE_VAPOR',
+        'unit' => 'bar(a)',
+        'available' => true,
+        'empty_label' => 'Sin dato',
+        'semaforo' => [
+          'modo' => 'rango',
+          'verde_min' => 3.0,
+          'verde_max' => 3.2,
+          'amarillo_min' => 2.8,
+          'amarillo_max' => 2.99,
+        ],
+        'leyenda' => 'Ideal 3.1 bar(a) | Verde 3.0-3.2 | Atención 2.8-2.9 | Crítico <2.8',
+      ],
+      'humedad_recamara_2' => [
+        'group' => 'Humedades',
+        'label' => 'Recámara 2',
+        'field' => 'T5SHZ2PV',
+        'unit' => '%',
+        'available' => true,
+        'empty_label' => 'Sin dato',
+        'leyenda' => 'Lectura actual | Rango pendiente de definir',
+      ],
+      'humedad_recamara_4' => [
+        'group' => 'Humedades',
+        'label' => 'Recámara 4',
+        'field' => 'T5SHZ4PV',
+        'unit' => '%',
+        'available' => true,
+        'empty_label' => 'Sin dato',
+        'leyenda' => 'Lectura actual | Rango pendiente de definir',
+      ],
+      'humedad_recamara_8' => [
+        'group' => 'Humedades',
+        'label' => 'Recámara 8',
+        'field' => 'T5SHZ8PV',
+        'unit' => '%',
+        'available' => true,
+        'empty_label' => 'Sin dato',
+        'leyenda' => 'Lectura actual | Rango pendiente de definir',
+      ],
+      'humedad_suministro_aire' => [
+        'group' => 'Humedades',
+        'label' => 'Aire de suministro',
+        'field' => 'T5HHVACZ1PV',
+        'unit' => 'g/kg',
+        'available' => true,
+        'empty_label' => 'Sin dato',
+        'semaforo' => [
+          'modo' => 'maximo',
+          'verde_max' => 7.5,
+          'amarillo_max' => 8.5,
+        ],
+        'leyenda' => 'Ideal ≤ 7.5 g/kg | Verde ≤ 7.5 | Atención 7.6-8.5 | Crítico > 8.5',
+      ],
+    ],
+  ],
+  'votators_por_tunel' => [
+    'tunel_1' => [
+      'votator_1' => [
+        'label' => 'Votator 1',
+        'campos' => [
+          'flujo' => [
+            'label' => 'Flujo',
+            'source' => 'sqlserver',
+            'field' => 'FLUJO_VOTATOR_1_SA',
+            'unit' => '',
+            'available' => true,
+            'empty_label' => 'Sin dato',
+          ],
+          'presion_cuajado' => [
+            'label' => 'Presión de cuajado',
+            'source' => 'sqlserver',
+            'field' => 'PRESION_CUAJADO_VOTATOR_1',
+            'unit' => 'kg/cm2',
+            'available' => true,
+            'empty_label' => 'Sin dato',
+            'semaforo' => [
+              'modo' => 'rango',
+              'verde_min' => 24,
+              'verde_max' => 26,
+              'amarillo_min' => 23,
+              'amarillo_max' => 27,
+            ],
+            'leyenda' => 'Óptimo 24-26 kg/cm2 | Atención 23 o 27 | Crítico <23 o >27',
           ],
         ],
-        'TEMPERATURA_RECAMARA_3_TUNEL_1' => [
-          'label' => 'Recámara 3',
-          'semaforo' => [
-            'modo' => 'rango',
-            'verde_min' => 43.4,
-            'verde_max' => 46.6,
-            'amarillo_min' => 43,
-            'amarillo_max' => 47
+      ],
+      'votator_2' => [
+        'label' => 'Votator 2',
+        'campos' => [
+          'flujo' => [
+            'label' => 'Flujo',
+            'source' => 'sqlserver',
+            'field' => 'FLUJO_VOTATOR_2_SA',
+            'unit' => '',
+            'available' => true,
+            'empty_label' => 'Sin dato',
           ],
-        ],
-        'TEMPERATURA_RECAMARA_4_TUNEL_1' => [
-          'label' => 'Recámara 4',
-          'semaforo' => [
-            'modo' => 'rango',
-            'verde_min' => 41.4,
-            'verde_max' => 44.6,
-            'amarillo_min' => 41,
-            'amarillo_max' => 45
-          ],
-        ],
-        'TEMPERATURA_RECAMARA_5_TUNEL_1' => [
-          'label' => 'Recámara 5',
-          'semaforo' => [
-            'modo' => 'rango',
-            'verde_min' => 48.4,
-            'verde_max' => 51.6,
-            'amarillo_min' => 48,
-            'amarillo_max' => 52
-          ],
-        ],
-        'TEMPERATURA_RECAMARA_6_TUNEL_1' => [
-          'label' => 'Recámara 6',
-          'semaforo' => [
-            'modo' => 'rango',
-            'verde_min' => 48.4,
-            'verde_max' => 51.6,
-            'amarillo_min' => 48,
-            'amarillo_max' => 52
-          ],
-        ],
-        'TEMPERATURA_RECAMARA_7_TUNEL_1' => [
-          'label' => 'Recámara 7',
-          'semaforo' => [
-            'modo' => 'rango',
-            'verde_min' => 56.4,
-            'verde_max' => 59.6,
-            'amarillo_min' => 56,
-            'amarillo_max' => 60
-          ],
-        ],
-        'TEMPERATURA_RECAMARA_8_TUNEL_1' => [
-          'label' => 'Recámara 8',
-          'semaforo' => [
-            'modo' => 'rango',
-            'verde_min' => 59.3,
-            'verde_max' => 61.7,
-            'amarillo_min' => 59,
-            'amarillo_max' => 62
+          'presion_cuajado' => [
+            'label' => 'Presión de cuajado',
+            'source' => 'sqlserver',
+            'field' => 'PRESION_CUAJADO_VOTATOR_2_SA',
+            'unit' => 'kg/cm2',
+            'available' => true,
+            'empty_label' => 'Sin dato',
+            'semaforo' => [
+              'modo' => 'rango',
+              'verde_min' => 24,
+              'verde_max' => 26,
+              'amarillo_min' => 23,
+              'amarillo_max' => 27,
+            ],
+            'leyenda' => 'Óptimo 24-26 kg/cm2 | Atención 23 o 27 | Crítico <23 o >27',
           ],
         ],
       ],
     ],
-
     'tunel_2' => [
-      'titulo' => 'Túnel 2',
-      'campos' => [
-        'TEMPERATURA_ZONA_1' => [
-          'label' => 'Zona 1',
-          'semaforo' => [
-            'modo' => 'rango',
-            'verde_min' => 31.8,
-            'verde_max' => 46.2,
-            'amarillo_min' => 30,
-            'amarillo_max' => 48
+      'votator_3' => [
+        'label' => 'Votator 3',
+        'campos' => [
+          'flujo' => [
+            'label' => 'Flujo',
+            'source' => 'sqlserver',
+            'field' => 'FLUJO_VOTATOR_1',
+            'unit' => '',
+            'available' => true,
+            'empty_label' => 'Sin dato',
+          ],
+          'presion_cuajado' => [
+            'label' => 'Presión de cuajado',
+            'source' => 'sqlserver',
+            'field' => 'PRESION__CUAJADO_VOTATOR_3',
+            'unit' => 'kg/cm2',
+            'available' => true,
+            'empty_label' => 'Sin dato',
+            'semaforo' => [
+              'modo' => 'rango',
+              'verde_min' => 24,
+              'verde_max' => 26,
+              'amarillo_min' => 23,
+              'amarillo_max' => 27,
+            ],
+            'leyenda' => 'Óptimo 24-26 kg/cm2 | Atención 23 o 27 | Crítico <23 o >27',
           ],
         ],
-        'TEMPERATURA_ZONA_2' => [
-          'label' => 'Zona 2',
-          'semaforo' => [
-            'modo' => 'rango',
-            'verde_min' => 26.6,
-            'verde_max' => 39.4,
-            'amarillo_min' => 25,
-            'amarillo_max' => 41
+      ],
+      'votator_4' => [
+        'label' => 'Votator 4',
+        'campos' => [
+          'flujo' => [
+            'label' => 'Flujo',
+            'source' => 'sqlserver',
+            'field' => 'FLUJO_VOTATOR_2',
+            'unit' => '',
+            'available' => true,
+            'empty_label' => 'Sin dato',
           ],
-        ],
-        'TEMPERATURA_ZONA_3' => [
-          'label' => 'Zona 3',
-          'semaforo' => [
-            'modo' => 'rango',
-            'verde_min' => 30.3,
-            'verde_max' => 48.7,
-            'amarillo_min' => 28,
-            'amarillo_max' => 51
-          ],
-        ],
-        'TEMPERATURA_ZONA_4' => [
-          'label' => 'Zona 4',
-          'semaforo' => [
-            'modo' => 'rango',
-            'verde_min' => 38.2,
-            'verde_max' => 47.8,
-            'amarillo_min' => 37,
-            'amarillo_max' => 49
-          ],
-        ],
-        'TEMPERATURA_ZONA_5' => [
-          'label' => 'Zona 5',
-          'semaforo' => [
-            'modo' => 'rango',
-            'verde_min' => 45.0,
-            'verde_max' => 53.0,
-            'amarillo_min' => 44,
-            'amarillo_max' => 54
-          ],
-        ],
-        'TEMPERATURA_ZONA_6' => [
-          'label' => 'Zona 6',
-          'semaforo' => [
-            'modo' => 'rango',
-            'verde_min' => 49.0,
-            'verde_max' => 57.0,
-            'amarillo_min' => 48,
-            'amarillo_max' => 58
-          ],
-        ],
-        'TEMPERATURA_ZONA_7' => [
-          'label' => 'Zona 7',
-          'semaforo' => [
-            'modo' => 'rango',
-            'verde_min' => 58.7,
-            'verde_max' => 64.3,
-            'amarillo_min' => 58,
-            'amarillo_max' => 65
-          ],
-        ],
-        'TEMPERATURA_ZONA_8' => [
-          'label' => 'Zona 8',
-          'semaforo' => [
-            'modo' => 'rango',
-            'verde_min' => 60.7,
-            'verde_max' => 66.3,
-            'amarillo_min' => 60,
-            'amarillo_max' => 67
+          'presion_cuajado' => [
+            'label' => 'Presión de cuajado',
+            'source' => 'sqlserver',
+            'field' => 'PRESION__CUAJADO_VOTATOR_4',
+            'unit' => 'kg/cm2',
+            'available' => true,
+            'empty_label' => 'Sin dato',
+            'semaforo' => [
+              'modo' => 'rango',
+              'verde_min' => 24,
+              'verde_max' => 26,
+              'amarillo_min' => 23,
+              'amarillo_max' => 27,
+            ],
+            'leyenda' => 'Óptimo 24-26 kg/cm2 | Atención 23 o 27 | Crítico <23 o >27',
           ],
         ],
       ],
     ],
   ],
-];
+]);

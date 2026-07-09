@@ -17,10 +17,11 @@ return [
     'charset' => getenv('PROD_DB_CHARSET') ?: 'utf8mb4',
   ],
   'hoshin' => [
-    'host' => 'localhost:3306',
-    'dbname' => 'hoshin_kanri',
-    'user' => 'root',
-    'pass' => '',
-    'charset' => 'utf8mb4',
+    'host' => getenv('HOSHIN_DB_HOST') ?: 'sis_preparacion-db-1',
+    'port' => (int)(getenv('HOSHIN_DB_PORT') ?: 3306),
+    'dbname' => getenv('HOSHIN_DB_NAME') ?: 'hoshin_proyectos_test',
+    'user' => getenv('HOSHIN_DB_USER') ?: 'root',
+    'pass' => getenv('HOSHIN_DB_PASS') ?: 'root',
+    'charset' => getenv('HOSHIN_DB_CHARSET') ?: 'utf8mb4',
   ],
 ];

@@ -23,7 +23,7 @@
     </div>
     <div class="kpi-label">Variables en alerta</div>
     <div class="kpi-value" id="secadoresAlertas">0</div>
-    <div class="kpi-trend">Lectura actual en zona amarilla</div>
+    <div class="kpi-trend">Lectura actual en recámara amarilla</div>
   </div>
 
   <div class="kpi-card">

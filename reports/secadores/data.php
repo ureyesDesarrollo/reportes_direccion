@@ -12,6 +12,29 @@ require __DIR__ . '/../../shared/helpers.php';
 
 try {
   $report = require __DIR__ . '/build_report.php';
+  $scope = trim((string)($_GET['scope'] ?? ''));
+
+  if ($scope === 'fast') {
+    $fastReport = [
+      'meta' => [
+        'intervaloActualizacionRapida' => $report['meta']['intervaloActualizacionRapida'] ?? 60000,
+      ],
+      'tuneles' => [],
+    ];
+
+    foreach ((array)($report['tuneles'] ?? []) as $tunnelKey => $tunnel) {
+      $fastReport['tuneles'][$tunnelKey] = [
+        'metricas' => [
+          'presion_vapor' => $tunnel['metricas']['presion_vapor'] ?? null,
+        ],
+        'votators' => $tunnel['votators'] ?? [],
+      ];
+    }
+
+    echo json_encode($fastReport, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    exit;
+  }
+
   echo json_encode($report, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 } catch (Throwable $e) {
   http_response_code(500);
