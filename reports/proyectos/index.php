@@ -58,10 +58,6 @@ $diamondClass = static function ($value): string {
   return 'critical';
 };
 
-$areaColumns = [[], []];
-foreach (array_values($areas) as $index => $area) {
-  $areaColumns[$index % 2][] = $area;
-}
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -201,16 +197,8 @@ foreach (array_values($areas) as $index => $area) {
 
     .board-grid {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 14px;
       align-items: start;
-    }
-
-    .area-column {
-      display: grid;
-      gap: 14px;
-      align-content: start;
-      min-width: 0;
     }
 
     .area-panel {
@@ -262,11 +250,35 @@ foreach (array_values($areas) as $index => $area) {
       text-transform: uppercase;
     }
 
+    .area-header-main {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
     .area-header span {
       font-size: 12px;
       font-weight: 700;
       opacity: 0.9;
       white-space: nowrap;
+    }
+
+    .print-area-btn {
+      min-height: 28px;
+      padding: 6px 10px;
+      border: 1px solid rgba(255, 255, 255, 0.72);
+      border-radius: 8px;
+      color: #ffffff;
+      background: rgba(255, 255, 255, 0.14);
+      font: inherit;
+      font-size: 12px;
+      font-weight: 900;
+      cursor: pointer;
+    }
+
+    .print-area-btn:hover {
+      background: rgba(255, 255, 255, 0.24);
     }
 
     .table-wrap {
@@ -278,7 +290,7 @@ foreach (array_values($areas) as $index => $area) {
       min-width: 920px;
       border-collapse: collapse;
       table-layout: fixed;
-      font-size: 10px;
+      font-size: 13px;
     }
 
     thead th {
@@ -286,7 +298,7 @@ foreach (array_values($areas) as $index => $area) {
       border-bottom: 1px solid var(--line);
       color: #445065;
       background: var(--head);
-      font-size: 9px;
+      font-size: 14px;
       font-weight: 900;
       text-align: left;
       text-transform: uppercase;
@@ -311,12 +323,12 @@ foreach (array_values($areas) as $index => $area) {
     }
 
     .col-project {
-      width: 22%;
+      width: 24%;
       font-weight: 800;
     }
 
     .col-priority {
-      width: 9%;
+      width: 8%;
     }
 
     .col-owner {
@@ -324,25 +336,25 @@ foreach (array_values($areas) as $index => $area) {
     }
 
     .col-date {
-      width: 8%;
+      width: 5.5%;
     }
 
     .col-progress {
-      width: 7%;
+      width: 6%;
       text-align: center;
     }
 
     .col-diamond {
-      width: 9%;
+      width: 8%;
       text-align: center;
     }
 
     .col-benefit {
-      width: 18%;
+      width: 19%;
     }
 
     .col-status {
-      width: 10%;
+      width: 8%;
     }
 
     .priority,
@@ -354,7 +366,7 @@ foreach (array_values($areas) as $index => $area) {
       max-width: 100%;
       padding: 4px 7px;
       border-radius: 999px;
-      font-size: 10px;
+      font-size: 13px;
       font-weight: 800;
       line-height: 1;
       white-space: normal;
@@ -479,6 +491,81 @@ foreach (array_values($areas) as $index => $area) {
       text-transform: uppercase;
     }
 
+    @media print {
+      @page {
+        size: landscape;
+        margin: 8mm;
+      }
+
+      *,
+      *::before,
+      *::after {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+
+      html,
+      body {
+        min-width: 0 !important;
+        background: #ffffff !important;
+      }
+
+      .dashboard-shell {
+        width: 100% !important;
+        padding: 0 !important;
+      }
+
+      body.printing-area .top-actions,
+      body.printing-area .dashboard-header,
+      body.printing-area .warning,
+      body.printing-area .print-area-btn {
+        display: none !important;
+      }
+
+      body.printing-area .board-grid {
+        display: block !important;
+      }
+
+      body.printing-area .area-panel {
+        display: none !important;
+      }
+
+      body.printing-area .area-panel.is-print-target {
+        display: block !important;
+        overflow: visible !important;
+        border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line)) !important;
+        box-shadow: none !important;
+      }
+
+      body.printing-area .table-wrap {
+        overflow: visible !important;
+      }
+
+      body.printing-area table {
+        min-width: 0 !important;
+        font-size: 10px !important;
+      }
+
+      body.printing-area thead th {
+        padding: 5px 4px !important;
+        font-size: 8px !important;
+      }
+
+      body.printing-area td {
+        height: auto !important;
+        padding: 5px 4px !important;
+        font-size: 9px !important;
+      }
+
+      body.printing-area .priority,
+      body.printing-area .status,
+      body.printing-area .diamond {
+        min-height: 18px !important;
+        padding: 3px 5px !important;
+        font-size: 8px !important;
+      }
+    }
+
     @media (max-width: 1480px) {
       body {
         min-width: 1000px;
@@ -486,10 +573,6 @@ foreach (array_values($areas) as $index => $area) {
 
       .dashboard-shell {
         width: min(1360px, calc(100vw - 24px));
-      }
-
-      .board-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
       }
 
     }
@@ -519,9 +602,6 @@ foreach (array_values($areas) as $index => $area) {
         padding-bottom: 2px;
       }
 
-      .board-grid {
-        grid-template-columns: 1fr;
-      }
     }
   </style>
 </head>
@@ -550,13 +630,14 @@ foreach (array_values($areas) as $index => $area) {
     <?php endforeach; ?>
 
     <section class="board-grid" aria-label="Tablero por area">
-      <?php foreach ($areaColumns as $columnAreas): ?>
-        <div class="area-column">
-          <?php foreach ($columnAreas as $area): ?>
-          <article class="area-panel accent-<?= $e($area['accent'] ?? 'indigo') ?>">
+      <?php foreach ($areas as $areaIndex => $area): ?>
+          <article id="project-area-<?= $e($areaIndex) ?>" class="area-panel accent-<?= $e($area['accent'] ?? 'indigo') ?>">
             <header class="area-header">
-              <h2><?= $e($area['nombre'] ?? 'Area') ?></h2>
-              <span><?= count((array)($area['items'] ?? [])) ?> proyecto(s)</span>
+              <div class="area-header-main">
+                <h2><?= $e($area['nombre'] ?? 'Area') ?></h2>
+                <span><?= count((array)($area['items'] ?? [])) ?> proyecto(s)</span>
+              </div>
+              <button class="print-area-btn" type="button" data-print-target="project-area-<?= $e($areaIndex) ?>">Imprimir</button>
             </header>
 
             <div class="table-wrap">
@@ -613,11 +694,31 @@ foreach (array_values($areas) as $index => $area) {
               </table>
             </div>
           </article>
-          <?php endforeach; ?>
-        </div>
       <?php endforeach; ?>
     </section>
   </main>
+  <script>
+    document.addEventListener('click', (event) => {
+      const button = event.target.closest('[data-print-target]');
+      if (!button) return;
+
+      const target = document.getElementById(button.dataset.printTarget || '');
+      if (!target) return;
+
+      const cleanup = () => {
+        document.body.classList.remove('printing-area');
+        target.classList.remove('is-print-target');
+      };
+
+      document.querySelectorAll('.area-panel.is-print-target').forEach((panel) => {
+        panel.classList.remove('is-print-target');
+      });
+      target.classList.add('is-print-target');
+      document.body.classList.add('printing-area');
+      window.addEventListener('afterprint', cleanup, { once: true });
+      window.print();
+    });
+  </script>
 </body>
 
 </html>

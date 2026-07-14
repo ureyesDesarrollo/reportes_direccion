@@ -97,11 +97,11 @@ return [
       ['estado_key' => 'rojo', 'estado' => 'Rojo', 'min' => 3.5, 'min_inclusive' => false, 'label' => '> 3.5'],
     ],
     'tar_humedad' => [
-      ['estado_key' => 'rojo', 'estado' => 'Rojo', 'max' => 8, 'max_inclusive' => false, 'label' => '< 8'],
-      ['estado_key' => 'amarillo', 'estado' => 'Amarillo', 'min' => 8, 'max' => 9, 'label' => '8 - 9'],
-      ['estado_key' => 'verde', 'estado' => 'Verde', 'min' => 9, 'min_inclusive' => false, 'max' => 11, 'label' => '9 - 11'],
-      ['estado_key' => 'amarillo', 'estado' => 'Amarillo', 'min' => 11, 'min_inclusive' => false, 'max' => 12, 'label' => '11 - 12'],
-      ['estado_key' => 'rojo', 'estado' => 'Rojo', 'min' => 12, 'min_inclusive' => false, 'label' => '> 12'],
+      ['estado_key' => 'rojo', 'estado' => 'Rojo', 'max' => 10.5, 'max_inclusive' => false, 'label' => '< 10.5'],
+      ['estado_key' => 'amarillo', 'estado' => 'Amarillo', 'min' => 10.5, 'max' => 11, 'max_inclusive' => false, 'label' => '10.5 - < 11'],
+      ['estado_key' => 'verde', 'estado' => 'Verde', 'min' => 11, 'max' => 12, 'label' => '11 - 12'],
+      ['estado_key' => 'amarillo', 'estado' => 'Amarillo', 'min' => 12, 'min_inclusive' => false, 'max' => 12.5, 'label' => '> 12 - 12.5'],
+      ['estado_key' => 'rojo', 'estado' => 'Rojo', 'min' => 12.5, 'min_inclusive' => false, 'label' => '> 12.5'],
     ],
     'tar_cenizas' => [
       ['estado_key' => 'verde', 'estado' => 'Verde', 'min' => 0, 'max' => 1, 'label' => '0 - 1.0'],
