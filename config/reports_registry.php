@@ -137,6 +137,16 @@ return [
       'enabled' => true,
     ],
     [
+      'slug' => 'concentradores',
+      'title' => 'CONCENTRADORES',
+      'description' => 'Monitoreo de flujo, temperatura, vacio y solidos por concentrador con semaforos configurables.',
+      'icon' => 'fa-industry',
+      'color' => '#10b981',
+      'groups' => ['produccion', 'direccion-general'],
+      'url' => './concentradores/index.php',
+      'enabled' => true,
+    ],
+    [
       'slug' => 'secadores-temperaturas',
       'title' => 'SECADORES / Temperaturas',
       'description' => 'Monitoreo histórico en tiempo casi real de temperaturas por túnel, con semáforos configurables por variable y actualización automática.',
@@ -144,7 +154,7 @@ return [
       'color' => '#10b981',
       'groups' => ['produccion'],
       'url' => './secadores-temperatura/index.php',
-      'enabled' => true,
+      'enabled' => false,
     ],
     [
       'slug' => 'calidad-produccion',
