@@ -107,6 +107,16 @@ return [
       'enabled' => true,
     ],
     [
+      'slug' => 'ventas',
+      'title' => 'VENTAS',
+      'description' => 'Resumen mensual de toneladas vendidas combinando facturas y remisiones.',
+      'icon' => 'fa-scale-balanced',
+      'color' => '#2563eb',
+      'groups' => ['ventas', 'direccion-general'],
+      'url' => './ventas/index.php',
+      'enabled' => true,
+    ],
+    [
       'slug' => 'avance-produccion',
       'title' => 'Avance de Producción',
       'description' => 'Avance mensual de toneladas, rendimiento, finos y déficit contra objetivo diario.',
@@ -114,6 +124,16 @@ return [
       'color' => '#10b981',
       'groups' => ['produccion', 'direccion-general'],
       'url' => './avance-produccion/index.php',
+      'enabled' => true,
+    ],
+    [
+      'slug' => 'produccion-monitoreo',
+      'title' => 'Producción Monitoreo',
+      'description' => 'Resumen operativo de producción con semáforos por módulo. Inicia con secadores por túnel.',
+      'icon' => 'fa-gauge-high',
+      'color' => '#10b981',
+      'groups' => ['produccion', 'direccion-general'],
+      'url' => './produccion-monitoreo/index.php',
       'enabled' => true,
     ],
     [

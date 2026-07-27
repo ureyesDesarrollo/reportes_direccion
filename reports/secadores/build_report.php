@@ -49,7 +49,8 @@ $quoteSqlIdentifier = static function (string $name): string {
   return '[' . $name . ']';
 };
 
-$historyLimit = 5;
+$historyLimit = max(300, (int)($config['tendencia_limite_registros'] ?? 5000));
+$sqlServerHistoryLimit = max(1440, (int)($config['tendencia_limite_sqlserver'] ?? 5000));
 $reportTimezone = new DateTimeZone((string)($detailConfig['timezone'] ?? 'America/Mexico_City'));
 
 $normalizeTimestamp = static function ($value) use ($reportTimezone): ?DateTimeImmutable {
@@ -82,6 +83,59 @@ $formatHistoryTimestamp = static function ($value) use ($normalizeTimestamp): st
   return $timestamp->format('d/m H:i');
 };
 
+$formatHistoryIsoTimestamp = static function ($value) use ($normalizeTimestamp): string {
+  $timestamp = $normalizeTimestamp($value);
+  return $timestamp !== null ? $timestamp->format(DateTimeInterface::ATOM) : '';
+};
+
+$aggregateHistoryPoints = static function (array $history, string $range) use ($normalizeTimestamp, $formatHistoryTimestamp, $formatHistoryIsoTimestamp): array {
+  $buckets = [];
+  $now = new DateTimeImmutable('now');
+  $cutoff = $range === 'month'
+    ? $now->modify('first day of this month')->setTime(0, 0, 0)
+    : $now->modify('-7 days');
+
+  foreach ($history as $point) {
+    $value = $point['value'] ?? null;
+    if (!is_numeric($value)) {
+      continue;
+    }
+
+    $timestamp = $normalizeTimestamp($point['iso'] ?? ($point['timestamp'] ?? null));
+    if ($timestamp === null || $timestamp < $cutoff) {
+      continue;
+    }
+
+    if ($range === 'month') {
+      $day = (int)$timestamp->format('N');
+      $bucketTimestamp = $timestamp->modify('-' . ($day - 1) . ' days')->setTime(0, 0, 0);
+    } else {
+      $bucketTimestamp = $timestamp->setTime(0, 0, 0);
+    }
+
+    $bucketKey = $bucketTimestamp->format('Y-m-d H:i:s');
+    if (!isset($buckets[$bucketKey])) {
+      $buckets[$bucketKey] = ['timestamp' => $bucketTimestamp, 'sum' => 0.0, 'count' => 0];
+    }
+    $buckets[$bucketKey]['sum'] += (float)$value;
+    $buckets[$bucketKey]['count']++;
+  }
+
+  ksort($buckets);
+  $aggregated = [];
+  foreach ($buckets as $bucket) {
+    $average = $bucket['count'] > 0 ? $bucket['sum'] / $bucket['count'] : null;
+    $aggregated[] = [
+      'timestamp' => $formatHistoryTimestamp($bucket['timestamp']),
+      'iso' => $formatHistoryIsoTimestamp($bucket['timestamp']),
+      'value' => $average,
+      'formatted' => $average !== null ? n($average, 2) : '-',
+    ];
+  }
+
+  return $aggregated;
+};
+
 $evaluateMetricStatus = static function (?float $value, array $rule): array {
   if ($value === null) {
     return ['Sin dato', 'gris', '#94a3b8'];
@@ -92,6 +146,28 @@ $evaluateMetricStatus = static function (?float $value, array $rule): array {
   $greenMax = isset($rule['verde_max']) && is_numeric($rule['verde_max']) ? (float)$rule['verde_max'] : null;
   $yellowMin = isset($rule['amarillo_min']) && is_numeric($rule['amarillo_min']) ? (float)$rule['amarillo_min'] : null;
   $yellowMax = isset($rule['amarillo_max']) && is_numeric($rule['amarillo_max']) ? (float)$rule['amarillo_max'] : null;
+
+  if ($mode === 'bandas') {
+    $statusMap = [
+      'verde' => ['Óptimo', 'verde', '#2e8b57'],
+      'amarillo' => ['Atención', 'amarillo', '#e49a32'],
+      'rojo' => ['Crítico', 'rojo', '#c94436'],
+      'gris' => ['Sin dato', 'gris', '#94a3b8'],
+      'azul' => ['Lectura', 'azul', '#0ea5e9'],
+    ];
+
+    foreach ((array)($rule['bandas'] ?? []) as $band) {
+      $min = isset($band['min']) && is_numeric($band['min']) ? (float)$band['min'] : null;
+      $max = isset($band['max']) && is_numeric($band['max']) ? (float)$band['max'] : null;
+      $status = (string)($band['estado'] ?? 'gris');
+
+      if (($min === null || $value >= $min) && ($max === null || $value <= $max)) {
+        return $statusMap[$status] ?? $statusMap['gris'];
+      }
+    }
+
+    return ['Crítico', 'rojo', '#c94436'];
+  }
 
   if ($mode === 'minimo') {
     if ($greenMin !== null && $value >= $greenMin) {
@@ -135,11 +211,79 @@ $evaluateMetricStatus = static function (?float $value, array $rule): array {
   return ['Crítico', 'rojo', '#c94436'];
 };
 
+$applyMetricFormula = static function (?float $value, array $metricConfig): ?float {
+  if ($value === null) {
+    return null;
+  }
+
+  $formula = (array)($metricConfig['formula'] ?? []);
+  $type = (string)($formula['tipo'] ?? '');
+
+  if ($type === 'factor' && isset($formula['factor']) && is_numeric($formula['factor'])) {
+    return $value * (float)$formula['factor'];
+  }
+
+  return $value;
+};
+
 $metricConfigByTunnel = (array)($config['metricas_por_tunel'] ?? []);
 $votatorConfigByTunnel = (array)($config['votators_por_tunel'] ?? []);
+
+$applyCentralHumidityRanges = static function (array $metricConfigByTunnel, array $monitorConfig): array {
+  $rangeTunnels = array_flip((array)($monitorConfig['humedad_rangos_tuneles'] ?? []));
+  $roomRanges = (array)($monitorConfig['humedad_rangos_recamaras'] ?? []);
+
+  foreach ($metricConfigByTunnel as $tunnelKey => &$metricGroup) {
+    if (!isset($rangeTunnels[(string)$tunnelKey])) {
+      continue;
+    }
+
+    foreach ($metricGroup as &$metricConfig) {
+      if (mb_strtolower((string)($metricConfig['group'] ?? ''), 'UTF-8') !== 'humedades') {
+        continue;
+      }
+
+      $label = (string)($metricConfig['label'] ?? '');
+      if (preg_match('/(?:zona|rec[aá]mara)\s+(\d+)/iu', $label, $matches) !== 1) {
+        continue;
+      }
+
+      $roomNumber = (int)$matches[1];
+      $range = (array)($roomRanges[$roomNumber] ?? []);
+      if ($range === []) {
+        continue;
+      }
+
+      $greenLt = isset($range['verde_lt']) && is_numeric($range['verde_lt']) ? (float)$range['verde_lt'] : null;
+      $yellowMax = isset($range['amarillo_max']) && is_numeric($range['amarillo_max']) ? (float)$range['amarillo_max'] : null;
+      if ($greenLt === null || $yellowMax === null) {
+        continue;
+      }
+
+      $metricConfig['semaforo'] = [
+        'modo' => 'maximo',
+        'verde_max' => $greenLt - 0.000001,
+        'amarillo_max' => $yellowMax,
+      ];
+      $metricConfig['leyenda'] = (string)($range['label'] ?? ('< ' . $greenLt . ' ' . (string)($metricConfig['unit'] ?? '')));
+    }
+    unset($metricConfig);
+  }
+  unset($metricGroup);
+
+  return $metricConfigByTunnel;
+};
+
+$metricConfigByTunnel = $applyCentralHumidityRanges(
+  $metricConfigByTunnel,
+  (array)($config['monitoreo_produccion'] ?? [])
+);
+
 $metricValuesByTunnel = [];
 $metricRow = [];
 $metricHistoryRows = [];
+$metricWeekHistoryByField = [];
+$metricMonthHistoryByField = [];
 $metricFields = [];
 $mysqlMetricLookups = [];
 
@@ -181,20 +325,85 @@ if (!empty($metricFields)) {
 
     $sql = 'SELECT TOP (1) ' . implode(', ', $selectParts)
       . ' FROM ' . $safeTable
+      . ' WHERE CAST(' . $safeTimestamp . ' AS date) = CAST(GETDATE() AS date)'
       . ' ORDER BY ' . $safeTimestamp . ' DESC';
 
     $metricRow = $pdo->query($sql)->fetch() ?: [];
 
-    $sqlHistory = 'SELECT TOP (' . $historyLimit . ') ' . implode(', ', $selectParts)
+    $sqlHistory = 'WITH tendencia AS ('
+      . ' SELECT ' . implode(', ', $selectParts)
+      . ', ROW_NUMBER() OVER (PARTITION BY DATEDIFF(minute, 0, ' . $safeTimestamp . ') ORDER BY ' . $safeTimestamp . ' DESC) AS [__minute_rn]'
       . ' FROM ' . $safeTable
-      . ' ORDER BY ' . $safeTimestamp . ' DESC';
+      . ' WHERE ' . $safeTimestamp . ' >= DATEADD(day, -31, GETDATE())'
+      . ') SELECT TOP (' . $sqlServerHistoryLimit . ') * FROM tendencia'
+      . ' WHERE [__minute_rn] = 1'
+      . ' ORDER BY [__timestamp] DESC';
     $metricHistoryRows = $pdo->query($sqlHistory)->fetchAll() ?: [];
+
+    $dailyAverageSelectParts = [
+      'CAST(' . $safeTimestamp . ' AS date) AS [__timestamp]',
+    ];
+    foreach ($metricFields as $fieldName) {
+      $dailyAverageSelectParts[] = 'AVG(TRY_CONVERT(float, ' . $quoteSqlIdentifier($fieldName) . ')) AS ' . $quoteSqlIdentifier($fieldName);
+    }
+
+    $sqlWeekHistory = 'SELECT ' . implode(', ', $dailyAverageSelectParts)
+      . ' FROM ' . $safeTable
+      . ' WHERE ' . $safeTimestamp . ' >= DATEADD(day, -7, GETDATE())'
+      . ' GROUP BY CAST(' . $safeTimestamp . ' AS date)'
+      . ' ORDER BY [__timestamp] DESC';
+    $metricWeekHistoryRows = $pdo->query($sqlWeekHistory)->fetchAll() ?: [];
+
+    foreach ($metricFields as $fieldName) {
+      $history = [];
+      foreach ($metricWeekHistoryRows as $historyRow) {
+        $historyValue = $historyRow[$fieldName] ?? null;
+        $historyNumericValue = is_numeric($historyValue) ? (float)$historyValue : null;
+        $history[] = [
+          'timestamp' => $formatHistoryTimestamp($historyRow['__timestamp'] ?? null),
+          'iso' => $formatHistoryIsoTimestamp($historyRow['__timestamp'] ?? null),
+          'value' => $historyNumericValue,
+          'formatted' => $historyNumericValue !== null ? n($historyNumericValue, 2) : '-',
+        ];
+      }
+      $metricWeekHistoryByField[$fieldName] = $history;
+    }
+
+    $averageSelectParts = [
+      'DATEADD(week, DATEDIFF(week, 0, ' . $safeTimestamp . '), 0) AS [__timestamp]',
+    ];
+    foreach ($metricFields as $fieldName) {
+      $averageSelectParts[] = 'AVG(TRY_CONVERT(float, ' . $quoteSqlIdentifier($fieldName) . ')) AS ' . $quoteSqlIdentifier($fieldName);
+    }
+
+    $sqlMonthHistory = 'SELECT ' . implode(', ', $averageSelectParts)
+      . ' FROM ' . $safeTable
+      . ' WHERE ' . $safeTimestamp . ' >= DATEADD(month, DATEDIFF(month, 0, GETDATE()), 0)'
+      . ' AND ' . $safeTimestamp . ' < DATEADD(month, DATEDIFF(month, 0, GETDATE()) + 1, 0)'
+      . ' GROUP BY DATEADD(week, DATEDIFF(week, 0, ' . $safeTimestamp . '), 0)'
+      . ' ORDER BY [__timestamp] DESC';
+    $metricMonthHistoryRows = $pdo->query($sqlMonthHistory)->fetchAll() ?: [];
+
+    foreach ($metricFields as $fieldName) {
+      $history = [];
+      foreach ($metricMonthHistoryRows as $historyRow) {
+        $historyValue = $historyRow[$fieldName] ?? null;
+        $historyNumericValue = is_numeric($historyValue) ? (float)$historyValue : null;
+        $history[] = [
+          'timestamp' => $formatHistoryTimestamp($historyRow['__timestamp'] ?? null),
+          'iso' => $formatHistoryIsoTimestamp($historyRow['__timestamp'] ?? null),
+          'value' => $historyNumericValue,
+          'formatted' => $historyNumericValue !== null ? n($historyNumericValue, 2) : '-',
+        ];
+      }
+      $metricMonthHistoryByField[$fieldName] = $history;
+    }
 
     foreach ($metricConfigByTunnel as $tunnelKey => $metricGroup) {
       foreach ((array)$metricGroup as $metricKey => $metricConfig) {
         $field = trim((string)($metricConfig['field'] ?? ''));
         $value = ($field !== '' && array_key_exists($field, $metricRow)) ? $metricRow[$field] : null;
-        $numericValue = is_numeric($value) ? (float)$value : null;
+        $numericValue = is_numeric($value) ? $applyMetricFormula((float)$value, (array)$metricConfig) : null;
         $rule = (array)($metricConfig['semaforo'] ?? []);
         [$statusLabel, $statusKey, $statusColor] = !empty($rule)
           ? $evaluateMetricStatus($numericValue, $rule)
@@ -204,9 +413,37 @@ if (!empty($metricFields)) {
         if ($field !== '') {
           foreach ($metricHistoryRows as $historyRow) {
             $historyValue = $historyRow[$field] ?? null;
-            $historyNumericValue = is_numeric($historyValue) ? (float)$historyValue : null;
+            $historyNumericValue = is_numeric($historyValue) ? $applyMetricFormula((float)$historyValue, (array)$metricConfig) : null;
             $history[] = [
               'timestamp' => $formatHistoryTimestamp($historyRow['__timestamp'] ?? null),
+              'iso' => $formatHistoryIsoTimestamp($historyRow['__timestamp'] ?? null),
+              'value' => $historyNumericValue,
+              'formatted' => $historyNumericValue !== null ? n($historyNumericValue, 2) : '-',
+            ];
+          }
+        }
+        $monthHistory = [];
+        $weekHistory = [];
+        if ($field !== '') {
+          foreach ((array)($metricWeekHistoryByField[$field] ?? []) as $historyPoint) {
+            $historyNumericValue = isset($historyPoint['value']) && is_numeric($historyPoint['value'])
+              ? $applyMetricFormula((float)$historyPoint['value'], (array)$metricConfig)
+              : null;
+            $weekHistory[] = [
+              'timestamp' => (string)($historyPoint['timestamp'] ?? '-'),
+              'iso' => (string)($historyPoint['iso'] ?? ''),
+              'value' => $historyNumericValue,
+              'formatted' => $historyNumericValue !== null ? n($historyNumericValue, 2) : '-',
+            ];
+          }
+
+          foreach ((array)($metricMonthHistoryByField[$field] ?? []) as $historyPoint) {
+            $historyNumericValue = isset($historyPoint['value']) && is_numeric($historyPoint['value'])
+              ? $applyMetricFormula((float)$historyPoint['value'], (array)$metricConfig)
+              : null;
+            $monthHistory[] = [
+              'timestamp' => (string)($historyPoint['timestamp'] ?? '-'),
+              'iso' => (string)($historyPoint['iso'] ?? ''),
               'value' => $historyNumericValue,
               'formatted' => $historyNumericValue !== null ? n($historyNumericValue, 2) : '-',
             ];
@@ -220,8 +457,9 @@ if (!empty($metricFields)) {
           'unit' => (string)($metricConfig['unit'] ?? ''),
           'available' => !empty($metricConfig['available']) && $field !== '',
           'field' => $field,
+          'source' => (string)($metricConfig['source'] ?? 'sqlserver'),
           'value' => $numericValue,
-          'formatted' => $numericValue !== null ? n($numericValue, 2) : (string)($metricConfig['empty_label'] ?? 'Sin dato'),
+          'formatted' => $numericValue !== null ? n($numericValue, 2) : '-',
           'emptyLabel' => (string)($metricConfig['empty_label'] ?? 'Sin dato'),
           'statusLabel' => $statusLabel,
           'statusKey' => $statusKey,
@@ -229,6 +467,10 @@ if (!empty($metricFields)) {
           'rangeLabel' => (string)($metricConfig['leyenda'] ?? ''),
           'rule' => $rule,
           'history' => $history,
+          'trends' => [
+            'week' => $weekHistory,
+            'month' => $monthHistory,
+          ],
         ];
       }
     }
@@ -242,8 +484,9 @@ if (!empty($metricFields)) {
           'unit' => (string)($metricConfig['unit'] ?? ''),
           'available' => false,
           'field' => (string)($metricConfig['field'] ?? ''),
+          'source' => (string)($metricConfig['source'] ?? 'sqlserver'),
           'value' => null,
-          'formatted' => (string)($metricConfig['empty_label'] ?? 'Sin dato'),
+          'formatted' => '-',
           'emptyLabel' => (string)($metricConfig['empty_label'] ?? 'Sin dato'),
           'statusLabel' => 'Sin dato',
           'statusKey' => 'gris',
@@ -275,10 +518,11 @@ if (!empty($mysqlMetricLookups)) {
         }
 
         $sql = sprintf(
-          'SELECT `%s` AS metric_value FROM `%s` WHERE `%s` = :key_value ORDER BY `%s` DESC LIMIT 1',
+          'SELECT `%s` AS metric_value FROM `%s` WHERE `%s` = :key_value AND DATE(`%s`) = CURDATE() ORDER BY `%s` DESC LIMIT 1',
           $field,
           $table,
           $keyColumn,
+          $timestampColumn,
           $timestampColumn
         );
 
@@ -287,11 +531,12 @@ if (!empty($mysqlMetricLookups)) {
         $row = $stmt->fetch() ?: [];
 
         $sqlHistory = sprintf(
-          'SELECT `%s` AS metric_value, `%s` AS metric_timestamp FROM `%s` WHERE `%s` = :key_value ORDER BY `%s` DESC LIMIT %d',
+          'SELECT `%s` AS metric_value, `%s` AS metric_timestamp FROM `%s` WHERE `%s` = :key_value AND `%s` >= DATE_SUB(NOW(), INTERVAL 31 DAY) ORDER BY `%s` DESC LIMIT %d',
           $field,
           $timestampColumn,
           $table,
           $keyColumn,
+          $timestampColumn,
           $timestampColumn,
           $historyLimit
         );
@@ -312,6 +557,7 @@ if (!empty($mysqlMetricLookups)) {
           $historyNumericValue = is_numeric($historyValue) ? (float)$historyValue : null;
           $history[] = [
             'timestamp' => $formatHistoryTimestamp($historyRow['metric_timestamp'] ?? null),
+            'iso' => $formatHistoryIsoTimestamp($historyRow['metric_timestamp'] ?? null),
             'value' => $historyNumericValue,
             'formatted' => $historyNumericValue !== null ? n($historyNumericValue, 2) : '-',
           ];
@@ -324,8 +570,9 @@ if (!empty($mysqlMetricLookups)) {
           'unit' => (string)($metricConfig['unit'] ?? ''),
           'available' => !empty($metricConfig['available']) && $field !== '',
           'field' => $field,
+          'source' => (string)($metricConfig['source'] ?? 'mysql_105'),
           'value' => $numericValue,
-          'formatted' => $numericValue !== null ? n($numericValue, 2) : (string)($metricConfig['empty_label'] ?? 'Sin dato'),
+          'formatted' => $numericValue !== null ? n($numericValue, 2) : '-',
           'emptyLabel' => (string)($metricConfig['empty_label'] ?? 'Sin dato'),
           'statusLabel' => $statusLabel,
           'statusKey' => $statusKey,
@@ -333,6 +580,10 @@ if (!empty($mysqlMetricLookups)) {
           'rangeLabel' => (string)($metricConfig['leyenda'] ?? ''),
           'rule' => $rule,
           'history' => $history,
+          'trends' => [
+            'week' => $aggregateHistoryPoints($history, 'week'),
+            'month' => $aggregateHistoryPoints($history, 'month'),
+          ],
         ];
       }
     }
@@ -350,8 +601,9 @@ if (!empty($mysqlMetricLookups)) {
           'unit' => (string)($metricConfig['unit'] ?? ''),
           'available' => false,
           'field' => (string)($metricConfig['field'] ?? ''),
+          'source' => (string)($metricConfig['source'] ?? 'mysql_105'),
           'value' => null,
-          'formatted' => (string)($metricConfig['empty_label'] ?? 'Sin dato'),
+          'formatted' => '-',
           'emptyLabel' => (string)($metricConfig['empty_label'] ?? 'Sin dato'),
           'statusLabel' => 'Sin dato',
           'statusKey' => 'gris',
@@ -452,7 +704,13 @@ $summarizeTunnel = static function (array $tunnel, array $summary, array $rows):
   ];
 };
 
-$normalizeVotators = static function (array $votatorConfig, array $latestMetricRow) use ($evaluateMetricStatus): array {
+$normalizeVotators = static function (
+  array $votatorConfig,
+  array $latestMetricRow,
+  array $metricHistoryRows,
+  array $metricWeekHistoryByField,
+  array $metricMonthHistoryByField
+) use ($evaluateMetricStatus, $formatHistoryTimestamp, $formatHistoryIsoTimestamp): array {
   $votators = [];
 
   foreach ($votatorConfig as $votatorKey => $votator) {
@@ -475,6 +733,25 @@ $normalizeVotators = static function (array $votatorConfig, array $latestMetricR
           (string)($field['status_key'] ?? ($numericValue !== null ? 'azul' : 'gris')),
           (string)($field['status_color'] ?? ($numericValue !== null ? '#0ea5e9' : '#94a3b8')),
         ];
+      $history = [];
+      $weekHistory = [];
+      $monthHistory = [];
+
+      if ($source === 'sqlserver' && $sourceField !== '') {
+        foreach ($metricHistoryRows as $historyRow) {
+          $historyValue = $historyRow[$sourceField] ?? null;
+          $historyNumericValue = is_numeric($historyValue) ? (float)$historyValue : null;
+          $history[] = [
+            'timestamp' => $formatHistoryTimestamp($historyRow['__timestamp'] ?? null),
+            'iso' => $formatHistoryIsoTimestamp($historyRow['__timestamp'] ?? null),
+            'value' => $historyNumericValue,
+            'formatted' => $historyNumericValue !== null ? n($historyNumericValue, 2) : '-',
+          ];
+        }
+
+        $weekHistory = (array)($metricWeekHistoryByField[$sourceField] ?? []);
+        $monthHistory = (array)($metricMonthHistoryByField[$sourceField] ?? []);
+      }
 
       $fields[] = [
         'key' => (string)$fieldKey,
@@ -482,6 +759,7 @@ $normalizeVotators = static function (array $votatorConfig, array $latestMetricR
         'unit' => (string)($field['unit'] ?? ''),
         'available' => !empty($field['available']) && $sourceField !== '',
         'field' => $sourceField,
+        'source' => $source,
         'value' => $numericValue,
         'formatted' => $numericValue !== null ? n($numericValue, 2) : $emptyLabel,
         'emptyLabel' => $emptyLabel,
@@ -491,6 +769,11 @@ $normalizeVotators = static function (array $votatorConfig, array $latestMetricR
         'rangeLabel' => (string)($field['leyenda'] ?? ''),
         'rule' => $rule,
         'icon' => (string)($field['icon'] ?? ''),
+        'history' => $history,
+        'trends' => [
+          'week' => $weekHistory,
+          'month' => $monthHistory,
+        ],
       ];
     }
 
@@ -523,7 +806,13 @@ foreach (($detailReport['tuneles'] ?? []) as $tunnelKey => $tunnel) {
   );
 
   $executiveTunels[$tunnelKey]['metricas'] = (array)($metricValuesByTunnel[$tunnelKey] ?? []);
-  $executiveTunels[$tunnelKey]['votators'] = $normalizeVotators((array)($votatorConfigByTunnel[$tunnelKey] ?? []), $metricRow);
+  $executiveTunels[$tunnelKey]['votators'] = $normalizeVotators(
+    (array)($votatorConfigByTunnel[$tunnelKey] ?? []),
+    $metricRow,
+    $metricHistoryRows,
+    $metricWeekHistoryByField,
+    $metricMonthHistoryByField
+  );
 
   foreach ($globalTotals as $metric => $value) {
     $globalTotals[$metric] += (int)($executiveTunels[$tunnelKey]['totales'][$metric] ?? 0);

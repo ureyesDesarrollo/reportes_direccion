@@ -241,6 +241,10 @@ if (!isset($tunelesConfig[$tunelSeleccionado])) {
 
 $warnings = [];
 $rows = [];
+$weekHistoryRows = [];
+$monthHistoryRows = [];
+$weekHistoryByField = [];
+$monthHistoryByField = [];
 
 $allFields = [];
 foreach ($tunelesConfig as $tunel) {
@@ -273,6 +277,35 @@ if (!$serverConfigured) {
 
     $stmt = $pdo->query($sql);
     $rows = $stmt->fetchAll() ?: [];
+
+    $dailyAverageSelectParts = [
+      'CAST(' . $safeTimestamp . ' AS date) AS [__timestamp]',
+    ];
+    foreach ($allFields as $fieldName) {
+      $dailyAverageSelectParts[] = 'AVG(TRY_CONVERT(float, ' . $quoteSqlIdentifier($fieldName) . ')) AS ' . $quoteSqlIdentifier($fieldName);
+    }
+
+    $sqlWeekHistory = 'SELECT ' . implode(', ', $dailyAverageSelectParts)
+      . ' FROM ' . $safeTable
+      . ' WHERE ' . $safeTimestamp . ' >= DATEADD(day, -7, GETDATE())'
+      . ' GROUP BY CAST(' . $safeTimestamp . ' AS date)'
+      . ' ORDER BY [__timestamp] DESC';
+    $weekHistoryRows = $pdo->query($sqlWeekHistory)->fetchAll() ?: [];
+
+    $weeklyAverageSelectParts = [
+      'DATEADD(week, DATEDIFF(week, 0, ' . $safeTimestamp . '), 0) AS [__timestamp]',
+    ];
+    foreach ($allFields as $fieldName) {
+      $weeklyAverageSelectParts[] = 'AVG(TRY_CONVERT(float, ' . $quoteSqlIdentifier($fieldName) . ')) AS ' . $quoteSqlIdentifier($fieldName);
+    }
+
+    $sqlMonthHistory = 'SELECT ' . implode(', ', $weeklyAverageSelectParts)
+      . ' FROM ' . $safeTable
+      . ' WHERE ' . $safeTimestamp . ' >= DATEADD(month, DATEDIFF(month, 0, GETDATE()), 0)'
+      . ' AND ' . $safeTimestamp . ' < DATEADD(month, DATEDIFF(month, 0, GETDATE()) + 1, 0)'
+      . ' GROUP BY DATEADD(week, DATEDIFF(week, 0, ' . $safeTimestamp . '), 0)'
+      . ' ORDER BY [__timestamp] DESC';
+    $monthHistoryRows = $pdo->query($sqlMonthHistory)->fetchAll() ?: [];
   } catch (Throwable $e) {
     $warnings[] = 'No fue posible consultar SQL Server: ' . $e->getMessage();
   }
@@ -357,6 +390,37 @@ $formatTimestamp = static function ($value, string $format) use ($normalizeTimes
   return is_scalar($value) && $value !== '' ? (string)$value : '-';
 };
 
+$formatIsoTimestamp = static function ($value) use ($normalizeTimestamp): string {
+  $normalized = $normalizeTimestamp($value);
+  return $normalized !== null ? $normalized->format(DateTimeInterface::ATOM) : '';
+};
+
+foreach ($allFields as $fieldName) {
+  $weekHistoryByField[$fieldName] = [];
+  foreach ($weekHistoryRows as $historyRow) {
+    $historyValue = $historyRow[$fieldName] ?? null;
+    $historyNumericValue = is_numeric($historyValue) ? (float)$historyValue : null;
+    $weekHistoryByField[$fieldName][] = [
+      'timestamp' => $formatTimestamp($historyRow['__timestamp'] ?? null, 'd/m H:i'),
+      'iso' => $formatIsoTimestamp($historyRow['__timestamp'] ?? null),
+      'value' => $historyNumericValue,
+      'formatted' => $historyNumericValue !== null ? n($historyNumericValue, 2) : '-',
+    ];
+  }
+
+  $monthHistoryByField[$fieldName] = [];
+  foreach ($monthHistoryRows as $historyRow) {
+    $historyValue = $historyRow[$fieldName] ?? null;
+    $historyNumericValue = is_numeric($historyValue) ? (float)$historyValue : null;
+    $monthHistoryByField[$fieldName][] = [
+      'timestamp' => $formatTimestamp($historyRow['__timestamp'] ?? null, 'd/m H:i'),
+      'iso' => $formatIsoTimestamp($historyRow['__timestamp'] ?? null),
+      'value' => $historyNumericValue,
+      'formatted' => $historyNumericValue !== null ? n($historyNumericValue, 2) : '-',
+    ];
+  }
+}
+
 $floorTimestampToInterval = static function ($value, int $minutes) use ($normalizeTimestamp, $reportTimezone): ?DateTimeImmutable {
   $normalized = $normalizeTimestamp($value);
   if ($normalized === null) {
@@ -436,6 +500,10 @@ foreach ($tunelesConfig as $tunelKey => $tunelDef) {
   $tablaRows = [];
   $latestValues = [];
   $latestTimestamp = '-';
+  $historyByField = [];
+  foreach ($campos as $fieldKey => $fieldDef) {
+    $historyByField[(string)$fieldKey] = [];
+  }
 
   foreach ($rows as $rowIndex => $row) {
     $timestampValue = $row['__timestamp'] ?? ($row['__bucket_timestamp'] ?? null);
@@ -450,13 +518,13 @@ foreach ($tunelesConfig as $tunelKey => $tunelDef) {
       $rawValue = $row[$fieldKey] ?? null;
       $numericValue = is_numeric($rawValue) ? (float)$rawValue : null;
       $fixedStatus = (array)($fieldDef['estado_fijo'] ?? []);
+      $rule = (array)($fieldDef['semaforo'] ?? []);
       $adjustmentCue = null;
       if (!empty($fixedStatus)) {
         $statusLabel = (string)($fixedStatus['label'] ?? 'Sin dato');
         $statusKey = (string)($fixedStatus['key'] ?? 'gris');
         $statusColor = (string)($fixedStatus['color'] ?? '#94a3b8');
       } else {
-        $rule = (array)($fieldDef['semaforo'] ?? []);
         [$statusLabel, $statusKey, $statusColor] = $evaluateStatus($numericValue, $rule);
         $adjustmentCue = $buildAdjustmentCue($numericValue, $rule);
       }
@@ -470,6 +538,14 @@ foreach ($tunelesConfig as $tunelKey => $tunelDef) {
         'statusKey' => $statusKey,
         'statusColor' => $statusColor,
         'adjustmentCue' => $adjustmentCue,
+        'rangeLabel' => $buildFieldRangeLabel($rule, isset($fieldDef['leyenda']) ? (string)$fieldDef['leyenda'] : null),
+        'rule' => $rule,
+      ];
+      $historyByField[(string)$fieldKey][] = [
+        'timestamp' => $formatTimestamp($timestampValue, 'd/m H:i'),
+        'iso' => $formatIsoTimestamp($timestampValue),
+        'value' => $numericValue,
+        'formatted' => $numericValue !== null ? n($numericValue, 2) : '-',
       ];
 
       if ($rowIndex === 0) {
@@ -485,6 +561,26 @@ foreach ($tunelesConfig as $tunelKey => $tunelDef) {
       'chartTimestamp' => $chartTimestamp,
       'cells' => $cells,
     ];
+  }
+  foreach ($latestValues as &$latestValue) {
+    $fieldKey = (string)($latestValue['field'] ?? '');
+    $latestValue['history'] = (array)($historyByField[$fieldKey] ?? []);
+    $latestValue['trends'] = [
+      'week' => (array)($weekHistoryByField[$fieldKey] ?? []),
+      'month' => (array)($monthHistoryByField[$fieldKey] ?? []),
+    ];
+  }
+  unset($latestValue);
+  if (isset($tablaRows[0]['cells'])) {
+    foreach ($tablaRows[0]['cells'] as &$latestCell) {
+      $fieldKey = (string)($latestCell['field'] ?? '');
+      $latestCell['history'] = (array)($historyByField[$fieldKey] ?? []);
+      $latestCell['trends'] = [
+        'week' => (array)($weekHistoryByField[$fieldKey] ?? []),
+        'month' => (array)($monthHistoryByField[$fieldKey] ?? []),
+      ];
+    }
+    unset($latestCell);
   }
 
   $numericLatest = array_values(array_filter(array_map(

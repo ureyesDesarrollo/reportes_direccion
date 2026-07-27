@@ -6,6 +6,20 @@ return array_replace_recursive($detailConfig, [
   'titulo' => 'Secadores',
   'intervalo_actualizacion_ms' => 600000,
   'intervalo_actualizacion_rapida_ms' => 60000,
+  'monitoreo_produccion' => [
+    'humedad_rangos_tuneles' => ['tunel_1', 'tunel_2'],
+    'humedad_rangos_recamaras' => [
+      1 => ['verde_lt' => 90, 'amarillo_min' => 90, 'amarillo_max' => 93, 'label' => '< 90 %'],
+      2 => ['verde_lt' => 90, 'amarillo_min' => 90, 'amarillo_max' => 93, 'label' => '< 90 %'],
+      3 => ['verde_lt' => 90, 'amarillo_min' => 90, 'amarillo_max' => 93, 'label' => '< 90 %'],
+      4 => ['verde_lt' => 60, 'amarillo_min' => 60, 'amarillo_max' => 65, 'label' => '< 60 %'],
+      5 => ['verde_lt' => 60, 'amarillo_min' => 60, 'amarillo_max' => 65, 'label' => '< 60 %'],
+      6 => ['verde_lt' => 49, 'amarillo_min' => 49, 'amarillo_max' => 54, 'label' => '< 49 %'],
+      7 => ['verde_lt' => 37, 'amarillo_min' => 37, 'amarillo_max' => 42, 'label' => '< 37 %'],
+      8 => ['verde_lt' => 30, 'amarillo_min' => 30, 'amarillo_max' => 35, 'label' => '< 30 %'],
+      9 => ['verde_lt' => 30, 'amarillo_min' => 30, 'amarillo_max' => 35, 'label' => '< 30 %'],
+    ],
+  ],
   'mysql_secadores' => [
     'host' => 'localhost',
     'port' => 3306,
@@ -19,10 +33,20 @@ return array_replace_recursive($detailConfig, [
       'velocidad_banda' => [
         'group' => 'Banda',
         'label' => 'Velocidad de banda',
-        'field' => null,
+        'field' => 'FUNCIONAMIENTO_BANDA_TRANSPORTADORA',
         'unit' => '',
-        'available' => false,
-        'empty_label' => 'Sin medición',
+        'available' => true,
+        'empty_label' => 'Sin dato',
+        'formula' => [
+          'tipo' => 'factor',
+          'factor' => 18.72 / 60,
+        ],
+        'semaforo' => [
+          'modo' => 'rango',
+          'verde_min' => 14.5,
+          'verde_max' => 15,
+        ],
+        'leyenda' => '14.5-15',
       ],
       'caudal_aire' => [
         'group' => 'Banda',
@@ -31,14 +55,19 @@ return array_replace_recursive($detailConfig, [
         'field' => 'caudal',
         'unit' => 'm³/h',
         'available' => true,
-        'empty_label' => 'Sin dato',
+        'empty_label' => '-',
         'lookup' => [
           'table' => 'secadores_caudal_registros',
           'key_column' => 'tunel_key',
           'key_value' => 'tunel_1',
           'timestamp_column' => 'fecha_hora',
         ],
-        'leyenda' => 'Lectura actual | Rango pendiente de definir',
+        'semaforo' => [
+          'modo' => 'minimo',
+          'verde_min' => 90000,
+          'amarillo_min' => 89000,
+        ],
+        'leyenda' => 'Verde >= 90,000 m³/h | Atención >= 89,000 | Crítico <89,000',
       ],
       'agua_caliente_suministro' => [
         'group' => 'Agua y vapor',
@@ -47,6 +76,14 @@ return array_replace_recursive($detailConfig, [
         'unit' => '°C',
         'available' => true,
         'empty_label' => 'Sin dato',
+        'semaforo' => [
+          'modo' => 'rango',
+          'verde_min' => 88,
+          'verde_max' => 92,
+          'amarillo_min' => 85,
+          'amarillo_max' => 87.99,
+        ],
+        'leyenda' => 'Ideal 90 °C | Verde 88-92 | Atención 85-87 | Crítico <85',
       ],
       'agua_caliente_retorno' => [
         'group' => 'Agua y vapor',
@@ -55,6 +92,12 @@ return array_replace_recursive($detailConfig, [
         'unit' => '°C',
         'available' => true,
         'empty_label' => 'Sin dato',
+        'semaforo' => [
+          'modo' => 'rango',
+          'verde_min' => 68,
+          'verde_max' => 72,
+        ],
+        'leyenda' => 'Ideal 70 °C | Verde 68-72',
       ],
       'presion_vapor' => [
         'group' => 'Agua y vapor',
@@ -63,6 +106,14 @@ return array_replace_recursive($detailConfig, [
         'unit' => 'bar(a)',
         'available' => true,
         'empty_label' => 'Sin dato',
+        'semaforo' => [
+          'modo' => 'rango',
+          'verde_min' => 3.0,
+          'verde_max' => 3.2,
+          'amarillo_min' => 2.8,
+          'amarillo_max' => 2.99,
+        ],
+        'leyenda' => 'Ideal 3.1 bar(a) | Verde 3.0-3.2 | Atención 2.8-2.9 | Crítico <2.8',
       ],
       'humedad_zona_1_inferior' => [
         'group' => 'Humedades',
@@ -154,6 +205,12 @@ return array_replace_recursive($detailConfig, [
         'unit' => '',
         'available' => true,
         'empty_label' => 'Sin dato',
+        'semaforo' => [
+          'modo' => 'rango',
+          'verde_min' => 14.5,
+          'verde_max' => 15,
+        ],
+        'leyenda' => '14.5-15',
       ],
       'caudal_aire' => [
         'group' => 'Banda',
@@ -162,7 +219,7 @@ return array_replace_recursive($detailConfig, [
         'field' => 'caudal',
         'unit' => 'm³/h',
         'available' => true,
-        'empty_label' => 'Sin dato',
+        'empty_label' => '-',
         'lookup' => [
           'table' => 'secadores_caudal_registros',
           'key_column' => 'tunel_key',
@@ -279,6 +336,17 @@ return array_replace_recursive($detailConfig, [
             'unit' => '',
             'available' => true,
             'empty_label' => 'Sin dato',
+            'semaforo' => [
+              'modo' => 'bandas',
+              'bandas' => [
+                ['max' => 10, 'estado' => 'rojo'],
+                ['min' => 10.5, 'max' => 11.499999, 'estado' => 'amarillo'],
+                ['min' => 11.5, 'max' => 12.5, 'estado' => 'verde'],
+                ['min' => 12.500001, 'max' => 13, 'estado' => 'amarillo'],
+                ['min' => 13, 'estado' => 'rojo'],
+              ],
+            ],
+            'leyenda' => '11.5-12.5',
           ],
           'presion_cuajado' => [
             'label' => 'Presión de cuajado',
@@ -308,6 +376,17 @@ return array_replace_recursive($detailConfig, [
             'unit' => '',
             'available' => true,
             'empty_label' => 'Sin dato',
+            'semaforo' => [
+              'modo' => 'bandas',
+              'bandas' => [
+                ['max' => 10, 'estado' => 'rojo'],
+                ['min' => 10.5, 'max' => 11.499999, 'estado' => 'amarillo'],
+                ['min' => 11.5, 'max' => 12.5, 'estado' => 'verde'],
+                ['min' => 12.500001, 'max' => 13, 'estado' => 'amarillo'],
+                ['min' => 13, 'estado' => 'rojo'],
+              ],
+            ],
+            'leyenda' => '11.5-12.5',
           ],
           'presion_cuajado' => [
             'label' => 'Presión de cuajado',
@@ -339,6 +418,17 @@ return array_replace_recursive($detailConfig, [
             'unit' => '',
             'available' => true,
             'empty_label' => 'Sin dato',
+            'semaforo' => [
+              'modo' => 'bandas',
+              'bandas' => [
+                ['max' => 10, 'estado' => 'rojo'],
+                ['min' => 10.5, 'max' => 11.499999, 'estado' => 'amarillo'],
+                ['min' => 11.5, 'max' => 12.5, 'estado' => 'verde'],
+                ['min' => 12.500001, 'max' => 13, 'estado' => 'amarillo'],
+                ['min' => 13, 'estado' => 'rojo'],
+              ],
+            ],
+            'leyenda' => '11.5-12.5',
           ],
           'presion_cuajado' => [
             'label' => 'Presión de cuajado',
@@ -368,6 +458,17 @@ return array_replace_recursive($detailConfig, [
             'unit' => '',
             'available' => true,
             'empty_label' => 'Sin dato',
+            'semaforo' => [
+              'modo' => 'bandas',
+              'bandas' => [
+                ['max' => 10, 'estado' => 'rojo'],
+                ['min' => 10.5, 'max' => 11.499999, 'estado' => 'amarillo'],
+                ['min' => 11.5, 'max' => 12.5, 'estado' => 'verde'],
+                ['min' => 12.500001, 'max' => 13, 'estado' => 'amarillo'],
+                ['min' => 13, 'estado' => 'rojo'],
+              ],
+            ],
+            'leyenda' => '11.5-12.5',
           ],
           'presion_cuajado' => [
             'label' => 'Presión de cuajado',

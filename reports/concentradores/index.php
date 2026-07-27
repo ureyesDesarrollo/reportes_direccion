@@ -39,6 +39,52 @@ $metricIcon = static function (string $metricKey): string {
     'solidos_salida' => 'fa-arrow-right-from-bracket',
   ][$metricKey] ?? 'fa-flask';
 };
+$sourceIcon = static function (array $metric): string {
+  return (string)($metric['source'] ?? '') === 'sqlserver' ? 'fa-gear' : 'fa-book-open';
+};
+$sourceTitle = static function (array $metric): string {
+  return (string)($metric['source'] ?? '') === 'sqlserver' ? 'SQL Server / AVEVA' : 'MySQL 105';
+};
+$invertidoMetricGroups = [
+  'General' => [
+    'flujo_entrada_evaporador',
+    'flujo_salida_evaporador',
+    'temperatura_precalentamiento',
+    'nivel_tanque_alimentacion',
+  ],
+  'Etapa 1' => [
+    'flujo_etapa_1_2',
+    'temperatura_etapa_1',
+    'vacio_etapa_1',
+    'presion_etapa_1',
+    'nivel_etapa_1',
+    'valvula_control_temperatura_etapa_1',
+    'valvula_control_nivel_etapa_1',
+  ],
+  'Etapa 2' => [
+    'flujo_etapa_2_3',
+    'vacio_etapa_2',
+    'presion_etapa_2',
+    'nivel_etapa_2',
+    'moyno_control_nivel_etapa_2',
+  ],
+  'Etapa 3' => [
+    'vacio_etapa_3',
+    'presion_etapa_3',
+    'nivel_etapa_3',
+    'moyno_control_nivel_etapa_3',
+  ],
+  'Agua / vapor' => [
+    'temperatura_salida_agua',
+    'presion_agua_enfriamiento',
+    'presion_vapor',
+  ],
+  'Controles' => [
+    'valvula_control_flujo_entrada',
+    'valvula_control_precalentamiento',
+    'valvula_control_presion',
+  ],
+];
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -129,6 +175,11 @@ $metricIcon = static function (string $metricKey): string {
         0 16px 34px rgba(37, 99, 235, 0.12),
         0 3px 10px rgba(15, 23, 42, 0.06);
       transform: translateY(-2px);
+    }
+
+    .concentradores-exec-panel[data-concentrator="invertido"] {
+      grid-column: 1 / -1;
+      min-height: 0;
     }
 
     .concentradores-exec-head {
@@ -230,6 +281,63 @@ $metricIcon = static function (string $metricKey): string {
       grid-column: 2 / span 4;
     }
 
+    .concentradores-invertido-layout {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .concentradores-stage {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-width: 0;
+      padding: 10px;
+      border: 1px solid #dbe7f5;
+      border-radius: 14px;
+      background: #f8fbff;
+    }
+
+    .concentradores-stage h3 {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0;
+      color: #0f172a;
+      font-size: 13px;
+      font-weight: 900;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+
+    .concentradores-stage h3::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: #2563eb;
+    }
+
+    .concentradores-stage-metrics {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .concentradores-exec-panel[data-concentrator="invertido"] .concentradores-exec-metric {
+      grid-column: auto;
+      min-height: 92px;
+      padding: 9px;
+    }
+
+    .concentradores-exec-panel[data-concentrator="invertido"] .concentradores-exec-metric-value {
+      font-size: 20px;
+    }
+
+    .concentradores-exec-panel[data-concentrator="invertido"] .concentradores-exec-metric-status {
+      display: none;
+    }
+
     .concentradores-exec-metric i {
       width: 18px;
       margin-top: 2px;
@@ -246,12 +354,33 @@ $metricIcon = static function (string $metricKey): string {
     }
 
     .concentradores-exec-metric-label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
       min-height: 24px;
       font-size: 10px;
       font-weight: 900;
       letter-spacing: 0;
       text-transform: uppercase;
       opacity: 0.9;
+    }
+
+    .concentradores-exec-source {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex: 0 0 auto;
+      width: 16px;
+      height: 16px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.22);
+    }
+
+    .concentradores-exec-source i {
+      width: auto;
+      margin: 0;
+      font-size: 9px;
+      opacity: 1;
     }
 
     .concentradores-exec-metric-value {
@@ -286,6 +415,10 @@ $metricIcon = static function (string $metricKey): string {
       .concentradores-exec-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
+
+      .concentradores-invertido-layout {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
     }
 
     @media (max-width: 720px) {
@@ -302,6 +435,11 @@ $metricIcon = static function (string $metricKey): string {
       .concentradores-exec-metric[data-metric="solidos_salida"],
       .concentradores-exec-metric:last-child:nth-child(odd) {
         grid-column: auto;
+      }
+
+      .concentradores-invertido-layout,
+      .concentradores-stage-metrics {
+        grid-template-columns: 1fr;
       }
     }
   </style>
@@ -359,19 +497,81 @@ $metricIcon = static function (string $metricKey): string {
               <?= !empty($concentrador['fuera_operacion']) ? 'FO' : 'FO' ?>
             </span>
           </header>
-          <div class="concentradores-exec-metrics">
-            <?php foreach ((array)($concentrador['metricas'] ?? []) as $metric): ?>
-              <?php $metricKey = (string)($metric['key'] ?? ''); ?>
-              <div class="concentradores-exec-metric <?= $e($metricClass((array)$metric)) ?>" data-metric="<?= $e($metricKey) ?>">
-                <i class="fa-solid <?= $e($metricIcon($metricKey)) ?>"></i>
-                <div class="concentradores-exec-metric-body">
-                  <div class="concentradores-exec-metric-label"><?= $e($metric['label'] ?? $metricKey) ?></div>
-                  <div class="concentradores-exec-metric-value" data-field="value"><?= $e($metric['formatted'] ?? '-') ?></div>
-                  <div class="concentradores-exec-metric-status" data-field="status"><?= $e($metric['status']['label'] ?? 'Sin dato') ?></div>
+          <?php $metricas = (array)($concentrador['metricas'] ?? []); ?>
+          <?php if ((string)($concentrador['key'] ?? '') === 'invertido'): ?>
+            <div class="concentradores-invertido-layout">
+              <?php $renderedMetrics = []; ?>
+              <?php foreach ($invertidoMetricGroups as $groupTitle => $groupMetrics): ?>
+                <section class="concentradores-stage">
+                  <h3><?= $e($groupTitle) ?></h3>
+                  <div class="concentradores-stage-metrics">
+                    <?php foreach ($groupMetrics as $metricKey): ?>
+                      <?php if (!isset($metricas[$metricKey])) continue; ?>
+                      <?php $metric = (array)$metricas[$metricKey]; ?>
+                      <?php $renderedMetrics[$metricKey] = true; ?>
+                      <div class="concentradores-exec-metric <?= $e($metricClass($metric)) ?>" data-metric="<?= $e($metricKey) ?>">
+                        <i class="fa-solid <?= $e($metricIcon($metricKey)) ?>"></i>
+                        <div class="concentradores-exec-metric-body">
+                          <div class="concentradores-exec-metric-label">
+                            <span data-field="label"><?= $e($metric['label'] ?? $metricKey) ?></span>
+                            <span class="concentradores-exec-source" data-field="source-icon" title="<?= $e($sourceTitle($metric)) ?>">
+                              <i class="fa-solid <?= $e($sourceIcon($metric)) ?>"></i>
+                            </span>
+                          </div>
+                          <div class="concentradores-exec-metric-value" data-field="value"><?= $e($metric['formatted'] ?? '-') ?></div>
+                          <div class="concentradores-exec-metric-status" data-field="status"><?= $e($metric['status']['label'] ?? 'Sin dato') ?></div>
+                        </div>
+                      </div>
+                    <?php endforeach; ?>
+                  </div>
+                </section>
+              <?php endforeach; ?>
+              <?php $remainingMetrics = array_diff_key($metricas, $renderedMetrics); ?>
+              <?php if (!empty($remainingMetrics)): ?>
+                <section class="concentradores-stage">
+                  <h3>Otros</h3>
+                  <div class="concentradores-stage-metrics">
+                    <?php foreach ($remainingMetrics as $metric): ?>
+                      <?php $metric = (array)$metric; ?>
+                      <?php $metricKey = (string)($metric['key'] ?? ''); ?>
+                      <div class="concentradores-exec-metric <?= $e($metricClass($metric)) ?>" data-metric="<?= $e($metricKey) ?>">
+                        <i class="fa-solid <?= $e($metricIcon($metricKey)) ?>"></i>
+                        <div class="concentradores-exec-metric-body">
+                          <div class="concentradores-exec-metric-label">
+                            <span data-field="label"><?= $e($metric['label'] ?? $metricKey) ?></span>
+                            <span class="concentradores-exec-source" data-field="source-icon" title="<?= $e($sourceTitle($metric)) ?>">
+                              <i class="fa-solid <?= $e($sourceIcon($metric)) ?>"></i>
+                            </span>
+                          </div>
+                          <div class="concentradores-exec-metric-value" data-field="value"><?= $e($metric['formatted'] ?? '-') ?></div>
+                          <div class="concentradores-exec-metric-status" data-field="status"><?= $e($metric['status']['label'] ?? 'Sin dato') ?></div>
+                        </div>
+                      </div>
+                    <?php endforeach; ?>
+                  </div>
+                </section>
+              <?php endif; ?>
+            </div>
+          <?php else: ?>
+            <div class="concentradores-exec-metrics">
+              <?php foreach ($metricas as $metric): ?>
+                <?php $metricKey = (string)($metric['key'] ?? ''); ?>
+                <div class="concentradores-exec-metric <?= $e($metricClass((array)$metric)) ?>" data-metric="<?= $e($metricKey) ?>">
+                  <i class="fa-solid <?= $e($metricIcon($metricKey)) ?>"></i>
+                  <div class="concentradores-exec-metric-body">
+                    <div class="concentradores-exec-metric-label">
+                      <span data-field="label"><?= $e($metric['label'] ?? $metricKey) ?></span>
+                      <span class="concentradores-exec-source" data-field="source-icon" title="<?= $e($sourceTitle((array)$metric)) ?>">
+                        <i class="fa-solid <?= $e($sourceIcon((array)$metric)) ?>"></i>
+                      </span>
+                    </div>
+                    <div class="concentradores-exec-metric-value" data-field="value"><?= $e($metric['formatted'] ?? '-') ?></div>
+                    <div class="concentradores-exec-metric-status" data-field="status"><?= $e($metric['status']['label'] ?? 'Sin dato') ?></div>
+                  </div>
                 </div>
-              </div>
-            <?php endforeach; ?>
-          </div>
+              <?php endforeach; ?>
+            </div>
+          <?php endif; ?>
         </article>
       <?php endforeach; ?>
     </section>
@@ -383,6 +583,14 @@ $metricIcon = static function (string $metricKey): string {
     function metricClass(metric) {
       const statusClass = metric?.status?.class || 'unavailable';
       return ['ok', 'warning', 'danger', 'info', 'unavailable'].includes(statusClass) ? statusClass : 'unavailable';
+    }
+
+    function sourceIconClass(metric) {
+      return metric?.source === 'sqlserver' ? 'fa-gear' : 'fa-book-open';
+    }
+
+    function sourceTitle(metric) {
+      return metric?.source === 'sqlserver' ? 'SQL Server / AVEVA' : 'MySQL 105';
     }
 
     function updateWarnings(warnings) {
@@ -417,8 +625,15 @@ $metricIcon = static function (string $metricKey): string {
           if (!card) return;
 
           card.className = `concentradores-exec-metric ${metricClass(metric)}`;
+          const label = card.querySelector('[data-field="label"]');
+          const sourceIcon = card.querySelector('[data-field="source-icon"]');
           const value = card.querySelector('[data-field="value"]');
           const status = card.querySelector('[data-field="status"]');
+          if (label) label.textContent = metric.label || metric.key || '';
+          if (sourceIcon) {
+            sourceIcon.title = sourceTitle(metric);
+            sourceIcon.innerHTML = `<i class="fa-solid ${sourceIconClass(metric)}"></i>`;
+          }
           if (value) value.textContent = metric.formatted || '-';
           if (status) status.textContent = metric?.status?.label || 'Sin dato';
         });

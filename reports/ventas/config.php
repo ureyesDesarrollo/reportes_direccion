@@ -1,0 +1,51 @@
+<?php
+
+declare(strict_types=1);
+
+return [
+  'titulo' => 'Ventas',
+  'timezone' => 'America/Mexico_City',
+  'intervalo_actualizacion_ms' => 600000,
+
+  'pedidos_api' => [
+    'url' => 'http://192.168.1.104:5000/api/pedidos',
+    'detalle_url' => 'http://192.168.1.104:5000/api/pedidos/detalle',
+    'api_key' => 'SAI-REQ-2026-MI-CLAVE-SEGURA',
+    'status' => 'Por Surtir,Parcial',
+    'status2' => 'Confirmado',
+    'timeout' => 8,
+  ],
+
+  'productos_calidad' => [
+    ['clave' => 'GRE250B', 'grupo' => '250', 'orden' => 250, 'descripcion' => 'GRENETINA ALIMENTICIA 250 BLOOM SACOS'],
+    ['clave' => 'GRE265B', 'grupo' => '265', 'orden' => 265, 'descripcion' => 'GRENETINA ALIMENTICIA 265 BLOOM SACOS'],
+    ['clave' => 'GRE280B', 'grupo' => '280', 'orden' => 280, 'descripcion' => 'GRENETINA ALIMENTICIA 280 BLOOM SACOS'],
+    ['clave' => 'GRE300B', 'grupo' => '300', 'orden' => 300, 'descripcion' => 'GRENETINA ALIMENTICIA 300 BLOOM SACOS'],
+    ['clave' => 'GRE315B', 'grupo' => '315', 'orden' => 315, 'descripcion' => 'GRENETINA ALIMENTICIA 315 BLOOM SACOS'],
+    ['clave' => 'GRE230B', 'grupo' => '230', 'orden' => 230, 'descripcion' => 'GRENETINA ALIMENTICIA 230 BLOOM GRANEL'],
+    ['clave' => 'GRE230C', 'grupo' => '230', 'orden' => 230, 'descripcion' => 'GRENETINA ALIMENTICIA 230 BLOOM CAJA'],
+    ['clave' => 'GRE265C', 'grupo' => '265', 'orden' => 265, 'descripcion' => 'GRENETINA ALIMENTICIA 265 BLOOM CAJA'],
+    ['clave' => 'GRE300C', 'grupo' => '300', 'orden' => 300, 'descripcion' => 'GRENETINA ALIMENTICIA 300 BLOOM CAJA'],
+    ['clave' => 'GRE315C', 'grupo' => '315', 'orden' => 315, 'descripcion' => 'GRENETINA ALIMENTICIA 315 BLOOM CAJA'],
+    ['clave' => 'GRE3151/4', 'grupo' => '315', 'orden' => 315, 'descripcion' => 'GRENETINA ALIMENTICIA 315 BLOOM CAJA 1/4'],
+    ['clave' => 'GREECO', 'grupo' => 'Económica', 'orden' => 229, 'descripcion' => 'GRENETINA ALIMENTICIA ECONOMICA'],
+    ['clave' => 'GRE300BL', 'grupo' => '300', 'orden' => 300, 'descripcion' => 'GRENETINA ALIMENTICIA DORADA'],
+  ],
+
+  'mysql_105' => [
+    'host' => '192.168.1.105',
+    'port' => 3306,
+    'dbname' => 'bd_sis_preparacion',
+    'user' => 'user_pro',
+    'pass' => 'Pr0g3l2025PR',
+    'charset' => 'utf8mb4',
+  ],
+
+  'tablas' => [
+    'facturas' => 'facturas_sai',
+    'factura_detalle' => 'factura_sai_detalle',
+    'remisiones' => 'remisiones',
+    'remision_detalle' => 'remision_detalle',
+    'notas_credito' => 'notas_credito',
+  ],
+];

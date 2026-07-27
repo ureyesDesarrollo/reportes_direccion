@@ -100,16 +100,16 @@ $semaforoTarimasPeriodo = static function ($value) use ($objetivoTarimasPeriodo,
 
   return 'avance-semaforo-verde';
 };
-$semaforoProduccionPromedio = static function ($value): string {
+$semaforoProduccion = static function ($value): string {
   if (!is_numeric($value)) {
     return '';
   }
 
   $number = (float)$value;
-  if ($number < 20) {
+  if ($number < 630) {
     return 'avance-semaforo-rojo';
   }
-  if ($number < 22) {
+  if ($number <= 670) {
     return 'avance-semaforo-amarillo';
   }
 
@@ -622,7 +622,7 @@ $semaforoDeficit = static function ($value): string {
     </form>
 
     <section class="avance-summary-grid" aria-label="Indicadores de avance">
-      <article class="kpi-card avance-progress-card avance-kpi-card <?= $e($semaforoProduccionPromedio($kpis['promedio_diario'] ?? null)) ?>" id="avanceProduccionCard">
+      <article class="kpi-card avance-progress-card avance-kpi-card <?= $e($semaforoProduccion($kpis['toneladas'] ?? null)) ?>" id="avanceProduccionCard">
         <div>
           <div class="kpi-icon" style="color:#10b981;"><i class="fa-solid fa-chart-line"></i></div>
           <div class="kpi-label">Avance del periodo</div>
@@ -841,7 +841,13 @@ $semaforoDeficit = static function ($value): string {
         if (number < greenTarget) return 'avance-semaforo-amarillo';
         return 'avance-semaforo-verde';
       };
-      const semaforoProduccionPromedio = (value) => semaforoTarimas(value);
+      const semaforoProduccion = (value) => {
+        const number = asNumber(value);
+        if (number === null) return '';
+        if (number < 630) return 'avance-semaforo-rojo';
+        if (number <= 670) return 'avance-semaforo-amarillo';
+        return 'avance-semaforo-verde';
+      };
       const semaforoFinos = (value) => {
         const number = asNumber(value);
         if (number === null) return '';
@@ -1085,7 +1091,7 @@ $semaforoDeficit = static function ($value): string {
         setText('avanceKpiDeficitDias', fmtNumber(kpis.deficit_dias, 2));
         setText('avanceBarreduraBadge', `${fmtNumber(kpis.barredura_toneladas, 1)} t`);
         setText('avanceFootnote', `Corte ${meta.hora_corte || ''} · ${filtros.periodo_inicio || ''} - ${filtros.periodo_fin || ''}`);
-        setSemaforo('avanceProduccionCard', semaforoProduccionPromedio(kpis.promedio_diario));
+        setSemaforo('avanceProduccionCard', semaforoProduccion(kpis.toneladas));
         setSemaforo('avanceKpiRendimientoCard', semaforoRendimiento(kpis.rendimiento));
         setSemaforo('avanceKpiFinosCard', semaforoFinos(kpis.porcentaje_finos));
         setSemaforo('avanceKpiPromedioCard', semaforoTarimas(kpis.promedio_diario));

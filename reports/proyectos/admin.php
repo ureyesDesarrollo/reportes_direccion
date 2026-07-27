@@ -95,6 +95,49 @@ try {
     }
   };
 
+  $resolveSectionForStatus = static function (PDO $pdo, string $sectionsSql, int $sectionId, string $statusKey, string $statusLabel): int {
+    $sectionStmt = $pdo->prepare("SELECT id, area_id, slug FROM {$sectionsSql} WHERE id = :id AND activo = 1 LIMIT 1");
+    $sectionStmt->execute(['id' => $sectionId]);
+    $section = $sectionStmt->fetch();
+    if (!$section) {
+      return $sectionId;
+    }
+
+    $normalizedStatusKey = strtolower(trim($statusKey));
+    $normalizedStatusLabel = mb_strtolower(trim($statusLabel), 'UTF-8');
+    $targetSlug = ($normalizedStatusKey === 'done' || $normalizedStatusLabel === 'terminado')
+      ? 'terminados'
+      : ((string)($section['slug'] ?? '') === 'terminados' ? 'proyectos' : '');
+
+    if ($targetSlug === '') {
+      return $sectionId;
+    }
+
+    $targetStmt = $pdo->prepare("SELECT id FROM {$sectionsSql} WHERE area_id = :area_id AND slug = :slug AND activo = 1 LIMIT 1");
+    $targetStmt->execute([
+      'area_id' => (int)$section['area_id'],
+      'slug' => $targetSlug,
+    ]);
+    $targetId = (int)$targetStmt->fetchColumn();
+
+    return $targetId > 0 ? $targetId : $sectionId;
+  };
+
+  $defaultProjectSectionId = static function (PDO $pdo, string $sectionsSql, string $areasSql): int {
+    $stmt = $pdo->query("
+      SELECT s.id
+      FROM {$sectionsSql} s
+      INNER JOIN {$areasSql} a ON a.id = s.area_id
+      WHERE s.activo = 1
+        AND a.activo = 1
+        AND s.slug = 'proyectos'
+      ORDER BY a.orden, s.orden, s.id
+      LIMIT 1
+    ");
+
+    return (int)($stmt->fetchColumn() ?: 0);
+  };
+
   if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = (string)($_POST['action'] ?? '');
 
@@ -156,6 +199,21 @@ try {
         $statusLabel = $defaultStatusLabel($statusKey);
       }
 
+      $previousSectionId = 0;
+      if ($id > 0) {
+        $previousSectionStmt = $pdo->prepare("SELECT section_id FROM {$itemsSql} WHERE id = :id AND activo = 1");
+        $previousSectionStmt->execute(['id' => $id]);
+        $previousSectionId = (int)$previousSectionStmt->fetchColumn();
+      }
+
+      if ($id > 0 && $previousSectionId > 0) {
+        $sectionId = $previousSectionId;
+      } elseif ($sectionId <= 0) {
+        $sectionId = $defaultProjectSectionId($pdo, $sectionsSql, $areasSql);
+      }
+
+      $sectionId = $resolveSectionForStatus($pdo, $sectionsSql, $sectionId, $statusKey, $statusLabel);
+
       $payload = [
         'section_id' => $sectionId,
         'nombre' => $clean($_POST['nombre'] ?? ''),
@@ -174,10 +232,10 @@ try {
       ];
 
       if ($payload['section_id'] <= 0 || $payload['nombre'] === '') {
-        throw new RuntimeException('Selecciona una seccion y escribe el nombre del proyecto.');
+        throw new RuntimeException('Escribe el nombre del proyecto.');
       }
 
-      if ($payload['orden'] <= 0) {
+      if ($payload['orden'] <= 0 || ($previousSectionId > 0 && $previousSectionId !== $payload['section_id'])) {
         $maxStmt = $pdo->prepare("SELECT COALESCE(MAX(orden), 0) + 1 FROM {$itemsSql} WHERE section_id = :section_id AND activo = 1");
         $maxStmt->execute(['section_id' => $payload['section_id']]);
         $payload['orden'] = (int)$maxStmt->fetchColumn();
@@ -216,6 +274,9 @@ try {
         $message = 'Proyecto creado.';
       }
 
+      if ($previousSectionId > 0 && $previousSectionId !== $payload['section_id']) {
+        $renumberSection($pdo, $itemsSql, $previousSectionId);
+      }
       $renumberSection($pdo, $itemsSql, $payload['section_id']);
     }
 
@@ -616,7 +677,7 @@ try {
     <div class="top">
       <div>
         <h1>Administrar proyectos</h1>
-        <p class="sub">Edicion agrupada por area y seccion. El orden se cambia con flechas.</p>
+        <p class="sub">Edicion agrupada por area. El estatus controla si el proyecto queda activo o terminado.</p>
       </div>
       <div class="actions">
         <a class="btn" href="index.php">Ver tablero</a>
@@ -641,9 +702,8 @@ try {
           <label>Proyecto
             <textarea name="nombre" required></textarea>
           </label>
-          <label>Seccion
+          <label>Sección
             <select name="section_id" required>
-              <option value="">Seleccionar</option>
               <?php foreach ($sectionRows as $section): ?>
                 <option value="<?= $e($section['id']) ?>"><?= $e($section['area_nombre'] . ' / ' . $section['nombre']) ?></option>
               <?php endforeach; ?>
@@ -741,17 +801,9 @@ try {
                     <input type="hidden" name="action" value="save_item">
                     <input type="hidden" name="id" value="<?= $e($item['id']) ?>">
                     <input type="hidden" name="orden" value="<?= $e($item['orden']) ?>">
+                    <input type="hidden" name="section_id" value="<?= $e($item['section_id']) ?>">
                     <label>Proyecto
                       <textarea name="nombre" required><?= $e($item['nombre']) ?></textarea>
-                    </label>
-                    <label>Seccion
-                      <select name="section_id" required>
-                        <?php foreach ($sectionRows as $sectionOption): ?>
-                          <option value="<?= $e($sectionOption['id']) ?>" <?= (int)$sectionOption['id'] === (int)$item['section_id'] ? 'selected' : '' ?>>
-                            <?= $e($sectionOption['area_nombre'] . ' / ' . $sectionOption['nombre']) ?>
-                          </option>
-                        <?php endforeach; ?>
-                      </select>
                     </label>
                     <div class="meta-grid">
                       <label>Prioridad tipo
