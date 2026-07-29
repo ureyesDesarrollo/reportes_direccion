@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 $config = $config ?? require __DIR__ . '/config.php';
+$warnings = [];
 
 $detailReport = require __DIR__ . '/../secadores-temperatura/build_report.php';
 $detailConfig = require __DIR__ . '/../secadores-temperatura/config.php';
@@ -37,6 +38,7 @@ $connectMysql = static function (array $cfg): PDO {
   return new PDO($dsn, (string)($cfg['user'] ?? ''), (string)($cfg['pass'] ?? ''), [
     PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
     PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+    PDO::ATTR_TIMEOUT => (int)($cfg['timeout'] ?? 3),
   ]);
 };
 
@@ -47,6 +49,14 @@ $quoteSqlIdentifier = static function (string $name): string {
   }
 
   return '[' . $name . ']';
+};
+
+$quoteMysqlIdentifier = static function (string $name): string {
+  if (!preg_match('/^[A-Za-z0-9_]+$/', $name)) {
+    throw new InvalidArgumentException('Identificador MySQL inválido: ' . $name);
+  }
+
+  return '`' . $name . '`';
 };
 
 $historyLimit = max(300, (int)($config['tendencia_limite_registros'] ?? 5000));
@@ -150,10 +160,10 @@ $evaluateMetricStatus = static function (?float $value, array $rule): array {
   if ($mode === 'bandas') {
     $statusMap = [
       'verde' => ['Óptimo', 'verde', '#2e8b57'],
-      'amarillo' => ['Atención', 'amarillo', '#e49a32'],
+      'amarillo' => ['Atención', 'amarillo', '#facc15'],
       'rojo' => ['Crítico', 'rojo', '#c94436'],
       'gris' => ['Sin dato', 'gris', '#94a3b8'],
-      'azul' => ['Lectura', 'azul', '#0ea5e9'],
+      'azul' => ['Lectura', 'azul', '#ffffff'],
     ];
 
     foreach ((array)($rule['bandas'] ?? []) as $band) {
@@ -175,7 +185,7 @@ $evaluateMetricStatus = static function (?float $value, array $rule): array {
     }
 
     if ($yellowMin !== null && $value >= $yellowMin) {
-      return ['Atención', 'amarillo', '#e49a32'];
+      return ['Atención', 'amarillo', '#facc15'];
     }
 
     return ['Crítico', 'rojo', '#c94436'];
@@ -187,7 +197,7 @@ $evaluateMetricStatus = static function (?float $value, array $rule): array {
     }
 
     if ($yellowMax !== null && $value <= $yellowMax) {
-      return ['Atención', 'amarillo', '#e49a32'];
+      return ['Atención', 'amarillo', '#facc15'];
     }
 
     return ['Crítico', 'rojo', '#c94436'];
@@ -203,12 +213,152 @@ $evaluateMetricStatus = static function (?float $value, array $rule): array {
     if ($hasYellow) {
       $inYellow = ($yellowMin === null || $value >= $yellowMin) && ($yellowMax === null || $value <= $yellowMax);
       if ($inYellow) {
-        return ['Atención', 'amarillo', '#e49a32'];
+        return ['Atención', 'amarillo', '#facc15'];
       }
     }
   }
 
   return ['Crítico', 'rojo', '#c94436'];
+};
+
+$normalizeStatusText = static function (string $value): string {
+  $value = mb_strtolower(trim($value), 'UTF-8');
+  return strtr($value, [
+    'á' => 'a',
+    'é' => 'e',
+    'í' => 'i',
+    'ó' => 'o',
+    'ú' => 'u',
+    'ü' => 'u',
+    'Á' => 'a',
+    'É' => 'e',
+    'Í' => 'i',
+    'Ó' => 'o',
+    'Ú' => 'u',
+    'Ü' => 'u',
+  ]);
+};
+
+$evaluateTextMetricStatus = static function (string $value, array $rule) use ($normalizeStatusText): array {
+  $value = $normalizeStatusText($value);
+  if ($value === '') {
+    return ['Sin dato', 'gris', '#94a3b8'];
+  }
+
+  $statusMap = [
+    'verde' => ['Óptimo', 'verde', '#2e8b57'],
+    'amarillo' => ['Atención', 'amarillo', '#facc15'],
+    'rojo' => ['Crítico', 'rojo', '#c94436'],
+  ];
+
+  foreach (['verde', 'amarillo', 'rojo'] as $status) {
+    foreach ((array)($rule[$status] ?? []) as $expected) {
+      if ($value === $normalizeStatusText((string)$expected)) {
+        return $statusMap[$status];
+      }
+    }
+  }
+
+  return ['Lectura', 'azul', '#ffffff'];
+};
+
+$formatRangeValue = static function ($value): string {
+  if (!is_numeric($value)) {
+    return trim((string)$value);
+  }
+
+  return rtrim(rtrim(n((float)$value, 2), '0'), '.');
+};
+
+$buildSemaphoreRangeLabel = static function (array $rule, string $unit = '', string $fallback = '') use ($formatRangeValue): string {
+  if ($rule === []) {
+    return $fallback;
+  }
+
+  $mode = (string)($rule['modo'] ?? 'rango');
+  $parts = [];
+
+  if ($mode === 'bandas') {
+    $bands = (array)($rule['bandas'] ?? []);
+    usort($bands, static function (array $a, array $b): int {
+      $aMin = isset($a['min']) && is_numeric($a['min']) ? (float)$a['min'] : -INF;
+      $bMin = isset($b['min']) && is_numeric($b['min']) ? (float)$b['min'] : -INF;
+      return $aMin <=> $bMin;
+    });
+
+    foreach ($bands as $band) {
+      $status = ucfirst((string)($band['estado'] ?? 'Rango'));
+      $hasMin = isset($band['min']) && is_numeric($band['min']);
+      $hasMax = isset($band['max']) && is_numeric($band['max']);
+
+      if (!$hasMin && $hasMax) {
+        $parts[] = $status . ' <' . $formatRangeValue($band['max']);
+      } elseif ($hasMin && !$hasMax) {
+        $parts[] = $status . ' >' . $formatRangeValue($band['min']);
+      } elseif ($hasMin && $hasMax) {
+        $parts[] = $status . ' ' . $formatRangeValue($band['min']) . '-' . $formatRangeValue($band['max']);
+      }
+    }
+  } elseif ($mode === 'texto') {
+    foreach (['verde' => 'Verde', 'amarillo' => 'Amarillo', 'rojo' => 'Rojo'] as $key => $label) {
+      $values = array_values(array_filter(array_map('trim', array_map('strval', (array)($rule[$key] ?? [])))));
+      if ($values !== []) {
+        $parts[] = $label . ' ' . implode(', ', $values);
+      }
+    }
+  } elseif ($mode === 'rango') {
+    $greenMin = isset($rule['verde_min']) && is_numeric($rule['verde_min']) ? (float)$rule['verde_min'] : null;
+    $greenMax = isset($rule['verde_max']) && is_numeric($rule['verde_max']) ? (float)$rule['verde_max'] : null;
+    $yellowMin = isset($rule['amarillo_min']) && is_numeric($rule['amarillo_min']) ? (float)$rule['amarillo_min'] : null;
+    $yellowMax = isset($rule['amarillo_max']) && is_numeric($rule['amarillo_max']) ? (float)$rule['amarillo_max'] : null;
+
+    if ($greenMin !== null && $greenMax !== null) {
+      if ($yellowMin !== null && $yellowMin < $greenMin) {
+        $parts[] = 'Rojo <' . $formatRangeValue($yellowMin);
+        $parts[] = 'Amarillo ' . $formatRangeValue($yellowMin) . '-' . $formatRangeValue($greenMin);
+      } else {
+        $parts[] = 'Rojo <' . $formatRangeValue($greenMin);
+      }
+
+      $parts[] = 'Verde ' . $formatRangeValue($greenMin) . '-' . $formatRangeValue($greenMax);
+
+      if ($yellowMax !== null && $yellowMax > $greenMax) {
+        $parts[] = 'Amarillo ' . $formatRangeValue($greenMax) . '-' . $formatRangeValue($yellowMax);
+        $parts[] = 'Rojo >' . $formatRangeValue($yellowMax);
+      } else {
+        $parts[] = 'Rojo >' . $formatRangeValue($greenMax);
+      }
+    }
+  } elseif ($mode === 'minimo') {
+    $greenMin = isset($rule['verde_min']) && is_numeric($rule['verde_min']) ? (float)$rule['verde_min'] : null;
+    $yellowMin = isset($rule['amarillo_min']) && is_numeric($rule['amarillo_min']) ? (float)$rule['amarillo_min'] : null;
+
+    if ($yellowMin !== null && $greenMin !== null) {
+      $parts[] = 'Rojo <' . $formatRangeValue($yellowMin);
+      $parts[] = 'Amarillo ' . $formatRangeValue($yellowMin) . '-' . $formatRangeValue($greenMin);
+      $parts[] = 'Verde >=' . $formatRangeValue($greenMin);
+    } elseif ($greenMin !== null) {
+      $parts[] = 'Rojo <' . $formatRangeValue($greenMin);
+      $parts[] = 'Verde >=' . $formatRangeValue($greenMin);
+    }
+  } elseif ($mode === 'maximo') {
+    $greenMax = isset($rule['verde_max']) && is_numeric($rule['verde_max']) ? (float)$rule['verde_max'] : null;
+    $yellowMax = isset($rule['amarillo_max']) && is_numeric($rule['amarillo_max']) ? (float)$rule['amarillo_max'] : null;
+
+    if ($greenMax !== null && $yellowMax !== null) {
+      $parts[] = 'Verde <' . $formatRangeValue($greenMax);
+      $parts[] = 'Amarillo ' . $formatRangeValue($greenMax) . '-' . $formatRangeValue($yellowMax);
+      $parts[] = 'Rojo >' . $formatRangeValue($yellowMax);
+    }
+  }
+
+  if ($parts === []) {
+    return $fallback;
+  }
+
+  $label = implode(' | ', $parts);
+  $unit = trim($unit);
+  return $unit !== '' ? $label . ' ' . $unit : $label;
 };
 
 $applyMetricFormula = static function (?float $value, array $metricConfig): ?float {
@@ -280,6 +430,7 @@ $metricConfigByTunnel = $applyCentralHumidityRanges(
 );
 
 $metricValuesByTunnel = [];
+$topIndicators = [];
 $metricRow = [];
 $metricHistoryRows = [];
 $metricWeekHistoryByField = [];
@@ -294,7 +445,7 @@ foreach ($metricConfigByTunnel as $tunnelKey => $metricGroup) {
     if ($field !== '' && $source === 'sqlserver') {
       $metricFields[$field] = $field;
     }
-    if ($source === 'mysql_secadores') {
+    if (in_array($source, ['mysql_secadores', 'mysql_verificacion_secado'], true)) {
       $mysqlMetricLookups[$tunnelKey][$metricKey] = (array)$metricConfig;
     }
   }
@@ -407,7 +558,7 @@ if (!empty($metricFields)) {
         $rule = (array)($metricConfig['semaforo'] ?? []);
         [$statusLabel, $statusKey, $statusColor] = !empty($rule)
           ? $evaluateMetricStatus($numericValue, $rule)
-          : [($numericValue !== null ? 'Lectura' : 'Sin dato'), ($numericValue !== null ? 'azul' : 'gris'), ($numericValue !== null ? '#0ea5e9' : '#94a3b8')];
+          : [($numericValue !== null ? 'Lectura' : 'Sin dato'), ($numericValue !== null ? 'azul' : 'gris'), ($numericValue !== null ? '#ffffff' : '#94a3b8')];
         $history = [];
 
         if ($field !== '') {
@@ -458,13 +609,14 @@ if (!empty($metricFields)) {
           'available' => !empty($metricConfig['available']) && $field !== '',
           'field' => $field,
           'source' => (string)($metricConfig['source'] ?? 'sqlserver'),
+          'hidden' => !empty($metricConfig['hidden']),
           'value' => $numericValue,
           'formatted' => $numericValue !== null ? n($numericValue, 2) : '-',
           'emptyLabel' => (string)($metricConfig['empty_label'] ?? 'Sin dato'),
           'statusLabel' => $statusLabel,
           'statusKey' => $statusKey,
           'statusColor' => $statusColor,
-          'rangeLabel' => (string)($metricConfig['leyenda'] ?? ''),
+          'rangeLabel' => $buildSemaphoreRangeLabel($rule, (string)($metricConfig['unit'] ?? ''), (string)($metricConfig['leyenda'] ?? '')),
           'rule' => $rule,
           'history' => $history,
           'trends' => [
@@ -475,6 +627,7 @@ if (!empty($metricFields)) {
       }
     }
   } catch (Throwable $e) {
+    $warnings[] = 'No se pudieron leer metricas de secadores desde SQL Server: ' . $e->getMessage();
     foreach ($metricConfigByTunnel as $tunnelKey => $metricGroup) {
       foreach ((array)$metricGroup as $metricKey => $metricConfig) {
         $metricValuesByTunnel[$tunnelKey][$metricKey] = [
@@ -485,13 +638,14 @@ if (!empty($metricFields)) {
           'available' => false,
           'field' => (string)($metricConfig['field'] ?? ''),
           'source' => (string)($metricConfig['source'] ?? 'sqlserver'),
+          'hidden' => !empty($metricConfig['hidden']),
           'value' => null,
           'formatted' => '-',
           'emptyLabel' => (string)($metricConfig['empty_label'] ?? 'Sin dato'),
           'statusLabel' => 'Sin dato',
           'statusKey' => 'gris',
           'statusColor' => '#94a3b8',
-          'rangeLabel' => (string)($metricConfig['leyenda'] ?? ''),
+          'rangeLabel' => $buildSemaphoreRangeLabel((array)($metricConfig['semaforo'] ?? []), (string)($metricConfig['unit'] ?? ''), (string)($metricConfig['leyenda'] ?? '')),
           'rule' => (array)($metricConfig['semaforo'] ?? []),
           'history' => [],
         ];
@@ -502,42 +656,70 @@ if (!empty($metricFields)) {
 
 if (!empty($mysqlMetricLookups)) {
   try {
-    $pdoMysql = $connectMysql((array)($config['mysql_secadores'] ?? []));
+    $mysqlConnections = [];
 
     foreach ($mysqlMetricLookups as $tunnelKey => $metricGroup) {
       foreach ($metricGroup as $metricKey => $metricConfig) {
+        $source = (string)($metricConfig['source'] ?? 'mysql_secadores');
+        $connectionKey = $source === 'mysql_verificacion_secado' ? 'mysql_verificacion_secado' : 'mysql_secadores';
+        if (!isset($mysqlConnections[$connectionKey])) {
+          $mysqlConnections[$connectionKey] = $connectMysql((array)($config[$connectionKey] ?? []));
+        }
+        $pdoMysql = $mysqlConnections[$connectionKey];
+
         $lookup = (array)($metricConfig['lookup'] ?? []);
         $table = (string)($lookup['table'] ?? '');
         $keyColumn = (string)($lookup['key_column'] ?? '');
         $keyValue = (string)($lookup['key_value'] ?? '');
         $timestampColumn = (string)($lookup['timestamp_column'] ?? 'fecha_hora');
+        $lookupDate = trim((string)($lookup['date'] ?? ''));
+        $useDateFilter = array_key_exists('date_filter', $lookup) ? (bool)$lookup['date_filter'] : true;
         $field = trim((string)($metricConfig['field'] ?? ''));
 
         if ($table === '' || $keyColumn === '' || $keyValue === '' || $field === '') {
           continue;
         }
 
+        $safeField = $quoteMysqlIdentifier($field);
+        $safeTimestampColumn = $quoteMysqlIdentifier($timestampColumn);
+        $safeTable = $quoteMysqlIdentifier($table);
+        $safeKeyColumn = $quoteMysqlIdentifier($keyColumn);
+        $orderColumns = (array)($lookup['order_columns'] ?? [$timestampColumn]);
+        $orderParts = [];
+        foreach ($orderColumns as $orderColumn) {
+          $orderParts[] = $quoteMysqlIdentifier((string)$orderColumn) . ' DESC';
+        }
+        $orderSql = implode(', ', $orderParts !== [] ? $orderParts : [$safeTimestampColumn . ' DESC']);
+        $dateSql = '';
+        if ($useDateFilter) {
+          $dateSql = $lookupDate !== '' ? ' AND DATE(' . $safeTimestampColumn . ') = :lookup_date' : ' AND DATE(' . $safeTimestampColumn . ') = CURDATE()';
+        }
         $sql = sprintf(
-          'SELECT `%s` AS metric_value FROM `%s` WHERE `%s` = :key_value AND DATE(`%s`) = CURDATE() ORDER BY `%s` DESC LIMIT 1',
-          $field,
-          $table,
-          $keyColumn,
-          $timestampColumn,
-          $timestampColumn
+          'SELECT %s AS metric_value, %s AS metric_timestamp FROM %s WHERE %s = :key_value%s ORDER BY %s LIMIT 1',
+          $safeField,
+          $safeTimestampColumn,
+          $safeTable,
+          $safeKeyColumn,
+          $dateSql,
+          $orderSql
         );
 
         $stmt = $pdoMysql->prepare($sql);
-        $stmt->execute(['key_value' => $keyValue]);
+        $params = ['key_value' => $keyValue];
+        if ($lookupDate !== '') {
+          $params['lookup_date'] = $lookupDate;
+        }
+        $stmt->execute($params);
         $row = $stmt->fetch() ?: [];
 
         $sqlHistory = sprintf(
-          'SELECT `%s` AS metric_value, `%s` AS metric_timestamp FROM `%s` WHERE `%s` = :key_value AND `%s` >= DATE_SUB(NOW(), INTERVAL 31 DAY) ORDER BY `%s` DESC LIMIT %d',
-          $field,
-          $timestampColumn,
-          $table,
-          $keyColumn,
-          $timestampColumn,
-          $timestampColumn,
+          'SELECT %s AS metric_value, %s AS metric_timestamp FROM %s WHERE %s = :key_value AND %s >= DATE_SUB(NOW(), INTERVAL 31 DAY) ORDER BY %s LIMIT %d',
+          $safeField,
+          $safeTimestampColumn,
+          $safeTable,
+          $safeKeyColumn,
+          $safeTimestampColumn,
+          $orderSql,
           $historyLimit
         );
         $stmtHistory = $pdoMysql->prepare($sqlHistory);
@@ -545,22 +727,32 @@ if (!empty($mysqlMetricLookups)) {
         $historyRows = $stmtHistory->fetchAll() ?: [];
 
         $value = $row['metric_value'] ?? null;
-        $numericValue = is_numeric($value) ? (float)$value : null;
+        $timestampValue = $row['metric_timestamp'] ?? null;
+        $isTextMetric = (string)($metricConfig['tipo'] ?? 'numero') === 'texto';
+        $textValue = is_scalar($value) ? trim((string)$value) : '';
+        $numericValue = (!$isTextMetric && is_numeric($value)) ? (float)$value : null;
         $rule = (array)($metricConfig['semaforo'] ?? []);
-        [$statusLabel, $statusKey, $statusColor] = !empty($rule)
-          ? $evaluateMetricStatus($numericValue, $rule)
-          : [($numericValue !== null ? 'Lectura' : 'Sin dato'), ($numericValue !== null ? 'azul' : 'gris'), ($numericValue !== null ? '#0ea5e9' : '#94a3b8')];
+        $hasMetricValue = $numericValue !== null || ($isTextMetric && $textValue !== '');
+        if (!empty($rule) && $isTextMetric) {
+          [$statusLabel, $statusKey, $statusColor] = $evaluateTextMetricStatus($textValue, $rule);
+        } elseif (!empty($rule)) {
+          [$statusLabel, $statusKey, $statusColor] = $evaluateMetricStatus($numericValue, $rule);
+        } else {
+          [$statusLabel, $statusKey, $statusColor] = [($hasMetricValue ? 'Lectura' : 'Sin dato'), ($hasMetricValue ? 'azul' : 'gris'), ($hasMetricValue ? '#ffffff' : '#94a3b8')];
+        }
         $history = [];
 
-        foreach ($historyRows as $historyRow) {
-          $historyValue = $historyRow['metric_value'] ?? null;
-          $historyNumericValue = is_numeric($historyValue) ? (float)$historyValue : null;
-          $history[] = [
-            'timestamp' => $formatHistoryTimestamp($historyRow['metric_timestamp'] ?? null),
-            'iso' => $formatHistoryIsoTimestamp($historyRow['metric_timestamp'] ?? null),
-            'value' => $historyNumericValue,
-            'formatted' => $historyNumericValue !== null ? n($historyNumericValue, 2) : '-',
-          ];
+        if (!$isTextMetric) {
+          foreach ($historyRows as $historyRow) {
+            $historyValue = $historyRow['metric_value'] ?? null;
+            $historyNumericValue = is_numeric($historyValue) ? (float)$historyValue : null;
+            $history[] = [
+              'timestamp' => $formatHistoryTimestamp($historyRow['metric_timestamp'] ?? null),
+              'iso' => $formatHistoryIsoTimestamp($historyRow['metric_timestamp'] ?? null),
+              'value' => $historyNumericValue,
+              'formatted' => $historyNumericValue !== null ? n($historyNumericValue, 2) : '-',
+            ];
+          }
         }
 
         $metricValuesByTunnel[$tunnelKey][$metricKey] = [
@@ -570,14 +762,16 @@ if (!empty($mysqlMetricLookups)) {
           'unit' => (string)($metricConfig['unit'] ?? ''),
           'available' => !empty($metricConfig['available']) && $field !== '',
           'field' => $field,
-          'source' => (string)($metricConfig['source'] ?? 'mysql_105'),
+          'source' => $source,
+          'hidden' => !empty($metricConfig['hidden']),
           'value' => $numericValue,
-          'formatted' => $numericValue !== null ? n($numericValue, 2) : '-',
+          'formatted' => $isTextMetric ? ($textValue !== '' ? $textValue : '-') : ($numericValue !== null ? n($numericValue, 2) : '-'),
           'emptyLabel' => (string)($metricConfig['empty_label'] ?? 'Sin dato'),
           'statusLabel' => $statusLabel,
           'statusKey' => $statusKey,
           'statusColor' => $statusColor,
-          'rangeLabel' => (string)($metricConfig['leyenda'] ?? ''),
+          'rangeLabel' => $buildSemaphoreRangeLabel($rule, (string)($metricConfig['unit'] ?? ''), (string)($metricConfig['leyenda'] ?? '')),
+          'timestampLabel' => $formatHistoryTimestamp($timestampValue),
           'rule' => $rule,
           'history' => $history,
           'trends' => [
@@ -588,6 +782,7 @@ if (!empty($mysqlMetricLookups)) {
       }
     }
   } catch (Throwable $e) {
+    $warnings[] = 'No se pudieron leer metricas de secadores desde MySQL: ' . $e->getMessage();
     foreach ($mysqlMetricLookups as $tunnelKey => $metricGroup) {
       foreach ($metricGroup as $metricKey => $metricConfig) {
         if (isset($metricValuesByTunnel[$tunnelKey][$metricKey])) {
@@ -602,13 +797,14 @@ if (!empty($mysqlMetricLookups)) {
           'available' => false,
           'field' => (string)($metricConfig['field'] ?? ''),
           'source' => (string)($metricConfig['source'] ?? 'mysql_105'),
+          'hidden' => !empty($metricConfig['hidden']),
           'value' => null,
           'formatted' => '-',
           'emptyLabel' => (string)($metricConfig['empty_label'] ?? 'Sin dato'),
           'statusLabel' => 'Sin dato',
           'statusKey' => 'gris',
           'statusColor' => '#94a3b8',
-          'rangeLabel' => (string)($metricConfig['leyenda'] ?? ''),
+          'rangeLabel' => $buildSemaphoreRangeLabel((array)($metricConfig['semaforo'] ?? []), (string)($metricConfig['unit'] ?? ''), (string)($metricConfig['leyenda'] ?? '')),
           'rule' => (array)($metricConfig['semaforo'] ?? []),
           'history' => [],
         ];
@@ -616,6 +812,76 @@ if (!empty($mysqlMetricLookups)) {
     }
   }
 }
+
+$buildTopIndicators = static function (array $indicatorConfig, array $config) use ($connectMysql, $evaluateMetricStatus, $formatHistoryTimestamp, $buildSemaphoreRangeLabel): array {
+  $indicators = [];
+  $mysqlProductConfig = (array)($config['mysql_producto'] ?? []);
+  $mysqlProductRow = [];
+  $mysqlProductTimestamp = null;
+
+  $needsMysqlProduct = false;
+  foreach ($indicatorConfig as $indicator) {
+    if ((string)($indicator['source'] ?? '') === 'mysql_producto') {
+      $needsMysqlProduct = true;
+      break;
+    }
+  }
+
+  if ($needsMysqlProduct && $mysqlProductConfig !== []) {
+    try {
+      $pdoMysql = $connectMysql($mysqlProductConfig);
+      $table = (string)($mysqlProductConfig['tabla_datos'] ?? 'datos_producto');
+      $orderColumns = (array)($mysqlProductConfig['columnas_orden'] ?? ['id_datos_hora', 'id']);
+      $orderSql = [];
+      foreach ($orderColumns as $column) {
+        $column = (string)$column;
+        if (preg_match('/^[A-Za-z0-9_]+$/', $column)) {
+          $orderSql[] = '`' . $column . '` DESC';
+        }
+      }
+      $orderClause = $orderSql !== [] ? ' ORDER BY ' . implode(', ', $orderSql) : '';
+      $mysqlProductRow = $pdoMysql->query('SELECT * FROM `' . $table . '`' . $orderClause . ' LIMIT 1')->fetch() ?: [];
+      $mysqlProductTimestamp = $mysqlProductRow['id_datos_hora'] ?? null;
+    } catch (Throwable $e) {
+      $mysqlProductRow = [];
+    }
+  }
+
+  foreach ($indicatorConfig as $indicatorKey => $indicator) {
+    $source = (string)($indicator['source'] ?? '');
+    $field = (string)($indicator['field'] ?? '');
+    $rawValue = null;
+
+    if ($source === 'mysql_producto' && $field !== '') {
+      $rawValue = $mysqlProductRow[$field] ?? null;
+    }
+
+    $numericValue = is_numeric($rawValue) ? (float)$rawValue : null;
+    $rule = (array)($indicator['semaforo'] ?? []);
+    [$statusLabel, $statusKey, $statusColor] = $rule !== []
+      ? $evaluateMetricStatus($numericValue, $rule)
+      : [($numericValue !== null ? 'Lectura' : 'Sin dato'), ($numericValue !== null ? 'azul' : 'gris'), ($numericValue !== null ? '#ffffff' : '#94a3b8')];
+
+    $unit = trim((string)($indicator['unit'] ?? ''));
+    $formatted = $numericValue !== null ? n($numericValue, 2) : (string)($indicator['empty_label'] ?? '-');
+    $indicators[(string)$indicatorKey] = [
+      'key' => (string)$indicatorKey,
+      'label' => (string)($indicator['label'] ?? $indicatorKey),
+      'value' => $numericValue,
+      'formatted' => $formatted,
+      'unit' => $unit,
+      'statusLabel' => $statusLabel,
+      'statusKey' => $statusKey,
+      'statusColor' => $statusColor,
+      'rangeLabel' => $buildSemaphoreRangeLabel($rule, $unit, (string)($indicator['leyenda'] ?? '')),
+      'timestampLabel' => $mysqlProductTimestamp !== null ? (string)$mysqlProductTimestamp : '',
+    ];
+  }
+
+  return $indicators;
+};
+
+$topIndicators = $buildTopIndicators((array)($config['indicadores_superiores'] ?? []), $config);
 
 $summarizeTunnel = static function (array $tunnel, array $summary, array $rows): array {
   $latestRow = $rows[0] ?? null;
@@ -674,7 +940,7 @@ $summarizeTunnel = static function (array $tunnel, array $summary, array $rows):
   } elseif ($warning > 0) {
     $statusLabel = 'Atención';
     $statusKey = 'amarillo';
-    $statusColor = '#e49a32';
+    $statusColor = '#facc15';
   } elseif ($neutral === $total && $total > 0) {
     $statusLabel = 'Referencia';
     $statusKey = 'gris';
@@ -704,13 +970,56 @@ $summarizeTunnel = static function (array $tunnel, array $summary, array $rows):
   ];
 };
 
+$ensureTemperatureRooms = static function (array $tunnelSummary, array $rooms): array {
+  $cells = (array)($tunnelSummary['cells'] ?? []);
+  $present = [];
+
+  foreach ($cells as $cell) {
+    $label = (string)($cell['label'] ?? '');
+    if (preg_match('/rec[aá]mara\s+(\d+)/iu', $label, $matches) === 1) {
+      $room = (int)$matches[1];
+      $cell['label'] = 'Recamara ' . $room;
+      $present[$room] = true;
+    }
+    $normalizedCells[] = $cell;
+  }
+  $cells = $normalizedCells ?? $cells;
+
+  foreach ($rooms as $room) {
+    $room = (int)$room;
+    if (isset($present[$room])) {
+      continue;
+    }
+
+    $cells[] = [
+      'field' => 'recamara_' . $room . '_placeholder',
+      'label' => 'Recamara ' . $room,
+      'formatted' => '-',
+      'value' => null,
+      'statusLabel' => 'Sin dato',
+      'statusKey' => 'gris',
+      'statusColor' => '#94a3b8',
+      'rangeLabel' => '',
+    ];
+  }
+
+  usort($cells, static function (array $a, array $b): int {
+    $roomA = preg_match('/rec[aá]mara\s+(\d+)/iu', (string)($a['label'] ?? ''), $matchesA) === 1 ? (int)$matchesA[1] : 999;
+    $roomB = preg_match('/rec[aá]mara\s+(\d+)/iu', (string)($b['label'] ?? ''), $matchesB) === 1 ? (int)$matchesB[1] : 999;
+    return $roomA <=> $roomB;
+  });
+
+  $tunnelSummary['cells'] = $cells;
+  return $tunnelSummary;
+};
+
 $normalizeVotators = static function (
   array $votatorConfig,
   array $latestMetricRow,
   array $metricHistoryRows,
   array $metricWeekHistoryByField,
   array $metricMonthHistoryByField
-) use ($evaluateMetricStatus, $formatHistoryTimestamp, $formatHistoryIsoTimestamp): array {
+) use ($evaluateMetricStatus, $formatHistoryTimestamp, $formatHistoryIsoTimestamp, $buildSemaphoreRangeLabel): array {
   $votators = [];
 
   foreach ($votatorConfig as $votatorKey => $votator) {
@@ -731,7 +1040,7 @@ $normalizeVotators = static function (
         : [
           (string)($field['status_label'] ?? ($numericValue !== null ? 'Lectura' : 'Pendiente')),
           (string)($field['status_key'] ?? ($numericValue !== null ? 'azul' : 'gris')),
-          (string)($field['status_color'] ?? ($numericValue !== null ? '#0ea5e9' : '#94a3b8')),
+          (string)($field['status_color'] ?? ($numericValue !== null ? '#ffffff' : '#94a3b8')),
         ];
       $history = [];
       $weekHistory = [];
@@ -766,7 +1075,7 @@ $normalizeVotators = static function (
         'statusLabel' => $statusLabel,
         'statusKey' => $statusKey,
         'statusColor' => $statusColor,
-        'rangeLabel' => (string)($field['leyenda'] ?? ''),
+        'rangeLabel' => $buildSemaphoreRangeLabel($rule, (string)($field['unit'] ?? ''), (string)($field['leyenda'] ?? '')),
         'rule' => $rule,
         'icon' => (string)($field['icon'] ?? ''),
         'history' => $history,
@@ -805,6 +1114,10 @@ foreach (($detailReport['tuneles'] ?? []) as $tunnelKey => $tunnel) {
     (array)($detailReport['tablas'][$tunnelKey] ?? [])
   );
 
+  if ((string)$tunnelKey === 'tunel_2') {
+    $executiveTunels[$tunnelKey] = $ensureTemperatureRooms($executiveTunels[$tunnelKey], range(1, 9));
+  }
+
   $executiveTunels[$tunnelKey]['metricas'] = (array)($metricValuesByTunnel[$tunnelKey] ?? []);
   $executiveTunels[$tunnelKey]['votators'] = $normalizeVotators(
     (array)($votatorConfigByTunnel[$tunnelKey] ?? []),
@@ -834,7 +1147,7 @@ if ($globalTotals['criticas'] > 0) {
 } elseif ($globalTotals['alertas'] > 0) {
   $globalStatusLabel = 'Atención';
   $globalStatusKey = 'amarillo';
-  $globalStatusColor = '#e49a32';
+  $globalStatusColor = '#facc15';
 } elseif ($globalTotals['grises'] === $globalTotals['monitoreadas'] && $globalTotals['monitoreadas'] > 0) {
   $globalStatusLabel = 'Referencia';
   $globalStatusKey = 'gris';
@@ -847,7 +1160,11 @@ $meta['intervaloActualizacionRapida'] = max(15000, (int)($config['intervalo_actu
 return [
   'titulo' => (string)($config['titulo'] ?? 'Secadores'),
   'meta' => $meta,
-  'warnings' => (array)(($detailReport['meta'] ?? [])['warnings'] ?? []),
+  'warnings' => array_values(array_filter(array_merge(
+    (array)(($detailReport['meta'] ?? [])['warnings'] ?? []),
+    $warnings
+  ))),
+  'indicadores' => $topIndicators,
   'tuneles' => $executiveTunels,
   'global' => [
     'cumplimiento' => $globalCompliance,

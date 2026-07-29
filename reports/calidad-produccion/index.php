@@ -276,9 +276,9 @@ $formatAvg = static fn(?float $value): string => $value === null ? '-' : n($valu
     }
 
     .target-card.over {
-      background: #e49a32;
-      color: white;
-      border-color: #c47b1c;
+      background: #facc15;
+      color: #111827;
+      border-color: #eab308;
     }
 
     .target-card:hover {
@@ -723,9 +723,9 @@ $formatAvg = static fn(?float $value): string => $value === null ? '-' : n($valu
     }
 
     .physchem-value-cell.amarillo .physchem-value-box {
-      background: #e49a32;
-      color: white;
-      border-color: #c47b1c;
+      background: #facc15;
+      color: #111827;
+      border-color: #eab308;
     }
 
     .physchem-value-cell.rojo .physchem-value-box,

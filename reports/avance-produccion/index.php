@@ -339,8 +339,9 @@ $semaforoDeficit = static function ($value): string {
     }
 
     .avance-kpi-card.avance-semaforo-amarillo {
-      background: #e49a32;
-      border-color: #c47b1c;
+      background: #facc15;
+      color: #111827;
+      border-color: #eab308;
     }
 
     .avance-kpi-card.avance-semaforo-rojo {

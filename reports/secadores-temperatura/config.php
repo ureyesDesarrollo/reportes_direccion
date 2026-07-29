@@ -118,6 +118,17 @@ return [
             'amarillo_max' => 63
           ],
         ],
+
+        'SECADOR_AS_TEMPERATURA_ZONA_9_INFERIOR' => [
+          'label' => 'Recámara 9',
+          'semaforo' => [
+            'modo' => 'rango',
+            'verde_min' => 61,
+            'verde_max' => 62,
+            'amarillo_min' => 60,
+            'amarillo_max' => 63
+          ],
+        ],
       ],
     ],
 

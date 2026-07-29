@@ -391,14 +391,21 @@ $invertidoMetricGroups = [
       background: #94a3b8;
     }
 
+    .monitor-head-metric.neutral {
+      border-color: #d9e0ea;
+      color: #111827;
+      background: #ffffff;
+    }
+
     .monitor-head-metric.ok {
       border-color: #257447;
       background: #2e8b57;
     }
 
     .monitor-head-metric.warning {
-      border-color: #c47b1c;
-      background: #e49a32;
+      border-color: #eab308;
+      color: #111827;
+      background: #facc15;
     }
 
     .monitor-head-metric.danger {
@@ -568,8 +575,9 @@ $invertidoMetricGroups = [
     }
 
     .monitor-value-box.warning {
-      border-color: #c47b1c;
-      background: #e49a32;
+      border-color: #eab308;
+      color: #111827;
+      background: #facc15;
     }
 
     .monitor-value-box.danger {
@@ -580,6 +588,12 @@ $invertidoMetricGroups = [
     .monitor-value-box.unavailable {
       border-color: #64748b;
       background: #94a3b8;
+    }
+
+    .monitor-value-box.neutral {
+      border-color: #d9e0ea;
+      color: #111827;
+      background: #ffffff;
     }
 
     .monitor-value-box strong {

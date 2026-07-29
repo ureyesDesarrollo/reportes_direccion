@@ -58,7 +58,7 @@ $evaluateMetricStatus = static function (?float $value, array $rule): array {
   }
 
   if ($rule === []) {
-    return ['label' => 'Lectura', 'key' => 'azul', 'color' => '#0ea5e9', 'class' => 'info'];
+    return ['label' => 'Lectura', 'key' => 'azul', 'color' => '#ffffff', 'class' => 'neutral'];
   }
 
   $mode = (string)($rule['modo'] ?? 'rango');
@@ -72,7 +72,7 @@ $evaluateMetricStatus = static function (?float $value, array $rule): array {
       return ['label' => 'Optimo', 'key' => 'verde', 'color' => '#2e8b57', 'class' => 'ok'];
     }
     if ($yellowMin !== null && $value >= $yellowMin) {
-      return ['label' => 'Atencion', 'key' => 'amarillo', 'color' => '#e49a32', 'class' => 'warning'];
+      return ['label' => 'Atencion', 'key' => 'amarillo', 'color' => '#facc15', 'class' => 'warning'];
     }
 
     return ['label' => 'Critico', 'key' => 'rojo', 'color' => '#c94436', 'class' => 'danger'];
@@ -83,7 +83,7 @@ $evaluateMetricStatus = static function (?float $value, array $rule): array {
       return ['label' => 'Optimo', 'key' => 'verde', 'color' => '#2e8b57', 'class' => 'ok'];
     }
     if ($yellowMax !== null && $value <= $yellowMax) {
-      return ['label' => 'Atencion', 'key' => 'amarillo', 'color' => '#e49a32', 'class' => 'warning'];
+      return ['label' => 'Atencion', 'key' => 'amarillo', 'color' => '#facc15', 'class' => 'warning'];
     }
 
     return ['label' => 'Critico', 'key' => 'rojo', 'color' => '#c94436', 'class' => 'danger'];
@@ -97,7 +97,7 @@ $evaluateMetricStatus = static function (?float $value, array $rule): array {
   if ($yellowMin !== null || $yellowMax !== null) {
     $inYellow = ($yellowMin === null || $value >= $yellowMin) && ($yellowMax === null || $value <= $yellowMax);
     if ($inYellow) {
-      return ['label' => 'Atencion', 'key' => 'amarillo', 'color' => '#e49a32', 'class' => 'warning'];
+      return ['label' => 'Atencion', 'key' => 'amarillo', 'color' => '#facc15', 'class' => 'warning'];
     }
   }
 
@@ -377,11 +377,12 @@ foreach ($concentratorConfig as $concentratorKey => $concentrator) {
     }
 
     $rule = (array)($semaforos[$concentratorKey][$metricKey] ?? $semaforos[$metricKey] ?? []);
-    if ($fueraOperacion) {
+    $aplicarFo = $fueraOperacion && $source !== 'sqlserver';
+    if ($aplicarFo) {
       $numericValue = null;
     }
 
-    $status = $fueraOperacion
+    $status = $aplicarFo
       ? ['label' => 'Fuera de operacion', 'key' => 'gris', 'color' => '#94a3b8', 'class' => 'unavailable']
       : $evaluateMetricStatus($numericValue, $rule);
     $decimals = (int)($metric['decimals'] ?? 2);
@@ -397,9 +398,9 @@ foreach ($concentratorConfig as $concentratorKey => $concentrator) {
       'source_column' => $sourceColumn,
       'status' => $status,
       'leyenda' => (string)($metric['leyenda'] ?? ''),
-      'history' => $fueraOperacion ? [] : $historyRows,
+      'history' => $aplicarFo ? [] : $historyRows,
       'trends' => [
-        'month' => (!$fueraOperacion && $source === 'sqlserver' && $sourceColumn !== '') ? (array)($flowMonthHistoryByField[$sourceColumn] ?? []) : [],
+        'month' => (!$aplicarFo && $source === 'sqlserver' && $sourceColumn !== '') ? (array)($flowMonthHistoryByField[$sourceColumn] ?? []) : [],
       ],
     ];
   }

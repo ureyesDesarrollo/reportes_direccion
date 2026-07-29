@@ -106,7 +106,7 @@ $invertidoMetricGroups = [
       --line: #dbe7f5;
       --blue: #0ea5e9;
       --green: #2e8b57;
-      --yellow: #e49a32;
+      --yellow: #facc15;
       --red: #c94436;
       --gray: #94a3b8;
       --shadow: 0 14px 34px rgba(15, 23, 42, 0.08);
@@ -255,7 +255,8 @@ $invertidoMetricGroups = [
     }
 
     .concentradores-exec-metric.warning {
-      border-color: #c47b1c;
+      border-color: #eab308;
+      color: #111827;
       background: var(--yellow);
       box-shadow: 0 10px 24px rgba(228, 154, 50, 0.2);
     }
@@ -264,6 +265,13 @@ $invertidoMetricGroups = [
       border-color: #a9362c;
       background: var(--red);
       box-shadow: 0 10px 24px rgba(201, 68, 54, 0.2);
+    }
+
+    .concentradores-exec-metric.neutral {
+      border-color: #d9e0ea;
+      color: #111827;
+      background: #ffffff;
+      box-shadow: none;
     }
 
     .concentradores-exec-metric.unavailable {
@@ -582,7 +590,7 @@ $invertidoMetricGroups = [
 
     function metricClass(metric) {
       const statusClass = metric?.status?.class || 'unavailable';
-      return ['ok', 'warning', 'danger', 'info', 'unavailable'].includes(statusClass) ? statusClass : 'unavailable';
+      return ['ok', 'warning', 'danger', 'neutral', 'info', 'unavailable'].includes(statusClass) ? statusClass : 'unavailable';
     }
 
     function sourceIconClass(metric) {

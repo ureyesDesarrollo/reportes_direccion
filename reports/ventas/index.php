@@ -203,8 +203,9 @@ $chartTarget = array_fill(0, count($chartLabels), round($objetivoDiario, 2));
     }
 
     .ventas-kpi-card.avance-semaforo-amarillo {
-      background: #e49a32;
-      border-color: #c47b1c;
+      background: #facc15;
+      color: #111827;
+      border-color: #eab308;
     }
 
     .ventas-kpi-card.avance-semaforo-rojo {

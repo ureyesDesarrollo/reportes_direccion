@@ -69,24 +69,24 @@ $yieldStatusColor = static function (string $group, $value): string {
   $number = (float)$value;
   if ($group === 'Carnaza') {
     if ($number > 15.5) return '#2e8b57';
-    if ($number >= 15) return '#e49a32';
+    if ($number >= 15) return '#facc15';
     return '#c94436';
   }
 
   if ($group === 'Cuero Entero') {
     if ($number > 18) return '#2e8b57';
-    if ($number >= 17) return '#e49a32';
+    if ($number >= 17) return '#facc15';
     return '#c94436';
   }
 
   if ($group === 'Recorte' || $group === 'Pedacera') {
     if ($number > 14) return '#2e8b57';
-    if ($number >= 13.5) return '#e49a32';
+    if ($number >= 13.5) return '#facc15';
     return '#c94436';
   }
 
   if ($number >= 17) return '#2e8b57';
-  if ($number >= 16) return '#e49a32';
+  if ($number >= 16) return '#facc15';
   return '#c94436';
 };
 $yieldLabels = array_map(static fn(array $row): string => (string)($row['grupo'] ?? ''), $materialYieldRows);
@@ -456,8 +456,9 @@ if (is_numeric($producedTons)) {
     }
 
     .mp-kpi.mp-warn {
-      background: #e49a32;
-      border-color: #c47b1c;
+      background: #facc15;
+      color: #111827;
+      border-color: #eab308;
     }
 
     .mp-kpi.mp-bad {
@@ -718,7 +719,8 @@ if (is_numeric($producedTons)) {
     }
 
     .mp-yield-pill.amarillo {
-      background: #e49a32;
+      background: #facc15;
+      color: #111827;
     }
 
     .mp-yield-pill.rojo {

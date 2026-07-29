@@ -25,6 +25,9 @@ try {
 extract($report, EXTR_SKIP);
 
 $version = $version ?? time();
+$secadorCaptura = isset($_GET['secador']) ? (string)$_GET['secador'] : '';
+$secadoresValidos = array_keys((array)($tuneles ?? []));
+$modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresValidos, true);
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -86,6 +89,14 @@ $version = $version ?? time();
       font-weight: 700;
     }
 
+    .secadores-exec-tunnel-title-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      width: 100%;
+    }
+
     /* Cabecera del túnel */
     .secadores-exec-tunnel-head {
       display: flex;
@@ -113,13 +124,71 @@ $version = $version ?? time();
       margin-top: 2px;
     }
 
+    .secadores-exec-top-indicator {
+      flex: 0 0 auto;
+      min-width: 190px;
+      min-height: 52px;
+      padding: 8px 12px;
+      border: 1px solid #dbe7f5;
+      border-radius: 12px;
+      background: #ffffff;
+      box-shadow: none;
+      display: grid;
+      align-content: center;
+      gap: 2px;
+    }
+
+    .secadores-exec-top-indicator.ok {
+      color: #ffffff;
+      background: #2e8b57;
+      border-color: #257447;
+    }
+
+    .secadores-exec-top-indicator.warning {
+      color: #111827;
+      background: #facc15;
+      border-color: #eab308;
+    }
+
+    .secadores-exec-top-indicator.danger {
+      color: #ffffff;
+      background: #c94436;
+      border-color: #a9362c;
+    }
+
+    .secadores-exec-top-indicator.unavailable {
+      color: #ffffff;
+      background: #94a3b8;
+      border-color: #64748b;
+    }
+
+    .secadores-exec-top-indicator-label {
+      font-size: 9px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      opacity: .9;
+    }
+
+    .secadores-exec-top-indicator-value {
+      font-size: 20px;
+      font-weight: 900;
+      line-height: 1;
+    }
+
+    .secadores-exec-top-indicator-range {
+      font-size: 9px;
+      font-weight: 800;
+      opacity: .85;
+    }
+
     .secadores-exec-inline-group {
       display: grid;
       gap: 5px;
     }
 
     .secadores-exec-inline-group-title {
-      font-size: 10px;
+      font-size: 20px;
       font-weight: 800;
       text-transform: uppercase;
       letter-spacing: .05em;
@@ -130,7 +199,7 @@ $version = $version ?? time();
       display: grid;
       grid-template-columns: repeat(var(--metric-cols, 3), minmax(0, 1fr));
       grid-auto-rows: minmax(82px, 1fr);
-      gap: 6px;
+      gap: 4px;
     }
 
     .secadores-exec-inline-group-items.is-banda {
@@ -138,15 +207,16 @@ $version = $version ?? time();
     }
 
     .secadores-exec-inline-group-items.is-agua-y-vapor,
-    .secadores-exec-inline-group-items.is-humedades {
-      --metric-cols: 3;
+    .secadores-exec-inline-group-items.is-humedades,
+    .secadores-exec-inline-group-items.is-verificacion-de-secado {
+      --metric-cols: 4;
     }
 
     .secadores-exec-inline-metric {
       display: inline-flex;
       align-items: flex-start;
-      gap: 8px;
-      padding: 8px 10px;
+      gap: 6px;
+      padding: 8px 8px;
       border-radius: 12px;
       background: #0ea5e9;
       border: 1px solid #0284c7;
@@ -182,8 +252,9 @@ $version = $version ?? time();
     }
 
     .secadores-exec-inline-metric.warning {
-      background: #e49a32;
-      border-color: #c47b1c;
+      background: #facc15;
+      border-color: #eab308;
+      color: #111827;
     }
 
     .secadores-exec-inline-metric.danger {
@@ -194,6 +265,13 @@ $version = $version ?? time();
     .secadores-exec-inline-metric.ok {
       background: #2e8b57;
       border-color: #257447;
+    }
+
+    .secadores-exec-inline-metric.neutral {
+      background: #ffffff;
+      border-color: #d9e0ea;
+      color: #111827;
+      box-shadow: none;
     }
 
     .secadores-exec-inline-metric.unavailable {
@@ -210,6 +288,10 @@ $version = $version ?? time();
     }
 
     .secadores-exec-inline-metric-label {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
       font-size: 9px;
       font-weight: 800;
       text-transform: uppercase;
@@ -217,6 +299,17 @@ $version = $version ?? time();
       opacity: 0.86;
       color: inherit;
       min-height: 22px;
+    }
+
+    .secadores-exec-inline-metric-date {
+      flex: 0 0 auto;
+      font-size: 8px;
+      font-weight: 800;
+      line-height: 1;
+      opacity: .82;
+      white-space: nowrap;
+      text-transform: none;
+      letter-spacing: 0;
     }
 
     .secadores-exec-inline-metric-value {
@@ -241,6 +334,15 @@ $version = $version ?? time();
     .secadores-exec-inline-metric-range.is-empty,
     .secadores-exec-zone-range.is-empty {
       visibility: hidden;
+    }
+
+    .secadores-exec-inline-metric-time {
+      color: inherit;
+      font-size: 9px;
+      line-height: 1.2;
+      min-height: 12px;
+      opacity: .78;
+      font-weight: 800;
     }
 
     .secadores-history-modal {
@@ -430,12 +532,21 @@ $version = $version ?? time();
     .secadores-exec-zones {
       display: grid;
       grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 8px;
+      gap: 4px;
+    }
+
+    .secadores-exec-zone-section-title {
+      margin: 0 0 8px;
+      color: #475569;
+      font-size: 20px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: .05em;
     }
 
     .secadores-exec-zone {
-      padding: 10px;
-      min-height: 112px;
+      padding: 8px 8px;
+      min-height: 82px;
       display: flex;
       flex-direction: column;
       gap: 4px;
@@ -452,10 +563,6 @@ $version = $version ?? time();
       box-shadow: none;
     }
 
-    .secadores-exec-zone.clickable {
-      cursor: pointer;
-    }
-
     .secadores-exec-zone:hover {
       transform: translateY(-2px);
       box-shadow: 0 8px 24px rgba(15, 23, 42, 0.10);
@@ -464,65 +571,97 @@ $version = $version ?? time();
     /* Estados por color plano */
 
     .secadores-exec-zone[data-status="ok"] {
-      background: #dcfce7;
-      border-color: #86efac;
-      box-shadow: 0 4px 10px rgba(34, 197, 94, 0.10);
+      background: #2e8b57;
+      border-color: #257447;
+      box-shadow: 0 4px 10px rgba(46, 139, 87, 0.18);
     }
 
     .secadores-exec-zone[data-status="ok"]:hover {
-      box-shadow: 0 8px 24px rgba(74, 222, 128, 0.15);
-      border-color: rgba(74, 222, 128, 0.5);
+      box-shadow: 0 8px 24px rgba(46, 139, 87, 0.24);
+      border-color: #257447;
     }
 
     /* Amarillo visible, pero más ejecutivo */
     .secadores-exec-zone[data-status="warning"] {
-      background: #fde68a;
-      border-color: #e49a32;
-      box-shadow: 0 4px 12px rgba(245, 158, 11, 0.16);
+      background: #facc15;
+      border-color: #eab308;
+      box-shadow: 0 4px 12px rgba(250, 204, 21, 0.24);
     }
 
     .secadores-exec-zone[data-status="warning"]:hover {
-      box-shadow: 0 10px 24px rgba(245, 158, 11, 0.22);
-      border-color: #c47b1c;
+      box-shadow: 0 10px 24px rgba(250, 204, 21, 0.28);
+      border-color: #eab308;
     }
 
     .secadores-exec-zone[data-status="danger"] {
-      background: #fecaca;
-      border-color: #f87171;
-      box-shadow: 0 4px 10px rgba(239, 68, 68, 0.12);
+      background: #c94436;
+      border-color: #a9362c;
+      box-shadow: 0 4px 10px rgba(201, 68, 54, 0.20);
     }
 
     .secadores-exec-zone[data-status="danger"]:hover {
-      box-shadow: 0 8px 24px rgba(239, 68, 68, 0.15);
-      border-color: rgba(239, 68, 68, 0.5);
+      box-shadow: 0 8px 24px rgba(201, 68, 54, 0.26);
+      border-color: #a9362c;
     }
 
     .secadores-exec-zone[data-status="unknown"] {
-      background: #e2e8f0;
-      border-color: #cbd5e1;
+      background: #94a3b8;
+      border-color: #64748b;
+      color: #ffffff;
     }
 
     .secadores-exec-zone-label {
       font-size: 10px;
       font-weight: 800;
-      color: #334155;
+      color: #ffffff;
       padding-left: 2px;
       text-transform: uppercase;
       letter-spacing: 0.04em;
     }
 
+    .secadores-exec-zone[data-status="ok"] .secadores-exec-zone-label,
+    .secadores-exec-zone[data-status="ok"] .secadores-exec-zone-value,
+    .secadores-exec-zone[data-status="ok"] .secadores-exec-zone-value small,
+    .secadores-exec-zone[data-status="ok"] .secadores-exec-zone-range,
+    .secadores-exec-zone[data-status="danger"] .secadores-exec-zone-label,
+    .secadores-exec-zone[data-status="danger"] .secadores-exec-zone-value,
+    .secadores-exec-zone[data-status="danger"] .secadores-exec-zone-value small,
+    .secadores-exec-zone[data-status="danger"] .secadores-exec-zone-range {
+      color: #ffffff;
+    }
+
+    .secadores-exec-zone[data-status="warning"] .secadores-exec-zone-label,
+    .secadores-exec-zone[data-status="warning"] .secadores-exec-zone-value,
+    .secadores-exec-zone[data-status="warning"] .secadores-exec-zone-value small,
+    .secadores-exec-zone[data-status="warning"] .secadores-exec-zone-range {
+      color: #111827;
+    }
+
+    .secadores-exec-zone[data-status="ok"] .secadores-exec-status,
+    .secadores-exec-zone[data-status="danger"] .secadores-exec-status {
+      color: #ffffff !important;
+      background: rgba(255, 255, 255, 0.18) !important;
+      border-color: rgba(255, 255, 255, 0.36);
+    }
+
+    .secadores-exec-zone[data-status="warning"] .secadores-exec-status {
+      color: #111827 !important;
+      background: rgba(255, 255, 255, 0.42) !important;
+      border-color: rgba(17, 24, 39, 0.14);
+    }
+
     .secadores-exec-zone-value {
-      font-size: 22px;
+      font-size: 17px;
       line-height: 1;
       font-weight: 800;
-      color: #0f172a;
+      color: #ffffff;
       padding-left: 2px;
       margin: 2px 0;
     }
 
     .secadores-exec-zone-value small {
       font-size: 11px;
-      color: #64748b;
+      color: #ffffff;
       margin-left: 4px;
       font-weight: 600;
     }
@@ -540,108 +679,19 @@ $version = $version ?? time();
       font-weight: 500;
     }
 
-    /* ============================================
-   BADGE DE AJUSTE — GRANDE Y PROMINENTE
-   ============================================ */
-
-    .secadores-exec-zone-cue {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      align-self: stretch;
-      margin-top: 4px;
-      padding: 6px 8px;
-      min-height: 44px;
-      box-sizing: border-box;
-      border-radius: 8px;
-      font-size: 10px;
-      font-weight: 800;
-      letter-spacing: 0.03em;
-      text-transform: uppercase;
-      transition: transform 0.15s ease, box-shadow 0.15s ease;
-      cursor: default;
-    }
-
-    .secadores-exec-zone-cue:hover {
-      transform: scale(1.02);
-    }
-
-    .secadores-exec-zone-cue .cue-icon {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 22px;
-      height: 22px;
-      border-radius: 6px;
-      flex-shrink: 0;
-      font-size: 12px;
-      background: rgba(255, 255, 255, 0.22);
-    }
-
-    .secadores-exec-zone-cue .cue-text {
-      display: flex;
-      flex-direction: column;
-      gap: 1px;
-      line-height: 1.2;
-      min-width: 0;
-    }
-
-    .secadores-exec-zone-cue .cue-text strong {
-      font-size: 10px;
-      font-weight: 800;
-      display: block;
-    }
-
-    .secadores-exec-zone-cue .cue-text span {
-      font-size: 9px;
-      font-weight: 600;
-      opacity: 0.85;
-      display: block;
-      text-transform: none;
-      letter-spacing: 0;
-    }
-
-    /* SUBIR — azul */
-    .secadores-exec-zone-cue.cue-up {
-      background: #2563eb;
-      color: #ffffff;
-      box-shadow: 0 4px 12px rgba(37, 99, 235, 0.38);
-      border: none;
-    }
-
-    /* BAJAR — rojo */
-    .secadores-exec-zone-cue.cue-down {
-      background: #a9362c;
-      color: #ffffff;
-      box-shadow: 0 4px 12px rgba(220, 38, 38, 0.38);
-      border: none;
-    }
-
-    /* NEUTRO */
-    .secadores-exec-zone-cue.cue-neutral {
-      background: #e2e8f0;
-      color: #475569;
-      box-shadow: none;
-      border: none;
-    }
-
-    .secadores-exec-zone-cue.cue-neutral .cue-icon {
-      background: rgba(71, 85, 105, 0.12);
-    }
-
     .secadores-exec-votators {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 10px;
-      margin-top: 6px;
+      gap: 12px;
+      margin-top: 8px;
       width: 100%;
     }
 
     .secadores-exec-votator {
       display: grid;
-      grid-template-columns: minmax(118px, .36fr) minmax(0, 1fr);
+      grid-template-columns: 1fr;
       align-items: stretch;
-      gap: 10px;
+      gap: 8px;
       padding: 10px;
       border-radius: 12px;
       background: #f8fbff;
@@ -651,10 +701,10 @@ $version = $version ?? time();
 
     .secadores-exec-votator-head {
       display: flex;
-      flex-direction: column;
-      align-items: flex-start;
-      justify-content: center;
-      gap: 5px;
+      flex-direction: row;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
       min-width: 0;
     }
 
@@ -691,18 +741,19 @@ $version = $version ?? time();
     .secadores-exec-votator-fields {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 10px;
+      gap: 6px;
     }
 
     .secadores-exec-votator-field {
-      min-height: 58px;
-      padding: 10px 12px;
-      border-radius: 10px;
-      background: #ffffff;
-      border: 1px dashed #cbd5e1;
+      min-height: 94px;
+      padding: 8px 8px;
+      border-radius: 12px;
+      background: #0ea5e9;
+      border: 1px solid #0284c7;
       display: grid;
       gap: 4px;
       align-content: center;
+      color: #ffffff;
     }
 
     .secadores-exec-votator-field.status-verde {
@@ -712,9 +763,9 @@ $version = $version ?? time();
     }
 
     .secadores-exec-votator-field.status-amarillo {
-      background: #e49a32;
-      color: white;
-      border-color: #c47b1c;
+      background: #facc15;
+      color: #111827;
+      border-color: #eab308;
     }
 
     .secadores-exec-votator-field.status-rojo {
@@ -723,42 +774,77 @@ $version = $version ?? time();
       border-color: #a9362c;
     }
 
+    .secadores-exec-votator-field.status-azul {
+      background: #ffffff;
+      color: #111827;
+      border-color: #d9e0ea;
+    }
+
+    .secadores-exec-votator-field.status-gris {
+      background: #94a3b8;
+      color: #ffffff;
+      border-color: #64748b;
+    }
+
     .secadores-exec-votator-field.status-verde .secadores-exec-votator-field-label,
     .secadores-exec-votator-field.status-verde .secadores-exec-votator-field-label i,
     .secadores-exec-votator-field.status-verde .secadores-exec-votator-field-value,
     .secadores-exec-votator-field.status-verde .secadores-exec-votator-field-value small,
+    .secadores-exec-votator-field.status-verde .secadores-exec-votator-field-range,
+    .secadores-exec-votator-field.status-rojo .secadores-exec-votator-field-label,
+    .secadores-exec-votator-field.status-rojo .secadores-exec-votator-field-label i,
+    .secadores-exec-votator-field.status-rojo .secadores-exec-votator-field-value,
+    .secadores-exec-votator-field.status-rojo .secadores-exec-votator-field-value small,
+    .secadores-exec-votator-field.status-rojo .secadores-exec-votator-field-range {
+      color: white;
+    }
+
     .secadores-exec-votator-field.status-amarillo .secadores-exec-votator-field-label,
     .secadores-exec-votator-field.status-amarillo .secadores-exec-votator-field-label i,
     .secadores-exec-votator-field.status-amarillo .secadores-exec-votator-field-value,
     .secadores-exec-votator-field.status-amarillo .secadores-exec-votator-field-value small,
-    .secadores-exec-votator-field.status-rojo .secadores-exec-votator-field-label,
-    .secadores-exec-votator-field.status-rojo .secadores-exec-votator-field-label i,
-    .secadores-exec-votator-field.status-rojo .secadores-exec-votator-field-value,
-    .secadores-exec-votator-field.status-rojo .secadores-exec-votator-field-value small {
-      color: white;
+    .secadores-exec-votator-field.status-amarillo .secadores-exec-votator-field-range {
+      color: #111827;
     }
 
     .secadores-exec-votator-field-label {
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      color: #475569;
-      font-size: 10px;
+      color: inherit;
+      font-size: 9px;
       font-weight: 800;
       text-transform: uppercase;
       letter-spacing: .04em;
+      line-height: 1.2;
+      min-height: 22px;
+      opacity: .86;
     }
 
     .secadores-exec-votator-field-label i {
-      color: #64748b;
+      color: inherit;
       font-size: 12px;
     }
 
+    .secadores-exec-votator-field-range {
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      color: inherit;
+      font-size: 9px;
+      font-weight: 800;
+      line-height: 1.3;
+      min-height: 34px;
+      opacity: .9;
+      overflow: hidden;
+      overflow-wrap: anywhere;
+    }
+
     .secadores-exec-votator-field-value {
-      color: #0f172a;
-      font-size: 22px;
+      color: inherit;
+      font-size: 17px;
       font-weight: 800;
       line-height: 1;
+      white-space: nowrap;
     }
 
     .secadores-exec-votator-field-value small {
@@ -766,43 +852,6 @@ $version = $version ?? time();
       color: #64748b;
       font-size: 12px;
       font-weight: 700;
-    }
-
-    /* Animación en el ícono */
-    .secadores-exec-zone-cue.cue-up .cue-icon i {
-      animation: bounce-up 1.4s ease-in-out infinite;
-    }
-
-    .secadores-exec-zone-cue.cue-down .cue-icon i {
-      animation: bounce-down 1.4s ease-in-out infinite;
-    }
-
-    @keyframes bounce-up {
-
-      0%,
-      100% {
-        transform: translateY(0);
-        opacity: 1;
-      }
-
-      50% {
-        transform: translateY(-3px);
-        opacity: 0.7;
-      }
-    }
-
-    @keyframes bounce-down {
-
-      0%,
-      100% {
-        transform: translateY(0);
-        opacity: 1;
-      }
-
-      50% {
-        transform: translateY(3px);
-        opacity: 0.7;
-      }
     }
 
     /* ============================================
@@ -816,7 +865,7 @@ $version = $version ?? time();
       padding: 8px 12px;
       border-radius: 10px;
       background: #fef3c7;
-      border: 1px solid #e49a32;
+      border: 1px solid #facc15;
       color: #78350f;
       box-shadow: 0 6px 16px rgba(245, 158, 11, 0.12);
       font-size: 11px;
@@ -826,7 +875,7 @@ $version = $version ?? time();
 
     .secadores-exec-warning-strip i {
       font-size: 14px;
-      color: #c47b1c;
+      color: #eab308;
     }
 
     .secadores-exec-warning-strip strong {
@@ -888,7 +937,7 @@ $version = $version ?? time();
     /* Prioridad Media - Amarillo */
     .secadores-exec-action[data-priority="medium"] {
       background: #fef3c7;
-      border-color: #e49a32;
+      border-color: #facc15;
       box-shadow: 0 4px 10px rgba(245, 158, 11, 0.10);
     }
 
@@ -950,7 +999,7 @@ $version = $version ?? time();
       border-radius: 14px;
       background: #fef3c7;
       color: #78350f;
-      border: 1px solid #e49a32;
+      border: 1px solid #facc15;
       box-shadow: 0 6px 16px rgba(245, 158, 11, 0.12);
       font-weight: 700;
       display: flex;
@@ -986,6 +1035,64 @@ $version = $version ?? time();
       background: #eff6ff;
       transform: translateX(-2px);
       box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+    }
+
+    .print-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      border-radius: 999px;
+      text-decoration: none;
+      font-weight: 700;
+      background: #0f172a;
+      color: #ffffff;
+      border: 1px solid #0f172a;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .print-btn:hover {
+      background: #1d4ed8;
+      border-color: #1d4ed8;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(37, 99, 235, 0.18);
+    }
+
+    body.capture-mode {
+      background: #ffffff;
+    }
+
+    body.capture-mode .dashboard {
+      width: min(1120px, calc(100vw - 24px));
+      padding: 12px 0;
+    }
+
+    body.capture-mode .header-left > div:first-child,
+    body.capture-mode .header .sub,
+    body.capture-mode .secadores-exec-warning {
+      display: none !important;
+    }
+
+    body.capture-mode .header {
+      margin-bottom: 8px;
+    }
+
+    body.capture-mode .header h1 {
+      margin: 0;
+      font-size: 24px;
+    }
+
+    body.capture-mode .secadores-exec-grid {
+      grid-template-columns: 1fr;
+      gap: 0;
+      margin-top: 8px;
+    }
+
+    body.capture-mode .secadores-exec-tunnel {
+      box-shadow: none;
+      transform: none !important;
     }
 
     /* ============================================
@@ -1039,13 +1146,264 @@ $version = $version ?? time();
       }
 
       .secadores-exec-zone {
-        min-height: 108px;
+        min-height: 82px;
+      }
+    }
+
+    @media print {
+      @page {
+        size: letter portrait;
+        margin: 4mm;
+      }
+
+      * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        color-adjust: exact !important;
+        box-shadow: none !important;
+        text-shadow: none !important;
+      }
+
+      html,
+      body {
+        width: 100%;
+        min-height: auto;
+        background: #ffffff !important;
+      }
+
+      body {
+        margin: 0;
+        font-size: 8px;
+      }
+
+      .dashboard {
+        width: 130% !important;
+        max-width: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        background: #ffffff !important;
+        transform: scale(.77);
+        transform-origin: top left;
+      }
+
+      .header {
+        margin: 0 0 3px !important;
+        padding: 0 !important;
+      }
+
+      .header-left > div:first-child,
+      .secadores-exec-warning,
+      .secadores-history-modal {
+        display: none !important;
+      }
+
+      .header h1 {
+        margin: 0 0 4px !important;
+        font-size: 20px !important;
+        line-height: 1.1 !important;
+        color: #0f172a !important;
+      }
+
+      .header .sub {
+        display: none !important;
+      }
+
+      .header h1 i {
+        display: none !important;
+      }
+
+      #secadoresExecRefreshBadge {
+        display: none !important;
+      }
+
+      .secadores-exec-grid {
+        display: grid !important;
+        grid-template-columns: 1fr !important;
+        gap: 0 !important;
+        margin-top: 0 !important;
+        align-items: start !important;
+        grid-auto-rows: auto !important;
+      }
+
+      .secadores-exec-tunnel {
+        page-break-inside: avoid;
+        break-inside: avoid;
+        page-break-after: always;
+        break-after: page;
+        border: 1px solid #cbd5e1 !important;
+        border-radius: 7px !important;
+        padding: 5px !important;
+        gap: 4px !important;
+        background: #ffffff !important;
+        transform: none !important;
+      }
+
+      .secadores-exec-tunnel:last-child {
+        page-break-after: auto;
+        break-after: auto;
+      }
+
+      .secadores-exec-tunnel-head {
+        padding: 5px !important;
+        gap: 4px !important;
+        border-radius: 6px !important;
+        background: #eef6ff !important;
+      }
+
+      .secadores-exec-tunnel-title {
+        gap: 4px !important;
+      }
+
+      .secadores-exec-tunnel-title-row {
+        gap: 6px !important;
+      }
+
+      .secadores-exec-tunnel h2 {
+        font-size: 14px !important;
+      }
+
+      .secadores-exec-tunnel-sub {
+        gap: 6px !important;
+        font-size: 8px !important;
+      }
+
+      .secadores-exec-top-indicator {
+        min-width: 125px !important;
+        min-height: 36px !important;
+        padding: 4px 7px !important;
+        border-radius: 6px !important;
+      }
+
+      .secadores-exec-top-indicator-label,
+      .secadores-exec-top-indicator-range {
+        font-size: 7px !important;
+      }
+
+      .secadores-exec-top-indicator-value {
+        font-size: 14px !important;
+      }
+
+      .secadores-exec-inline-metrics {
+        gap: 5px !important;
+      }
+
+      .secadores-exec-inline-group {
+        gap: 3px !important;
+      }
+
+      .secadores-exec-inline-group-title,
+      .secadores-exec-zone-section-title {
+        margin: 0 0 3px !important;
+        font-size: 9px !important;
+        color: #334155 !important;
+      }
+
+      .secadores-exec-inline-group-items,
+      .secadores-exec-zones {
+        grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+        grid-auto-rows: 62px !important;
+        gap: 3px !important;
+      }
+
+      .secadores-exec-inline-group-items.is-banda {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+      }
+
+      .secadores-exec-votators {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        gap: 3px !important;
+        margin-top: 2px !important;
+      }
+
+      .secadores-exec-votator {
+        padding: 4px !important;
+        gap: 3px !important;
+        border-radius: 6px !important;
+      }
+
+      .secadores-exec-votator-title {
+        font-size: 8px !important;
+        gap: 4px !important;
+      }
+
+      .secadores-exec-votator-badge {
+        display: none !important;
+      }
+
+      .secadores-exec-votator-fields {
+        gap: 3px !important;
+      }
+
+      .secadores-exec-inline-metric,
+      .secadores-exec-zone,
+      .secadores-exec-votator-field {
+        min-height: 62px !important;
+        padding: 4px 5px !important;
+        border-radius: 6px !important;
+        gap: 2px !important;
+      }
+
+      .secadores-exec-inline-metric {
+        gap: 4px !important;
+      }
+
+      .secadores-exec-inline-metric i,
+      .secadores-exec-votator-field-label i {
+        font-size: 9px !important;
+      }
+
+      .secadores-exec-inline-metric-label,
+      .secadores-exec-zone-label,
+      .secadores-exec-votator-field-label {
+        min-height: auto !important;
+        font-size: 8px !important;
+        line-height: 1.1 !important;
+      }
+
+      .secadores-exec-inline-metric-value,
+      .secadores-exec-zone-value,
+      .secadores-exec-votator-field-value {
+        margin: 0 !important;
+        font-size: 14px !important;
+      }
+
+      .secadores-exec-inline-metric-value small,
+      .secadores-exec-zone-value small,
+      .secadores-exec-votator-field-value small {
+        font-size: 7px !important;
+      }
+
+      .secadores-exec-inline-metric-range,
+      .secadores-exec-zone-range,
+      .secadores-exec-votator-field-range {
+        min-height: auto !important;
+        max-height: none !important;
+        font-size: 6.8px !important;
+        line-height: 1.1 !important;
+        overflow: visible !important;
+      }
+
+      .secadores-exec-inline-metric-time,
+      .secadores-exec-status {
+        font-size: 7px !important;
+        min-height: auto !important;
+        padding: 2px 4px !important;
+      }
+
+      .secadores-exec-status i {
+        font-size: 6px !important;
+      }
+
+      .secadores-exec-zone:hover,
+      .secadores-exec-inline-metric:hover,
+      .secadores-exec-tunnel:hover {
+        transform: none !important;
       }
     }
   </style>
 </head>
 
-<body>
+<body class="<?= $modoCaptura ? 'capture-mode' : '' ?>">
   <div class="dashboard">
     <div class="header">
       <div class="header-left">
@@ -1056,6 +1414,10 @@ $version = $version ?? time();
             <i class="fas fa-arrow-left"></i>
             Regresar al inicio
           </a>
+          <button type="button" class="print-btn" id="secadoresPrintBtn">
+            <i class="fas fa-print"></i>
+            Imprimir
+          </button>
         </div>
 
         <h1>
@@ -1118,6 +1480,7 @@ $version = $version ?? time();
 
   <script>
     window.secadoresExecutiveBootstrap = <?= json_encode($report, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+    window.secadoresCaptureSecador = <?= json_encode($modoCaptura ? $secadorCaptura : '', JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
   </script>
   <script>
     (() => {
@@ -1212,28 +1575,69 @@ $version = $version ?? time();
         .replace(/'/g, '&#039;');
 
       const renderStatus = (label, color, bgColor) => {
-        const bg = bgColor || color + '1A';
-        return '<span class="secadores-exec-status" style="background:' + bg + '; color:' + color + ';">' +
+        const isNeutral = String(color || '').toLowerCase() === '#ffffff';
+        const bg = bgColor || (isNeutral ? '#ffffff' : color + '1A');
+        const textColor = isNeutral ? '#111827' : color;
+        return '<span class="secadores-exec-status" style="background:' + bg + '; color:' + textColor + ';">' +
           '<i class="fas fa-circle" style="font-size:10px;"></i>' +
           escapeHtml(label) +
           '</span>';
       };
 
+      const statusClassFromKey = (statusKey, hasData = true) => {
+        if (!hasData) return 'unavailable';
+        return (
+          statusKey === 'verde' ? 'ok' :
+          statusKey === 'amarillo' ? 'warning' :
+          statusKey === 'rojo' ? 'danger' :
+          statusKey === 'azul' ? 'neutral' :
+          'unavailable'
+        );
+      };
+
+      const renderHeaderIndicator = (indicators) => {
+        const items = Object.values(indicators || {});
+        if (!items.length) return '';
+        const item = items[0];
+
+        const plainValue = String(item.formatted || '').trim();
+        const hasData = plainValue !== '' && plainValue !== '-' && plainValue.toLowerCase() !== 'sin dato';
+        const value = hasData
+          ? `${escapeHtml(item.formatted || '-')} ${escapeHtml(item.unit || '')}`.trim()
+          : '-';
+        const statusClass = statusClassFromKey(String(item.statusKey || 'gris'), hasData);
+
+        return `
+          <article class="secadores-exec-top-indicator ${statusClass}">
+            <div class="secadores-exec-top-indicator-label">${escapeHtml(item.label || 'Indicador')}</div>
+            <div class="secadores-exec-top-indicator-value">${value}</div>
+            <div class="secadores-exec-top-indicator-range">${escapeHtml(item.rangeLabel || '')}</div>
+          </article>
+        `;
+      };
+
       const renderInlineMetric = (groupName, metricKey, metric, tunnelKey) => {
-        const statusClass = metric.available
+        const formattedValue = String(metric.formatted || '').trim();
+        const hasFormattedValue = formattedValue !== '' && formattedValue !== '-' && formattedValue.toLowerCase() !== 'sin dato';
+        const renderedValue = hasFormattedValue
+          ? `${escapeHtml(formattedValue)} ${escapeHtml(metric.unit || '')}`.trim()
+          : escapeHtml(metric.emptyLabel || 'Sin dato');
+        const plainValue = String(formattedValue || renderedValue || '').trim();
+        const hasData = plainValue !== '' && plainValue !== '-' && plainValue.toLowerCase() !== 'sin dato';
+        const statusClass = metric.available && hasData
           ? (
             metric.statusKey === 'verde' ? ' ok' :
             metric.statusKey === 'amarillo' ? ' warning' :
             metric.statusKey === 'rojo' ? ' danger' :
+            metric.statusKey === 'azul' ? ' neutral' :
+            metric.statusKey === 'gris' ? ' unavailable' :
             ''
           )
           : ' unavailable';
 
-        const value = metric.value !== null && metric.value !== undefined
-          ? `${escapeHtml(metric.formatted || '-')} ${escapeHtml(metric.unit || '')}`.trim()
-          : escapeHtml(metric.emptyLabel || 'Sin dato');
         const isClickable = Array.isArray(metric.history) && metric.history.length > 0;
         const rangeLabel = String(metric.rangeLabel || '').trim();
+        const timestampLabel = String(metric.timestampLabel || '').trim();
         const rangeClass = rangeLabel ? '' : ' is-empty';
         const rangeAttrs = rangeLabel ? '' : ' aria-hidden="true"';
         const metricIcon =
@@ -1244,9 +1648,12 @@ $version = $version ?? time();
         return `
           <div class="secadores-exec-inline-metric${statusClass}${isClickable ? ' clickable' : ''}" data-tunnel-key="${escapeHtml(tunnelKey)}" data-metric-key="${escapeHtml(metricKey)}">
             <i class="fas ${metricIcon}"></i>
-            <div class="secadores-exec-inline-metric-body">
-              <div class="secadores-exec-inline-metric-label">${escapeHtml(metric.label || 'Métrica')}</div>
-              <div class="secadores-exec-inline-metric-value">${value}</div>
+              <div class="secadores-exec-inline-metric-body">
+              <div class="secadores-exec-inline-metric-label">
+                <span>${escapeHtml(metric.label || 'Métrica')}</span>
+                ${timestampLabel ? `<span class="secadores-exec-inline-metric-date">${escapeHtml(timestampLabel)}</span>` : ''}
+              </div>
+              <div class="secadores-exec-inline-metric-value">${renderedValue}</div>
               <div class="secadores-exec-inline-metric-range${rangeClass}"${rangeAttrs}>${escapeHtml(rangeLabel || 'Rango pendiente de definir')}</div>
             </div>
           </div>
@@ -1268,8 +1675,9 @@ $version = $version ?? time();
           'banda': 2,
           'agua-y-vapor': 3,
           'humedades': 9,
+          'verificacion-de-secado': 8,
         };
-        const columns = normalized === 'banda' ? 2 : 3;
+        const columns = normalized === 'banda' ? 2 : ['humedades', 'verificacion-de-secado'].includes(normalized) ? 4 : 3;
         const minimum = minimums[normalized] || columns;
         return Math.max(minimum, Math.ceil(total / columns) * columns);
       };
@@ -1305,8 +1713,15 @@ $version = $version ?? time();
         }, () => '<div class="secadores-exec-zone is-placeholder" aria-hidden="true"></div>').join('');
       };
 
-      const renderInlineMetrics = (metrics, tunnelKey) => {
-        const entries = Object.entries(metrics || {});
+      const renderInlineMetrics = (metrics, tunnelKey, groupMode = 'main') => {
+        const entries = Object.entries(metrics || {}).filter(([, metric]) => {
+          if (metric.hidden) {
+            return false;
+          }
+
+          const isVerification = metricGroupClass(metric.group || 'General') === 'verificacion-de-secado';
+          return groupMode === 'verification' ? isVerification : !isVerification;
+        });
         if (!entries.length) {
           return '';
         }
@@ -1454,53 +1869,15 @@ $version = $version ?? time();
         const rangeLabel = String(cell.rangeLabel || '').trim();
         const rangeClass = rangeLabel ? '' : ' is-empty';
         const rangeAttrs = rangeLabel ? '' : ' aria-hidden="true"';
-        const adjustment = cell.adjustmentCue || {};
-        const dir = adjustment.icon || 'neutral';
-        const cueClass = dir === 'up' ? 'cue-up' : dir === 'down' ? 'cue-down' : 'cue-neutral';
-        const iconName = dir === 'up' ?
-          'fa-arrow-up' :
-          dir === 'down' ?
-          'fa-arrow-down' :
-          'fa-minus';
-        const cueLabel = adjustment.label || (
-          cell.statusLabel === 'Óptimo' ?
-            'Temperatura estable' :
-            cell.statusLabel === 'Sin dato' ?
-              'Sin lectura' :
-              'Sin ajuste definido'
-        );
-        const subtext = dir === 'up' ?
-          'Aumentar temperatura' :
-          dir === 'down' ?
-          'Reducir temperatura' :
-          cell.statusLabel === 'Sin dato' ?
-            'Esperando medición' :
-            'Sin ajuste requerido';
-
-        const cueHtml = `
-      <div class="secadores-exec-zone-cue ${cueClass}"
-           role="status"
-           aria-label="${escapeHtml(cueLabel)}">
-        <div class="cue-icon">
-          <i class="fas ${iconName}" aria-hidden="true"></i>
-        </div>
-        <div class="cue-text">
-          <strong>${escapeHtml(cueLabel)}</strong>
-          <span>${subtext}</span>
-        </div>
-      </div>
-    `;
 
         return `
-    <article class="secadores-exec-zone clickable" data-status="${statusAttr}" data-open-temperature="1" data-tunnel-key="${escapeHtml(tunnelKey)}">
+    <article class="secadores-exec-zone unavailable" data-status="${statusAttr}" data-open-temperature="1" data-tunnel-key="${escapeHtml(tunnelKey)}">
       <div class="secadores-exec-zone-label">${escapeHtml(cell.label || 'Recámara')}</div>
-      ${renderStatus(cell.statusLabel || 'Sin dato', cell.statusColor || '#94a3b8')}
       <div class="secadores-exec-zone-value">
         ${escapeHtml(cell.formatted || '-')}
         <small>°C</small>
       </div>
       <div class="secadores-exec-zone-range${rangeClass}"${rangeAttrs}>${escapeHtml(rangeLabel || 'Rango pendiente de definir')}</div>
-      ${cueHtml}
 	    </article>
 	  `;
       };
@@ -1529,10 +1906,14 @@ $version = $version ?? time();
                       const fieldKey = String(field.key || '');
                       const fieldIcon = field.icon || (fieldKey === 'flujo' ? 'fa-water' : 'fa-gauge-high');
                       const unit = String(field.unit || '').trim();
-                      const statusKey = String(field.statusKey || 'gris').replace(/[^a-z0-9_-]/gi, '').toLowerCase();
                       const value = field.value !== null && field.value !== undefined
                         ? escapeHtml(field.formatted || '-')
                         : escapeHtml(field.emptyLabel || field.formatted || 'Pendiente');
+                      const plainValue = String(field.formatted || value || '').trim();
+                      const statusKey = plainValue !== '' && plainValue !== '-' && plainValue.toLowerCase() !== 'sin dato'
+                        ? String(field.statusKey || 'gris').replace(/[^a-z0-9_-]/gi, '').toLowerCase()
+                        : 'gris';
+                      const rangeLabel = String(field.rangeLabel || '').trim();
 
                       return `
                         <div class="secadores-exec-votator-field status-${escapeHtml(statusKey)}" title="${escapeHtml(field.rangeLabel || field.statusLabel || '')}">
@@ -1543,6 +1924,7 @@ $version = $version ?? time();
                           <div class="secadores-exec-votator-field-value">
                             ${value}${unit ? `<small>${escapeHtml(unit)}</small>` : ''}
                           </div>
+                          <div class="secadores-exec-votator-field-range">${escapeHtml(rangeLabel || 'Rango pendiente de definir')}</div>
                         </div>
                       `;
                     }).join('')}
@@ -1556,28 +1938,34 @@ $version = $version ?? time();
 
       const renderTunnel = (tunnel) => {
         const cells = tunnel.cells || [];
-        const targetCells = Math.max(8, Math.ceil(cells.length / 4) * 4);
+        const targetCells = Math.max(12, Math.ceil(cells.length / 4) * 4);
+        const headerIndicator = renderHeaderIndicator(state.payload.indicadores || {});
 
         return `
           <section class="secadores-exec-tunnel">
             <div class="secadores-exec-tunnel-head">
               <div class="secadores-exec-tunnel-title">
-                <h2>${escapeHtml(tunnel.titulo || 'Túnel')}</h2>
+                <div class="secadores-exec-tunnel-title-row">
+                  <h2>${escapeHtml(tunnel.titulo || 'Túnel')}</h2>
+                  ${headerIndicator}
+                </div>
                 <div class="secadores-exec-tunnel-sub">
                   <span><i class="fas fa-clock"></i> ${escapeHtml(tunnel.ultimaLectura || '-')}</span>
                   <span>${renderStatus(tunnel.statusLabel || 'Referencia', tunnel.statusColor || '#94a3b8')}</span>
                 </div>
                 ${renderVotators(tunnel.votators || [], tunnel.key || '')}
-                ${renderInlineMetrics(tunnel.metricas || {}, tunnel.key || '')}
-              </div>
-            </div>
-            <div class="secadores-exec-tunnel-body">
-              <div class="secadores-exec-zones">
+                ${renderInlineMetrics(tunnel.metricas || {}, tunnel.key || '', 'main')}
+                <div class="secadores-exec-tunnel-body">
+                  <div class="secadores-exec-zone-section-title">Temperaturas</div>
+                  <div class="secadores-exec-zones">
                   ${cells.map((cell) => renderZone(cell, tunnel.key || '')).join('')}
                   ${renderZonePlaceholders(targetCells - cells.length)}
+                  </div>
                 </div>
+                ${renderInlineMetrics(tunnel.metricas || {}, tunnel.key || '', 'verification')}
               </div>
-            </section>
+            </div>
+          </section>
         `;
       };
 
@@ -1585,7 +1973,11 @@ $version = $version ?? time();
         const app = document.getElementById('secadoresExecApp');
         if (!app) return;
 
-        const tunnels = Object.values(state.payload.tuneles || {});
+        let tunnels = Object.values(state.payload.tuneles || {});
+        const captureSecador = String(window.secadoresCaptureSecador || '').trim();
+        if (captureSecador) {
+          tunnels = tunnels.filter((tunnel) => String(tunnel.key || '') === captureSecador);
+        }
         app.innerHTML = '<div class="secadores-exec-grid">' + tunnels.map(renderTunnel).join('') + '</div>';
       };
 
@@ -1684,6 +2076,12 @@ $version = $version ?? time();
       };
 
       document.addEventListener('click', (event) => {
+        const printButton = event.target.closest('#secadoresPrintBtn');
+        if (printButton) {
+          window.print();
+          return;
+        }
+
         const metricCard = event.target.closest('.secadores-exec-inline-metric.clickable');
         if (metricCard) {
           openHistoryModal(metricCard.dataset.tunnelKey || '', metricCard.dataset.metricKey || '');

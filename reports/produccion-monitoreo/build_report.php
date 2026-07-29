@@ -228,7 +228,7 @@ $statusClass = static function (string $statusKey): string {
     'verde' => 'ok',
     'amarillo' => 'warning',
     'rojo' => 'danger',
-    'azul' => 'info',
+    'azul' => 'neutral',
     'gris' => 'unavailable',
   ][$statusKey] ?? 'unavailable';
 };
@@ -389,7 +389,7 @@ $evaluateThresholdRange = static function (?float $value, array $rule): array {
   }
 
   if (($yellowMin === null || $value >= $yellowMin) && ($yellowMax === null || $value <= $yellowMax)) {
-    return ['Amarillo', 'amarillo', '#e49a32'];
+    return ['Amarillo', 'amarillo', '#facc15'];
   }
 
   return ['Rojo', 'rojo', '#c94436'];
@@ -411,7 +411,7 @@ $evaluateMetricRange = static function (?float $value, array $rule): array {
       return ['Verde', 'verde', '#2e8b57'];
     }
     if ($yellowMin !== null && $value >= $yellowMin) {
-      return ['Amarillo', 'amarillo', '#e49a32'];
+      return ['Amarillo', 'amarillo', '#facc15'];
     }
     return ['Rojo', 'rojo', '#c94436'];
   }
@@ -421,7 +421,7 @@ $evaluateMetricRange = static function (?float $value, array $rule): array {
       return ['Verde', 'verde', '#2e8b57'];
     }
     if ($yellowMax !== null && $value <= $yellowMax) {
-      return ['Amarillo', 'amarillo', '#e49a32'];
+      return ['Amarillo', 'amarillo', '#facc15'];
     }
     return ['Rojo', 'rojo', '#c94436'];
   }
@@ -434,7 +434,7 @@ $evaluateMetricRange = static function (?float $value, array $rule): array {
   $inYellow = ($yellowMin === null || $value >= $yellowMin) && ($yellowMax === null || $value <= $yellowMax);
   if ($yellowMin !== null || $yellowMax !== null) {
     if ($inYellow) {
-      return ['Amarillo', 'amarillo', '#e49a32'];
+      return ['Amarillo', 'amarillo', '#facc15'];
     }
   }
 
@@ -746,29 +746,31 @@ $buildConcentradorSummary = static function (array $report, array $concentradore
     foreach ((array)($equipo['metricas'] ?? []) as $metricKey => $metric) {
       $status = (array)($metric['status'] ?? []);
       $rule = (array)($semaforos[(string)$equipoKey][(string)$metricKey] ?? $semaforos[(string)$metricKey] ?? []);
+      $source = (string)($metric['source'] ?? '');
+      $aplicarFo = $fueraOperacion && $source !== 'sqlserver';
 
       $items[] = $makeItem(
         (string)$metricKey,
         (string)($metric['label'] ?? $metricKey),
-        $fueraOperacion ? 'FO' : (string)($metric['formatted'] ?? '-'),
-        $fueraOperacion ? 'gris' : (string)($status['key'] ?? 'gris'),
-        $fueraOperacion ? 'Fuera de operacion' : (string)($status['label'] ?? 'Sin dato'),
-        $fueraOperacion ? '#94a3b8' : (string)($status['color'] ?? '#94a3b8'),
+        $aplicarFo ? 'FO' : (string)($metric['formatted'] ?? '-'),
+        $aplicarFo ? 'gris' : (string)($status['key'] ?? 'gris'),
+        $aplicarFo ? 'Fuera de operacion' : (string)($status['label'] ?? 'Sin dato'),
+        $aplicarFo ? '#94a3b8' : (string)($status['color'] ?? '#94a3b8'),
         $buildRangeLabel([
           'rule' => $rule,
           'unit' => (string)($metric['unit'] ?? ''),
           'rangeLabel' => (string)($metric['leyenda'] ?? ''),
         ]),
-        (string)($metric['source'] ?? ''),
+        $source,
         $rule,
-        (array)($metric['history'] ?? []),
+        $aplicarFo ? [] : (array)($metric['history'] ?? []),
         (string)($metric['unit'] ?? ''),
-        (array)($metric['trends'] ?? [])
+        $aplicarFo ? [] : (array)($metric['trends'] ?? [])
       );
     }
 
     $status = $worstStatus($items);
-    if ($fueraOperacion) {
+    if ($fueraOperacion && $status['statusKey'] === 'gris') {
       $status = ['statusKey' => 'gris', 'statusLabel' => 'Fuera de operacion', 'statusColor' => '#94a3b8'];
     }
 
@@ -1042,17 +1044,17 @@ $buildCocedoresSummary = static function (array $cocedoresConfig, array $headerC
     $items[] = $makeItem(
       'flujo',
       'Flujo',
-      $fueraOperacion ? 'FO' : ($numericValue !== null ? n($numericValue, 2) : '-'),
-      $fueraOperacion ? 'gris' : $statusKey,
-      $fueraOperacion ? 'Fuera de operacion' : $statusLabel,
-      $fueraOperacion ? '#94a3b8' : $statusColor,
+      $numericValue !== null ? n($numericValue, 2) : '-',
+      $statusKey,
+      $statusLabel,
+      $statusColor,
       (string)($cocedor['flujo_leyenda'] ?? 'Por definir'),
       'sqlserver',
       $rule,
-      $fueraOperacion ? [] : (array)($sqlHistoryByField[$field] ?? []),
+      (array)($sqlHistoryByField[$field] ?? []),
       '',
       [
-        'month' => $fueraOperacion ? [] : (array)($sqlMonthHistoryByField[$field] ?? []),
+        'month' => (array)($sqlMonthHistoryByField[$field] ?? []),
       ]
     );
 
@@ -1098,7 +1100,7 @@ $buildCocedoresSummary = static function (array $cocedoresConfig, array $headerC
       );
     }
 
-    $status = $fueraOperacion
+    $status = $fueraOperacion && $worstStatus($items)['statusKey'] === 'gris'
       ? ['statusKey' => 'gris', 'statusLabel' => 'Fuera de operacion', 'statusColor' => '#94a3b8']
       : $worstStatus($items);
 
@@ -1246,6 +1248,7 @@ $buildClarificadoresSummary = static function (array $clarificadoresConfig, arra
     $field = (string)($metric['field'] ?? '');
     $unit = trim((string)($metric['unit'] ?? ''));
     $source = (string)($metric['source'] ?? 'mysql_105');
+    $aplicarFo = $fueraOperacion && $source !== 'sqlserver';
     $sourceRow = $source === 'sqlserver' ? $sqlServerRow : $row;
     $rawValue = $field !== '' && array_key_exists($field, $sourceRow) ? $sourceRow[$field] : null;
     $numericValue = is_numeric($rawValue) ? (float)$rawValue : null;
@@ -1278,22 +1281,22 @@ $buildClarificadoresSummary = static function (array $clarificadoresConfig, arra
     $items[] = $makeItem(
       (string)$metricKey,
       (string)($metric['label'] ?? $metricKey),
-      $fueraOperacion ? 'FO' : ($unit !== '' && $formatted !== '-' ? trim($formatted . ' ' . $unit) : $formatted),
-      $fueraOperacion ? 'gris' : $statusKey,
-      $fueraOperacion ? 'Fuera de operacion' : $statusLabel,
-      $fueraOperacion ? '#94a3b8' : $statusColor,
+      $aplicarFo ? 'FO' : ($unit !== '' && $formatted !== '-' ? trim($formatted . ' ' . $unit) : $formatted),
+      $aplicarFo ? 'gris' : $statusKey,
+      $aplicarFo ? 'Fuera de operacion' : $statusLabel,
+      $aplicarFo ? '#94a3b8' : $statusColor,
       (string)($metric['leyenda'] ?? 'Por definir'),
       $source,
       $rule,
-      $fueraOperacion ? [] : $history,
+      $aplicarFo ? [] : $history,
       $unit,
       [
-        'month' => ($fueraOperacion || $source !== 'sqlserver') ? [] : (array)($sqlMonthHistoryByField[$field] ?? []),
+        'month' => ($aplicarFo || $source !== 'sqlserver') ? [] : (array)($sqlMonthHistoryByField[$field] ?? []),
       ]
     );
   }
 
-  $status = $fueraOperacion
+  $status = $fueraOperacion && $worstStatus($items)['statusKey'] === 'gris'
     ? ['statusKey' => 'gris', 'statusLabel' => 'Fuera de operacion', 'statusColor' => '#94a3b8']
     : $worstStatus($items);
 
