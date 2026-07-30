@@ -50,6 +50,24 @@ return array_replace_recursive($detailConfig, [
     'timeout' => 3,
   ],
   'indicadores_superiores' => [
+    'viscosidad_churro' => [
+      'label' => 'Viscosidad del churro',
+      'source' => 'mysql_producto',
+      'field' => 'churro_viscosidad',
+      'unit' => '',
+      'available' => true,
+      'empty_label' => '-',
+      'usar_anterior_si_cero_o_null' => true,
+      'semaforo' => [
+        'modo' => 'bandas',
+        'bandas' => [
+          ['max' => 39.999999, 'estado' => 'verde'],
+          ['min' => 40, 'max' => 43, 'estado' => 'dorado'],
+          ['min' => 43.000001, 'estado' => 'azul'],
+        ],
+      ],
+      'leyenda' => '< 40',
+    ],
     'solido_entrada' => [
       'label' => 'Sólido de entrada',
       'source' => 'mysql_producto',
@@ -57,11 +75,16 @@ return array_replace_recursive($detailConfig, [
       'unit' => '%',
       'available' => true,
       'empty_label' => '-',
+      'usar_anterior_si_cero_o_null' => true,
       'semaforo' => [
-        'modo' => 'minimo',
-        'verde_min' => 34,
+        'modo' => 'bandas',
+        'bandas' => [
+          ['max' => 34.999999, 'estado' => 'rojo'],
+          ['min' => 35, 'max' => 37, 'estado' => 'amarillo'],
+          ['min' => 37.000001, 'estado' => 'verde'],
+        ],
       ],
-      'leyenda' => '≥ 34 %',
+      'leyenda' => '> 37 %',
     ],
   ],
   'metricas_por_tunel' => [

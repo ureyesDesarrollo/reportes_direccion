@@ -17,6 +17,10 @@ $secadoresSummaryConfig = array_replace_recursive(
   (array)($secadoresConfig['monitoreo_produccion'] ?? []),
   (array)($config['secadores'] ?? [])
 );
+$sqlServerAvevaConfig = (array)($config['sqlserver_aveva'] ?? []);
+$sqlServerAvevaConnection = (array)($sqlServerAvevaConfig['conexion'] ?? ($secadoresConfig['sqlserver'] ?? []));
+$sqlServerAvevaTable = (string)($sqlServerAvevaConfig['tabla'] ?? ($secadoresConfig['tabla'] ?? 'TREND001'));
+$sqlServerAvevaTimestamp = (string)($sqlServerAvevaConfig['campo_fecha'] ?? ($secadoresConfig['campo_fecha'] ?? 'Time_Stamp'));
 
 $concentradoresConfig = require __DIR__ . '/../concentradores/config.php';
 $concentradoresReport = (static function (): array {
@@ -223,6 +227,26 @@ $fetchMysqlTrendRows = static function (array $sourceConfig, string $defaultTabl
   }
 };
 
+$resolverValorBitacora = static function (string $field, array $row, array $historyRows) {
+  $value = $field !== '' && array_key_exists($field, $row) ? $row[$field] : null;
+  $needsFallback = $value === null || (is_numeric($value) && (float)$value === 0.0);
+
+  if (!$needsFallback) {
+    return $value;
+  }
+
+  foreach ($historyRows as $historyRow) {
+    $historyValue = $field !== '' && array_key_exists($field, (array)$historyRow) ? $historyRow[$field] : null;
+    if ($historyValue === null || (is_numeric($historyValue) && (float)$historyValue === 0.0)) {
+      continue;
+    }
+
+    return $historyValue;
+  }
+
+  return $value;
+};
+
 $statusClass = static function (string $statusKey): string {
   return [
     'verde' => 'ok',
@@ -406,6 +430,28 @@ $evaluateMetricRange = static function (?float $value, array $rule): array {
   $yellowMin = isset($rule['amarillo_min']) && is_numeric($rule['amarillo_min']) ? (float)$rule['amarillo_min'] : null;
   $yellowMax = isset($rule['amarillo_max']) && is_numeric($rule['amarillo_max']) ? (float)$rule['amarillo_max'] : null;
 
+  if ($mode === 'bandas') {
+    $statusMap = [
+      'verde' => ['Verde', 'verde', '#2e8b57'],
+      'amarillo' => ['Amarillo', 'amarillo', '#facc15'],
+      'rojo' => ['Rojo', 'rojo', '#c94436'],
+      'gris' => ['Sin dato', 'gris', '#94a3b8'],
+      'azul' => ['Lectura', 'azul', '#0ea5e9'],
+    ];
+
+    foreach ((array)($rule['bandas'] ?? []) as $band) {
+      $min = isset($band['min']) && is_numeric($band['min']) ? (float)$band['min'] : null;
+      $max = isset($band['max']) && is_numeric($band['max']) ? (float)$band['max'] : null;
+      $status = (string)($band['estado'] ?? 'gris');
+
+      if (($min === null || $value >= $min) && ($max === null || $value <= $max)) {
+        return $statusMap[$status] ?? $statusMap['gris'];
+      }
+    }
+
+    return ['Rojo', 'rojo', '#c94436'];
+  }
+
   if ($mode === 'minimo') {
     if ($greenMin !== null && $value >= $greenMin) {
       return ['Verde', 'verde', '#2e8b57'];
@@ -461,28 +507,6 @@ $buildTunnelSummary = static function (array $tunnel, array $summaryConfig) use 
     $temperatureCells = array_slice($temperatureCells, 0, $temperatureLimit);
   }
 
-  foreach ($temperatureCells as $cell) {
-    $value = (string)($cell['formatted'] ?? '-');
-    if ($value !== '-' && $value !== '') {
-      $value .= ' C';
-    }
-
-    $items[] = $makeItem(
-      'temp_' . (string)($cell['field'] ?? count($items)),
-      $compactLabel((string)($cell['label'] ?? 'Temperatura')),
-      $value !== '' ? $value : '-',
-      (string)($cell['statusKey'] ?? 'gris'),
-      (string)($cell['statusLabel'] ?? 'Sin dato'),
-      (string)($cell['statusColor'] ?? '#94a3b8'),
-      $buildRangeLabel($cell),
-      'sqlserver',
-      (array)($cell['rule'] ?? []),
-      (array)($cell['history'] ?? []),
-      'C',
-      (array)($cell['trends'] ?? [])
-    );
-  }
-
   foreach ((array)($summaryConfig['metricas'] ?? []) as $metricKey) {
     $metric = (array)(($tunnel['metricas'] ?? [])[$metricKey] ?? []);
     if ($metric === []) {
@@ -524,6 +548,28 @@ $buildTunnelSummary = static function (array $tunnel, array $summaryConfig) use 
     );
   }
 
+  foreach ($temperatureCells as $cell) {
+    $value = (string)($cell['formatted'] ?? '-');
+    if ($value !== '-' && $value !== '') {
+      $value .= ' C';
+    }
+
+    $items[] = $makeItem(
+      'temp_' . (string)($cell['field'] ?? count($items)),
+      $compactLabel((string)($cell['label'] ?? 'Temperatura')),
+      $value !== '' ? $value : '-',
+      (string)($cell['statusKey'] ?? 'gris'),
+      (string)($cell['statusLabel'] ?? 'Sin dato'),
+      (string)($cell['statusColor'] ?? '#94a3b8'),
+      $buildRangeLabel($cell),
+      'sqlserver',
+      (array)($cell['rule'] ?? []),
+      (array)($cell['history'] ?? []),
+      'C',
+      (array)($cell['trends'] ?? [])
+    );
+  }
+
   return [
     'key' => (string)($tunnel['key'] ?? ''),
     'titulo' => (string)($tunnel['titulo'] ?? 'Tunel'),
@@ -535,7 +581,7 @@ $buildTunnelSummary = static function (array $tunnel, array $summaryConfig) use 
   ];
 };
 
-$buildVotatorMysqlItems = static function (array $mysqlConfig) use ($fetchLatestMysqlRow, $fetchMysqlTrendRows, $formatHistoryTimestamp, $formatHistoryIsoTimestamp, $aggregateHistoryPoints, $isOutOfOperation, $makeItem, $buildRangeLabel, $evaluateMetricRange): array {
+$buildVotatorMysqlItems = static function (array $mysqlConfig) use ($fetchLatestMysqlRow, $fetchMysqlTrendRows, $resolverValorBitacora, $formatHistoryTimestamp, $formatHistoryIsoTimestamp, $aggregateHistoryPoints, $isOutOfOperation, $makeItem, $buildRangeLabel, $evaluateMetricRange): array {
   $fieldsConfig = (array)($mysqlConfig['campos'] ?? []);
   if ($fieldsConfig === []) {
     return [[], ''];
@@ -550,7 +596,7 @@ $buildVotatorMysqlItems = static function (array $mysqlConfig) use ($fetchLatest
   foreach ($fieldsConfig as $fieldKey => $field) {
     $fieldKey = (string)$fieldKey;
     $sourceField = (string)($field['field'] ?? '');
-    $rawValue = $sourceField !== '' && array_key_exists($sourceField, $row) ? $row[$sourceField] : null;
+    $rawValue = $resolverValorBitacora($sourceField, $row, $historyRows);
     $numericValue = is_numeric($rawValue) ? (float)$rawValue : null;
     $unit = trim((string)($field['unit'] ?? ''));
     $emptyLabel = (string)($field['empty_label'] ?? 'Sin dato');
@@ -853,7 +899,7 @@ $buildSqlServerIndicators = static function (array $indicatorsConfig, array $sql
   return [$indicators, ''];
 };
 
-$buildCocedoresSummary = static function (array $cocedoresConfig, array $headerConfig, array $mysqlMetricsConfig, array $cocedoresDbConfig, array $sqlConfig, string $tableName, string $timestampField) use ($connectSqlServer, $connectMysql, $quoteSqlServerIdentifier, $quoteMysqlIdentifier, $formatHistoryTimestamp, $formatHistoryIsoTimestamp, $historyLimit, $sqlServerHistoryLimit, $isOutOfOperation, $makeItem, $worstStatus, $evaluateMetricRange, $statusClass): array {
+$buildCocedoresSummary = static function (array $cocedoresConfig, array $headerConfig, array $mysqlMetricsConfig, array $cocedoresDbConfig, array $sqlConfig, string $tableName, string $timestampField) use ($connectSqlServer, $connectMysql, $quoteSqlServerIdentifier, $quoteMysqlIdentifier, $resolverValorBitacora, $formatHistoryTimestamp, $formatHistoryIsoTimestamp, $historyLimit, $sqlServerHistoryLimit, $isOutOfOperation, $makeItem, $worstStatus, $evaluateMetricRange, $statusClass): array {
   $cocedores = [];
   $fields = [];
   $headerMetrics = [];
@@ -1061,7 +1107,7 @@ $buildCocedoresSummary = static function (array $cocedoresConfig, array $headerC
     foreach ($mysqlMetricsConfig as $metricKey => $metric) {
       $metricField = (string)($metric['field'] ?? '');
       $unit = trim((string)($metric['unit'] ?? ''));
-      $metricRawValue = $metricField !== '' && array_key_exists($metricField, $mysqlRow) ? $mysqlRow[$metricField] : null;
+      $metricRawValue = $resolverValorBitacora($metricField, $mysqlRow, (array)($mysqlHistoryByNumber[$number] ?? []));
       $metricNumericValue = is_numeric($metricRawValue) ? (float)$metricRawValue : null;
       $metricFormatted = $metricNumericValue !== null ? n($metricNumericValue, 2) : '-';
       $metricRule = (array)($metric['semaforo'] ?? []);
@@ -1118,7 +1164,7 @@ $buildCocedoresSummary = static function (array $cocedoresConfig, array $headerC
   return [$cocedores, $headerMetrics, $warning];
 };
 
-$buildClarificadoresSummary = static function (array $clarificadoresConfig, array $defaultSqlConfig = []) use ($connectSqlServer, $connectMysql, $quoteSqlServerIdentifier, $quoteMysqlIdentifier, $formatHistoryTimestamp, $formatHistoryIsoTimestamp, $historyLimit, $sqlServerHistoryLimit, $isOutOfOperation, $makeItem, $worstStatus, $evaluateMetricRange): array {
+$buildClarificadoresSummary = static function (array $clarificadoresConfig, array $defaultSqlConfig = []) use ($connectSqlServer, $connectMysql, $quoteSqlServerIdentifier, $quoteMysqlIdentifier, $resolverValorBitacora, $formatHistoryTimestamp, $formatHistoryIsoTimestamp, $historyLimit, $sqlServerHistoryLimit, $isOutOfOperation, $makeItem, $worstStatus, $evaluateMetricRange): array {
   $metricsConfig = (array)($clarificadoresConfig['metricas'] ?? []);
   $items = [];
   $warning = '';
@@ -1250,7 +1296,9 @@ $buildClarificadoresSummary = static function (array $clarificadoresConfig, arra
     $source = (string)($metric['source'] ?? 'mysql_105');
     $aplicarFo = $fueraOperacion && $source !== 'sqlserver';
     $sourceRow = $source === 'sqlserver' ? $sqlServerRow : $row;
-    $rawValue = $field !== '' && array_key_exists($field, $sourceRow) ? $sourceRow[$field] : null;
+    $rawValue = $source === 'sqlserver'
+      ? ($field !== '' && array_key_exists($field, $sourceRow) ? $sourceRow[$field] : null)
+      : $resolverValorBitacora($field, $sourceRow, $mysqlHistoryRows);
     $numericValue = is_numeric($rawValue) ? (float)$rawValue : null;
     $formatted = $numericValue !== null ? n($numericValue, 2) : '-';
     $rule = (array)($metric['semaforo'] ?? []);
@@ -1333,9 +1381,17 @@ foreach ((array)($secadoresSummaryConfig['tuneles_placeholder'] ?? []) as $tunne
   ];
 }
 
-$buildCardTable = static function (array $tuneles): array {
+$buildCardTable = static function (array $tuneles, array $preferredLabels = []): array {
   $rows = [];
   $rowOrder = [];
+  $preferredOrder = [];
+
+  foreach ($preferredLabels as $index => $label) {
+    $key = mb_strtolower(trim((string)$label), 'UTF-8');
+    if ($key !== '') {
+      $preferredOrder[$key] = (int)$index;
+    }
+  }
 
   foreach ($tuneles as $tunnelKey => $tunnel) {
     foreach ((array)($tunnel['items'] ?? []) as $item) {
@@ -1380,8 +1436,42 @@ $buildCardTable = static function (array $tuneles): array {
   }
   unset($row);
 
-  return array_values(array_intersect_key($rows, array_flip($rowOrder)));
+  if ($preferredOrder !== []) {
+    $originalOrder = array_flip($rowOrder);
+    usort($rowOrder, static function (string $a, string $b) use ($preferredOrder, $originalOrder): int {
+      $rankA = $preferredOrder[$a] ?? null;
+      $rankB = $preferredOrder[$b] ?? null;
+
+      if ($rankA !== null || $rankB !== null) {
+        return ($rankA ?? PHP_INT_MAX) <=> ($rankB ?? PHP_INT_MAX);
+      }
+
+      return ($originalOrder[$a] ?? 0) <=> ($originalOrder[$b] ?? 0);
+    });
+  }
+
+  $orderedRows = [];
+  foreach ($rowOrder as $rowKey) {
+    if (isset($rows[$rowKey])) {
+      $orderedRows[] = $rows[$rowKey];
+    }
+  }
+
+  return $orderedRows;
 };
+
+$secadoresTableOrder = array_merge(
+  [
+    'Velocidad de banda',
+    'Caudal de aire',
+    'Agua caliente / suministro',
+    'Agua caliente / retorno',
+    'Presión de vapor',
+  ],
+  array_map(static fn(int $room): string => 'Hum R' . $room, range(1, 9)),
+  ['Hum Aire'],
+  array_map(static fn(int $room): string => 'Temp R' . $room, range(1, 9))
+);
 
 [$votatorMysqlItems, $votatorMysqlWarning] = $buildVotatorMysqlItems((array)($secadoresSummaryConfig['votator_mysql'] ?? []));
 $votatorsSummary = $buildVotatorSummary((array)($secadoresReport['tuneles'] ?? []), $secadoresSummaryConfig, $votatorMysqlItems);
@@ -1402,18 +1492,18 @@ foreach ($concentradoresSummary as $concentrador) {
 $concentradoresStatus = $worstStatus($concentradoresItems);
 [$extraccionIndicadores, $extraccionIndicadoresWarning] = $buildSqlServerIndicators(
   (array)($config['extraccion']['indicadores'] ?? []),
-  (array)($secadoresConfig['sqlserver'] ?? []),
-  (string)($secadoresConfig['tabla'] ?? 'TREND001'),
-  (string)($secadoresConfig['campo_fecha'] ?? 'Time_Stamp')
+  $sqlServerAvevaConnection,
+  $sqlServerAvevaTable,
+  $sqlServerAvevaTimestamp
 );
 [$cocedoresSummary, $cocedoresHeaderMetrics, $cocedoresWarning] = $buildCocedoresSummary(
   (array)($config['cocedores']['equipos'] ?? []),
   (array)($config['cocedores']['encabezado'] ?? []),
   (array)($config['cocedores']['metricas_mysql'] ?? []),
   (array)($config['cocedores'] ?? []),
-  (array)($secadoresConfig['sqlserver'] ?? []),
-  (string)($secadoresConfig['tabla'] ?? 'TREND001'),
-  (string)($secadoresConfig['campo_fecha'] ?? 'Time_Stamp')
+  $sqlServerAvevaConnection,
+  $sqlServerAvevaTable,
+  $sqlServerAvevaTimestamp
 );
 $cocedoresItems = [];
 foreach ($cocedoresSummary as $cocedor) {
@@ -1428,7 +1518,7 @@ $cocedoresControlledItems = array_values(array_filter($cocedoresItems, static fn
 $cocedoresStatus = $cocedoresControlledItems !== [] ? $worstStatus($cocedoresControlledItems) : $worstStatus($cocedoresItems);
 [$clarificadoresSummary, $clarificadoresWarning] = $buildClarificadoresSummary(
   (array)($config['clarificadores'] ?? []),
-  (array)($secadoresConfig['sqlserver'] ?? [])
+  $sqlServerAvevaConnection
 );
 $clarificadoresItems = [];
 foreach ($clarificadoresSummary as $clarificador) {
@@ -1439,7 +1529,7 @@ foreach ($clarificadoresSummary as $clarificador) {
 $clarificadoresStatus = $worstStatus($clarificadoresItems);
 [$integracionSummary, $integracionWarning] = $buildClarificadoresSummary(
   (array)($config['integracion'] ?? []),
-  (array)($secadoresConfig['sqlserver'] ?? [])
+  $sqlServerAvevaConnection
 );
 $integracionItems = [];
 foreach ($integracionSummary as $integracion) {
@@ -1460,7 +1550,7 @@ return [
       'titulo' => 'Secadores',
       'icon' => 'fa-fan',
       'tuneles' => $secadoresSummary,
-      'tabla' => $buildCardTable($secadoresSummary),
+      'tabla' => $buildCardTable($secadoresSummary, $secadoresTableOrder),
       'statusLabel' => (string)($secadoresReport['global']['statusLabel'] ?? 'Referencia'),
       'statusKey' => (string)($secadoresReport['global']['statusKey'] ?? 'gris'),
       'statusColor' => (string)($secadoresReport['global']['statusColor'] ?? '#94a3b8'),

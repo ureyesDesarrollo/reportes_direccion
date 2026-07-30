@@ -161,9 +161,10 @@ $evaluateMetricStatus = static function (?float $value, array $rule): array {
     $statusMap = [
       'verde' => ['Óptimo', 'verde', '#2e8b57'],
       'amarillo' => ['Atención', 'amarillo', '#facc15'],
+      'dorado' => ['Dorado', 'dorado', '#d4a017'],
       'rojo' => ['Crítico', 'rojo', '#c94436'],
       'gris' => ['Sin dato', 'gris', '#94a3b8'],
-      'azul' => ['Lectura', 'azul', '#ffffff'],
+      'azul' => ['Azul', 'azul', '#2563eb'],
     ];
 
     foreach ((array)($rule['bandas'] ?? []) as $band) {
@@ -818,6 +819,9 @@ $buildTopIndicators = static function (array $indicatorConfig, array $config) us
   $mysqlProductConfig = (array)($config['mysql_producto'] ?? []);
   $mysqlProductRow = [];
   $mysqlProductTimestamp = null;
+  $pdoMysql = null;
+  $mysqlProductTable = (string)($mysqlProductConfig['tabla_datos'] ?? 'datos_producto');
+  $mysqlProductOrderClause = '';
 
   $needsMysqlProduct = false;
   foreach ($indicatorConfig as $indicator) {
@@ -830,7 +834,6 @@ $buildTopIndicators = static function (array $indicatorConfig, array $config) us
   if ($needsMysqlProduct && $mysqlProductConfig !== []) {
     try {
       $pdoMysql = $connectMysql($mysqlProductConfig);
-      $table = (string)($mysqlProductConfig['tabla_datos'] ?? 'datos_producto');
       $orderColumns = (array)($mysqlProductConfig['columnas_orden'] ?? ['id_datos_hora', 'id']);
       $orderSql = [];
       foreach ($orderColumns as $column) {
@@ -839,8 +842,8 @@ $buildTopIndicators = static function (array $indicatorConfig, array $config) us
           $orderSql[] = '`' . $column . '` DESC';
         }
       }
-      $orderClause = $orderSql !== [] ? ' ORDER BY ' . implode(', ', $orderSql) : '';
-      $mysqlProductRow = $pdoMysql->query('SELECT * FROM `' . $table . '`' . $orderClause . ' LIMIT 1')->fetch() ?: [];
+      $mysqlProductOrderClause = $orderSql !== [] ? ' ORDER BY ' . implode(', ', $orderSql) : '';
+      $mysqlProductRow = $pdoMysql->query('SELECT * FROM `' . $mysqlProductTable . '`' . $mysqlProductOrderClause . ' LIMIT 1')->fetch() ?: [];
       $mysqlProductTimestamp = $mysqlProductRow['id_datos_hora'] ?? null;
     } catch (Throwable $e) {
       $mysqlProductRow = [];
@@ -851,9 +854,30 @@ $buildTopIndicators = static function (array $indicatorConfig, array $config) us
     $source = (string)($indicator['source'] ?? '');
     $field = (string)($indicator['field'] ?? '');
     $rawValue = null;
+    $indicatorTimestamp = $mysqlProductTimestamp;
 
     if ($source === 'mysql_producto' && $field !== '') {
       $rawValue = $mysqlProductRow[$field] ?? null;
+    }
+
+    if (
+      !empty($indicator['usar_anterior_si_cero_o_null'])
+      && $source === 'mysql_producto'
+      && $pdoMysql instanceof PDO
+      && preg_match('/^[A-Za-z0-9_]+$/', $mysqlProductTable) === 1
+      && preg_match('/^[A-Za-z0-9_]+$/', $field) === 1
+      && ($rawValue === null || (is_numeric($rawValue) && (float)$rawValue === 0.0))
+    ) {
+      try {
+        $fallbackSql = 'SELECT `' . $field . '` AS value, `id_datos_hora` AS timestamp FROM `' . $mysqlProductTable . '` WHERE `' . $field . '` IS NOT NULL AND `' . $field . '` <> 0' . $mysqlProductOrderClause . ' LIMIT 1';
+        $fallbackRow = $pdoMysql->query($fallbackSql)->fetch() ?: [];
+        if (array_key_exists('value', $fallbackRow)) {
+          $rawValue = $fallbackRow['value'];
+          $indicatorTimestamp = $fallbackRow['timestamp'] ?? $indicatorTimestamp;
+        }
+      } catch (Throwable $e) {
+        // Si no se puede consultar el anterior, se conserva el valor original.
+      }
     }
 
     $numericValue = is_numeric($rawValue) ? (float)$rawValue : null;
@@ -874,7 +898,7 @@ $buildTopIndicators = static function (array $indicatorConfig, array $config) us
       'statusKey' => $statusKey,
       'statusColor' => $statusColor,
       'rangeLabel' => $buildSemaphoreRangeLabel($rule, $unit, (string)($indicator['leyenda'] ?? '')),
-      'timestampLabel' => $mysqlProductTimestamp !== null ? (string)$mysqlProductTimestamp : '',
+      'timestampLabel' => $indicatorTimestamp !== null ? (string)$indicatorTimestamp : '',
     ];
   }
 

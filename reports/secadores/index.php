@@ -92,9 +92,13 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
     .secadores-exec-tunnel-title-row {
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      gap: 12px;
+      justify-content: flex-start;
+      gap: 8px;
       width: 100%;
+    }
+
+    .secadores-exec-tunnel-title-row h2 {
+      margin-right: auto;
     }
 
     /* Cabecera del túnel */
@@ -126,9 +130,9 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
 
     .secadores-exec-top-indicator {
       flex: 0 0 auto;
-      min-width: 190px;
+      min-width: 132px;
       min-height: 52px;
-      padding: 8px 12px;
+      padding: 7px 10px;
       border: 1px solid #dbe7f5;
       border-radius: 12px;
       background: #ffffff;
@@ -150,10 +154,22 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
       border-color: #eab308;
     }
 
+    .secadores-exec-top-indicator.gold {
+      color: #111827;
+      background: #d4a017;
+      border-color: #b8860b;
+    }
+
     .secadores-exec-top-indicator.danger {
       color: #ffffff;
       background: #c94436;
       border-color: #a9362c;
+    }
+
+    .secadores-exec-top-indicator.neutral {
+      color: #ffffff;
+      background: #2563eb;
+      border-color: #1d4ed8;
     }
 
     .secadores-exec-top-indicator.unavailable {
@@ -171,7 +187,7 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
     }
 
     .secadores-exec-top-indicator-value {
-      font-size: 20px;
+      font-size: 18px;
       font-weight: 900;
       line-height: 1;
     }
@@ -1589,6 +1605,7 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
         return (
           statusKey === 'verde' ? 'ok' :
           statusKey === 'amarillo' ? 'warning' :
+          statusKey === 'dorado' ? 'gold' :
           statusKey === 'rojo' ? 'danger' :
           statusKey === 'azul' ? 'neutral' :
           'unavailable'
@@ -1598,22 +1615,23 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
       const renderHeaderIndicator = (indicators) => {
         const items = Object.values(indicators || {});
         if (!items.length) return '';
-        const item = items[0];
 
-        const plainValue = String(item.formatted || '').trim();
-        const hasData = plainValue !== '' && plainValue !== '-' && plainValue.toLowerCase() !== 'sin dato';
-        const value = hasData
-          ? `${escapeHtml(item.formatted || '-')} ${escapeHtml(item.unit || '')}`.trim()
-          : '-';
-        const statusClass = statusClassFromKey(String(item.statusKey || 'gris'), hasData);
+        return items.map((item) => {
+          const plainValue = String(item.formatted || '').trim();
+          const hasData = plainValue !== '' && plainValue !== '-' && plainValue.toLowerCase() !== 'sin dato';
+          const value = hasData
+            ? `${escapeHtml(item.formatted || '-')} ${escapeHtml(item.unit || '')}`.trim()
+            : '-';
+          const statusClass = statusClassFromKey(String(item.statusKey || 'gris'), hasData);
 
-        return `
-          <article class="secadores-exec-top-indicator ${statusClass}">
-            <div class="secadores-exec-top-indicator-label">${escapeHtml(item.label || 'Indicador')}</div>
-            <div class="secadores-exec-top-indicator-value">${value}</div>
-            <div class="secadores-exec-top-indicator-range">${escapeHtml(item.rangeLabel || '')}</div>
-          </article>
-        `;
+          return `
+            <article class="secadores-exec-top-indicator ${statusClass}">
+              <div class="secadores-exec-top-indicator-label">${escapeHtml(item.label || 'Indicador')}</div>
+              <div class="secadores-exec-top-indicator-value">${value}</div>
+              <div class="secadores-exec-top-indicator-range">${escapeHtml(item.rangeLabel || '')}</div>
+            </article>
+          `;
+        }).join('');
       };
 
       const renderInlineMetric = (groupName, metricKey, metric, tunnelKey) => {

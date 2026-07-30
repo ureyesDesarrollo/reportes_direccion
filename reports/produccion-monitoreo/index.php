@@ -36,14 +36,14 @@ $extractionCards = array_values(array_filter([
   $cards['clarificadores'] ?? null,
   $cards['integracion'] ?? null,
 ], static fn($card): bool => is_array($card)));
+$votatorCards = array_filter($cards, static fn(array $card): bool => (string)($card['key'] ?? '') === 'votators');
 $primaryCards = array_filter($cards, static fn(array $card): bool => (string)($card['key'] ?? '') === 'secadores');
 $sideCards = array_values(array_filter([
   $cards['concentradores'] ?? null,
-  $cards['votators'] ?? null,
 ], static fn($card): bool => is_array($card)));
 $otherCards = array_filter($cards, static fn(array $card): bool => !in_array((string)($card['key'] ?? ''), ['secadores', 'votators', 'concentradores', 'cocedores', 'clarificadores', 'integracion'], true));
 $visibleCardCount = ($mostrarExtraccion ? count($extractionCards) : 0)
-  + ($mostrarSecado ? count($primaryCards) + count($sideCards) + count($otherCards) : 0);
+  + ($mostrarSecado ? count($votatorCards) + count($primaryCards) + count($sideCards) + count($otherCards) : 0);
 $meta = (array)($report['meta'] ?? []);
 $version = (int)($report['version'] ?? time());
 $e = static fn($value): string => htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
@@ -74,11 +74,15 @@ $vistaUrl = static function (string $target): string {
   return 'index.php' . ($query !== '' ? '?' . $query : '');
 };
 $cardClass = static function (string $key): string {
+  if ($key === 'votators') {
+    return 'is-over-primary';
+  }
+
   if ($key === 'secadores') {
     return 'is-primary';
   }
 
-  if ($key === 'votators' || $key === 'concentradores') {
+  if ($key === 'concentradores') {
     return 'is-side';
   }
 
@@ -222,9 +226,9 @@ $invertidoMetricGroups = [
     .monitor-grid {
       display: grid;
       column-gap: 8px;
-      row-gap: 0;
+      row-gap: 6px;
       grid-template-columns: minmax(0, 1.08fr) minmax(500px, 0.92fr);
-      align-items: start;
+      align-items: stretch;
     }
 
     .monitor-section {
@@ -263,7 +267,16 @@ $invertidoMetricGroups = [
 
     .monitor-card.is-primary {
       grid-column: 2;
+      grid-row: 2;
+      border-top-right-radius: 0;
+      border-top-left-radius: 0;
+    }
+
+    .monitor-card.is-over-primary {
+      grid-column: 2;
       grid-row: 1;
+      border-bottom-right-radius: 0;
+      border-bottom-left-radius: 0;
     }
 
     .monitor-card.is-side {
@@ -273,13 +286,18 @@ $invertidoMetricGroups = [
     .monitor-side-stack {
       display: flex;
       grid-column: 1;
-      grid-row: 1;
+      grid-row: 1 / span 2;
       flex-direction: column;
       gap: 8px;
+      align-self: stretch;
       min-width: 0;
     }
 
-    .monitor-card[data-card="votators"] {
+    .monitor-side-stack .monitor-card {
+      flex: 1 1 auto;
+    }
+
+    .monitor-side-stack .monitor-card[data-card="votators"] {
       border-top: 1px solid #dbe7f5;
       border-top-right-radius: 0;
       border-top-left-radius: 0;
@@ -867,6 +885,7 @@ $invertidoMetricGroups = [
       }
 
       .monitor-card.is-primary,
+      .monitor-card.is-over-primary,
       .monitor-card.is-side,
       .monitor-card.is-full,
       .monitor-side-stack,
@@ -1042,7 +1061,7 @@ $invertidoMetricGroups = [
     <section class="monitor-section" aria-label="Secado">
       <h2 class="monitor-section-title">Secado</h2>
       <div class="monitor-grid" data-monitor-grid>
-      <?php foreach (array_merge($primaryCards, $otherCards) as $card): ?>
+      <?php foreach (array_merge($votatorCards, $primaryCards, $otherCards) as $card): ?>
         <article class="monitor-card <?= $e($cardClass((string)($card['key'] ?? ''))) ?>" data-card="<?= $e($card['key'] ?? '') ?>">
           <header class="monitor-card-head">
             <div class="monitor-card-title">
@@ -1875,7 +1894,9 @@ $invertidoMetricGroups = [
     function renderCard(card) {
       const sizeClass = card.key === 'secadores'
         ? 'is-primary'
-        : (['votators', 'concentradores'].includes(card.key) ? 'is-side' : 'is-full');
+        : (card.key === 'votators'
+          ? 'is-over-primary'
+          : (card.key === 'concentradores' ? 'is-side' : 'is-full'));
       return `
         <article class="monitor-card ${sizeClass}" data-card="${escapeHtml(card.key || '')}">
           <header class="monitor-card-head">
@@ -1914,15 +1935,16 @@ $invertidoMetricGroups = [
       const grid = document.querySelector('[data-monitor-grid]');
       if (!grid) return;
       const cards = Object.values(report?.cards || {});
+      const votatorCards = cards.filter((card) => card.key === 'votators');
       const primaryCards = cards.filter((card) => card.key === 'secadores');
-      const sideCards = ['concentradores', 'votators']
+      const sideCards = ['concentradores']
         .map((key) => report?.cards?.[key])
         .filter(Boolean);
       const otherCards = cards.filter((card) => !['secadores', 'votators', 'concentradores', 'cocedores', 'clarificadores', 'integracion'].includes(card.key));
       const sideHtml = sideCards.length > 0
         ? `<div class="monitor-side-stack" data-side-stack>${sideCards.map(renderCard).join('')}</div>`
         : '';
-      grid.innerHTML = `${primaryCards.map(renderCard).join('')}${otherCards.map(renderCard).join('')}${sideHtml}`;
+      grid.innerHTML = `${votatorCards.map(renderCard).join('')}${primaryCards.map(renderCard).join('')}${otherCards.map(renderCard).join('')}${sideHtml}`;
 
       if (monitorState.activeTrend) {
         openTrendModal(monitorState.activeTrend.cardKey, monitorState.activeTrend.rowKey, monitorState.trendRange);

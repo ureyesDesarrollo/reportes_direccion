@@ -2,555 +2,403 @@
 
 declare(strict_types=1);
 
+/*
+|--------------------------------------------------------------------------
+| Conexiones y configuración base
+|--------------------------------------------------------------------------
+*/
+
+$conexionMysqlProgelProcesos = [
+  'host' => '192.168.1.105',
+  'port' => 3306,
+  'dbname' => 'progel_procesos',
+  'user' => 'user_pro',
+  'pass' => 'Pr0g3l2025PR',
+  'charset' => 'utf8mb4',
+  'timeout' => 3,
+];
+
+$configSecadoresBase = require __DIR__ . '/../secadores/config.php';
+
+$configuracionSqlServerAveva = [
+  'conexion' => (array)($configSecadoresBase['sqlserver'] ?? []),
+  'tabla' => (string)($configSecadoresBase['tabla'] ?? 'TREND001'),
+  'campo_fecha' => (string)($configSecadoresBase['campo_fecha'] ?? 'Time_Stamp'),
+];
+
+$ordenDatosHora = ['id_datos_hora', 'id'];
+
+/*
+|--------------------------------------------------------------------------
+| Helpers de reglas de semáforo
+|--------------------------------------------------------------------------
+*/
+
+$crearReglaRango = static fn(float $verdeMin, float $verdeMax, float $amarilloMin, float $amarilloMax): array => [
+  'modo' => 'rango',
+  'verde_min' => $verdeMin,
+  'verde_max' => $verdeMax,
+  'amarillo_min' => $amarilloMin,
+  'amarillo_max' => $amarilloMax,
+];
+
+$crearReglaMinimo = static fn(float $verdeMin): array => [
+  'modo' => 'minimo',
+  'verde_min' => $verdeMin,
+];
+
+$crearReglaMaximo = static fn(float $verdeMax, ?float $amarilloMax = null): array => array_filter([
+  'modo' => 'maximo',
+  'verde_max' => $verdeMax,
+  'amarillo_max' => $amarilloMax,
+], static fn($value): bool => $value !== null);
+
+/*
+|--------------------------------------------------------------------------
+| Helpers de métricas
+|--------------------------------------------------------------------------
+*/
+
+$crearMetrica = static function (string $label, string $field, string $unit = '', array $extra = []): array {
+  return array_replace([
+    'label' => $label,
+    'field' => $field,
+    'unit' => $unit,
+  ], $extra);
+};
+
+$crearSensor = static function (string $label, string $field, string $unit = '', array $extra = []) use ($crearMetrica): array {
+  return $crearMetrica($label, $field, $unit, array_replace([
+    'source' => 'sqlserver',
+    'available' => true,
+    'empty_label' => 'Sin dato',
+  ], $extra));
+};
+
+$crearCampoBitacora = static fn(string $label, string $field, string $unit = '', array $extra = []): array => $crearMetrica($label, $field, $unit, $extra);
+
+$crearCampoBase = static fn(string $label, string $unit = '', array $extra = []): array => array_replace([
+  'label' => $label,
+  'unit' => $unit,
+  'optimo_label' => 'Por definir',
+], $extra);
+
+/*
+|--------------------------------------------------------------------------
+| Secadores y votators
+|--------------------------------------------------------------------------
+*/
+
+$reglaFlujoVotator = [
+  'modo' => 'bandas',
+  'bandas' => [
+    ['max' => 10, 'estado' => 'rojo'],
+    ['min' => 10.5, 'max' => 11.499999, 'estado' => 'amarillo'],
+    ['min' => 11.5, 'max' => 12.5, 'estado' => 'verde'],
+    ['min' => 12.500001, 'max' => 13, 'estado' => 'amarillo'],
+    ['min' => 13, 'estado' => 'rojo'],
+  ],
+];
+
+$reglaSolidosVotator = [
+  'modo' => 'bandas',
+  'bandas' => [
+    ['max' => 34.999999, 'estado' => 'rojo'],
+    ['min' => 35, 'max' => 37, 'estado' => 'amarillo'],
+    ['min' => 37.000001, 'estado' => 'verde'],
+  ],
+];
+
+$camposBaseVotator = [
+  'flujo' => $crearCampoBase('Flujo'),
+  'presion_cuajado' => $crearCampoBase('Presión de cuajado', 'kg/cm2', [
+    'rule' => [
+      'verde_min' => 24,
+      'verde_max' => 26,
+    ],
+    'optimo_label' => '24-26 kg/cm2',
+  ]),
+  'solidos' => $crearCampoBase('Sólidos', '%'),
+  'amperaje_bomba' => $crearCampoBase('Amp bomba', 'A'),
+  'amperaje_reductor' => $crearCampoBase('Amp reductor', 'A'),
+];
+
+$crearSensorVotator = static function (string $campoKey, string $sqlField, array $extra = []) use ($crearSensor, $camposBaseVotator): array {
+  $base = (array)($camposBaseVotator[$campoKey] ?? []);
+  return $crearSensor(
+    (string)($base['label'] ?? $campoKey),
+    $sqlField,
+    (string)($base['unit'] ?? ''),
+    array_replace([
+      'semaforo' => (array)($base['semaforo'] ?? []),
+      'leyenda' => (string)($base['optimo_label'] ?? ''),
+    ], $extra)
+  );
+};
+
+$crearEquipoVotator = static function (string $label, array $campos): array {
+  $config = ['campos' => $campos];
+  if ($label !== '') {
+    $config['label'] = $label;
+  }
+
+  return $config;
+};
+
+$camposSqlVotator = [
+  'tunel_1' => [
+    'votator_1' => $crearEquipoVotator('', [
+      'amperaje_bomba' => $crearSensorVotator('amperaje_bomba', 'CORRIENTE_DE_EXTRUSOR_V1_SA'),
+    ]),
+    'votator_2' => $crearEquipoVotator('', [
+      'amperaje_bomba' => $crearSensorVotator('amperaje_bomba', 'CORRIENTE_DE_EXTRUSOR'),
+    ]),
+  ],
+  'tunel_2' => [
+    'votator_5' => $crearEquipoVotator('Votator 5', [
+      'flujo' => $crearSensorVotator('flujo', 'flujo_votator_3', [
+        'semaforo' => $reglaFlujoVotator,
+        'leyenda' => '11.5-12.5',
+      ]),
+    ]),
+    'votator_6' => $crearEquipoVotator('Votator 6', [
+      'flujo' => $crearSensorVotator('flujo', 'FLujo_votator_4', [
+        'semaforo' => $reglaFlujoVotator,
+        'leyenda' => '11.5-12.5',
+      ]),
+    ]),
+  ],
+];
+
+/*
+|--------------------------------------------------------------------------
+| Extracción
+|--------------------------------------------------------------------------
+*/
+
+$camposExtraccion = [
+  'nivel_grasa' => $crearSensor('Nivel de grasa', 'NIVEL_TANQUE_DE_GRASA_DE_EXTRACCION'),
+];
+
+$camposSecadores = [
+  'velocidad_banda',
+  'caudal_aire',
+  'agua_caliente_suministro',
+  'agua_caliente_retorno',
+  'presion_vapor',
+  'humedad_zona_1_inferior',
+  'humedad_zona_2_inferior',
+  'humedad_zona_3_inferior',
+  'humedad_zona_4_inferior',
+  'humedad_zona_5_inferior',
+  'humedad_zona_6_inferior',
+  'humedad_zona_7_inferior',
+  'humedad_zona_8_inferior',
+  'humedad_zona_9_inferior',
+  'humedad_recamara_2',
+  'humedad_recamara_4',
+  'humedad_recamara_8',
+  'humedad_suministro_aire',
+];
+
+$camposVotatorBitacora = [
+  'solidos' => $crearCampoBitacora('Sólidos', 'churro_solidos', '%', [
+    'empty_label' => 'Sin dato',
+    'semaforo' => $reglaSolidosVotator,
+    'optimo_label' => '> 37 %',
+  ]),
+];
+
+/*
+|--------------------------------------------------------------------------
+| Cocedores
+|--------------------------------------------------------------------------
+*/
+
+$configFlujoCocedor150 = [
+  'semaforo' => $crearReglaRango(150, 155, 149, 156),
+  'leyenda' => '150-155',
+];
+
+$configFlujoCocedor170 = [
+  'semaforo' => $crearReglaRango(170, 175, 169, 176),
+  'leyenda' => '170-175',
+];
+
+$crearCocedor = static function (int $numero, string $flujoField, array $flujoConfig): array {
+  return [
+    'titulo' => 'Cocedor ' . $numero,
+    'flujo_field' => $flujoField,
+    'flujo_semaforo' => (array)$flujoConfig['semaforo'],
+    'flujo_leyenda' => (string)$flujoConfig['leyenda'],
+  ];
+};
+
+$camposCocedoresCabecera = [
+  'temperatura_entrada' => $crearSensor('Entrada', 'COCEDORES_TEMPERATURA_DE_ENTRADA', '°C', [
+    'semaforo' => $crearReglaRango(60, 68, 59, 69),
+    'leyenda' => '60-68 °C',
+  ]),
+  'temperatura_salida' => $crearSensor('Salida', 'COCEDORES_TEMPERATURA_DE_SALIDA', '°C', [
+    'semaforo' => $crearReglaRango(55, 63, 54, 64),
+    'leyenda' => '55-63 °C',
+  ]),
+];
+
+$camposCocedoresBitacora = [
+  'ntu' => $crearCampoBitacora('NTU', 'ntu', '', [
+    'semaforo' => $crearReglaRango(60, 600, 50, 610),
+    'leyenda' => '60-600',
+  ]),
+  'solidos' => $crearCampoBitacora('Sólidos', 'solidos', '%', [
+    'semaforo' => $crearReglaRango(2.5, 3.5, 2.3, 3.7),
+    'leyenda' => '2.5-3.5 %',
+  ]),
+  'ph' => $crearCampoBitacora('pH', 'ph', '', [
+    'semaforo' => $crearReglaRango(3, 3.8, 2.9, 3.9),
+    'leyenda' => '3-3.8',
+  ]),
+];
+
+$equiposCocedores = [
+  'cocedor_1' => $crearCocedor(1, 'Flujo_cocedor_1', $configFlujoCocedor150),
+  'cocedor_2' => $crearCocedor(2, 'Flujo_cocedor_2', $configFlujoCocedor150),
+  'cocedor_3' => $crearCocedor(3, 'Flujo_cocedor_3', $configFlujoCocedor150),
+  'cocedor_4' => $crearCocedor(4, 'Flujo_cocedor_4', $configFlujoCocedor150),
+  'cocedor_5' => $crearCocedor(5, 'Flujo_cocedor_5', $configFlujoCocedor150),
+  'cocedor_6' => $crearCocedor(6, 'Flujo_cocedor_6', $configFlujoCocedor170),
+  'cocedor_7' => $crearCocedor(7, 'Flujo_cocedor_7', $configFlujoCocedor170),
+  'cocedor_8' => $crearCocedor(8, 'FLUJO_COCEDOR_8', $configFlujoCocedor170),
+  'cocedor_9' => $crearCocedor(9, 'FLUJO_COCEDOR_9', $configFlujoCocedor170),
+];
+
+/*
+|--------------------------------------------------------------------------
+| Clarificador
+|--------------------------------------------------------------------------
+*/
+
+$camposClarificador = [
+  'solidos' => $crearCampoBitacora('Sólidos', 'solidos', '%', [
+    'semaforo' => $crearReglaRango(2.5, 3.5, 2.3, 3.7),
+    'leyenda' => '2.5-3.5 %',
+  ]),
+  'temperatura' => $crearCampoBitacora('Temperatura', 'temperatura', '°C'),
+  'flujo' => $crearSensor('Flujo', 'FLUJO_TANQUE_DE_BALANCE'),
+  'flujo_polimero' => $crearSensor('Flujo Polímero', 'FLUJO_POLIMERO_CLARIFICADOR'),
+  'ntu_entrada' => $crearCampoBitacora('NTU Entrada', 'ntu_entrada', '', [
+    'semaforo' => $crearReglaRango(50, 600, 40, 610),
+    'leyenda' => '50-600',
+  ]),
+  'ntu_salida' => $crearCampoBitacora('NTU Salida', 'ntu_salida', '', [
+    'semaforo' => $crearReglaRango(5, 12, 4, 13),
+    'leyenda' => '5-12',
+  ]),
+  'ph_entrada' => $crearCampoBitacora('pH Entrada', 'ph_entrada', '', [
+    'semaforo' => $crearReglaRango(3, 3.8, 2.9, 3.9),
+    'leyenda' => '3-3.8',
+  ]),
+  'ph_electrodo' => $crearCampoBitacora('pH Electrodo', 'ph_electrodo', '', [
+    'semaforo' => $crearReglaRango(5.5, 6.5, 5.3, 6.7),
+    'leyenda' => '5.5-6.5',
+  ]),
+  'ph_salida' => $crearSensor('pH Salida', 'PH_REAL', '', [
+    'semaforo' => $crearReglaRango(5.5, 6.5, 5.3, 6.7),
+    'leyenda' => '5.5-6.5',
+  ]),
+  'ce_salida' => $crearCampoBitacora('CE Salida', 'ce_salida', '', [
+    'semaforo' => $crearReglaMaximo(6.49, 6.69),
+    'leyenda' => '< 6.5',
+  ]),
+  'tanq_balance' => $crearSensor('Tanque Balance', 'NIVEL_TANQUE_DE_BALANCE'),
+];
+
+/*
+|--------------------------------------------------------------------------
+| Integración
+|--------------------------------------------------------------------------
+*/
+
+$camposIntegracion = [
+  'visc_integracion' => $crearCampoBitacora('VISCOSIDAD', 'integ_viscosidad', '', [
+    'semaforo' => $crearReglaMinimo(25.01),
+    'leyenda' => '> 25',
+  ]),
+  'flujo_integracion' => $crearCampoBitacora('FLUJO', 'integ_flujo', '', [
+    'semaforo' => $crearReglaRango(2, 5, 1.5, 5.5),
+    'leyenda' => '2-5',
+  ]),
+];
+
+/*
+|--------------------------------------------------------------------------
+| Configuración final
+|--------------------------------------------------------------------------
+*/
+
+$configuracionExtraccion = [
+  'indicadores' => $camposExtraccion,
+];
+
+$configuracionSecadores = [
+  'temperaturas_limite' => 0,
+  'tuneles_placeholder' => [],
+  'metricas' => $camposSecadores,
+  'votator_campos' => array_keys($camposBaseVotator),
+  'votators_placeholder' => [
+    'votator_5' => 'Votator 5',
+    'votator_6' => 'Votator 6',
+  ],
+  'votator_mysql' => [
+    'mysql_105' => $conexionMysqlProgelProcesos,
+    'tabla_datos' => 'datos_producto',
+    'columnas_orden' => $ordenDatosHora,
+    'columna_fo' => 'estado_fo_churro',
+    'campos' => $camposVotatorBitacora,
+  ],
+  'votator_campos_overlay' => $camposSqlVotator,
+  'votator_campos_extra' => $camposBaseVotator,
+];
+
+$configuracionCocedores = [
+  'mysql_105' => $conexionMysqlProgelProcesos,
+  'tabla_datos' => 'datos_cocedores',
+  'columna_numero' => 'numero_cocedor',
+  'columna_fo' => 'estado_fo',
+  'columnas_orden' => $ordenDatosHora,
+  'encabezado' => $camposCocedoresCabecera,
+  'metricas_mysql' => $camposCocedoresBitacora,
+  'equipos' => $equiposCocedores,
+];
+
+$configuracionClarificador = [
+  'key' => 'clarificador',
+  'titulo' => 'Clarificador',
+  'mysql_105' => $conexionMysqlProgelProcesos,
+  'tabla_datos' => 'datos_clarificador',
+  'columna_fo' => 'estado_fo',
+  'columnas_orden' => $ordenDatosHora,
+  'sqlserver' => $configuracionSqlServerAveva,
+  'metricas' => $camposClarificador,
+];
+
+$configuracionIntegracion = [
+  'key' => 'integracion',
+  'titulo' => 'Integración',
+  'mysql_105' => $conexionMysqlProgelProcesos,
+  'tabla_datos' => 'datos_filtracion_integracion',
+  'columna_fo' => 'estado_fo_integ',
+  'columnas_orden' => $ordenDatosHora,
+  'metricas' => $camposIntegracion,
+];
+
 return [
   'titulo' => 'Produccion Monitoreo',
   'intervalo_actualizacion_ms' => 60000,
-  'extraccion' => [
-    'indicadores' => [
-      'nivel_grasa' => [
-        'label' => 'Nivel de grasa',
-        'field' => 'NIVEL_TANQUE_DE_GRASA_DE_EXTRACCION',
-        'unit' => '',
-        'source' => 'sqlserver',
-        'empty_label' => 'Sin dato',
-      ],
-    ],
-  ],
-  'secadores' => [
-    'temperaturas_limite' => 0,
-    'tuneles_placeholder' => [],
-    'metricas' => [
-      'velocidad_banda',
-      'caudal_aire',
-      'agua_caliente_suministro',
-      'agua_caliente_retorno',
-      'presion_vapor',
-      'humedad_zona_1_inferior',
-      'humedad_zona_2_inferior',
-      'humedad_zona_3_inferior',
-      'humedad_zona_4_inferior',
-      'humedad_zona_5_inferior',
-      'humedad_zona_6_inferior',
-      'humedad_zona_7_inferior',
-      'humedad_zona_8_inferior',
-      'humedad_zona_9_inferior',
-      'humedad_recamara_2',
-      'humedad_recamara_4',
-      'humedad_recamara_8',
-      'humedad_suministro_aire',
-    ],
-    'votator_campos' => [
-      'flujo',
-      'presion_cuajado',
-      'solidos',
-      'amperaje_bomba',
-      'amperaje_reductor',
-    ],
-    'votators_placeholder' => [
-      'votator_5' => 'Votator 5',
-      'votator_6' => 'Votator 6',
-    ],
-    'votator_mysql' => [
-      'mysql_105' => [
-        'host' => '192.168.1.105',
-        'port' => 3306,
-        'dbname' => 'progel_procesos',
-        'user' => 'user_pro',
-        'pass' => 'Pr0g3l2025PR',
-        'charset' => 'utf8mb4',
-        'timeout' => 3,
-      ],
-      'tabla_datos' => 'datos_producto',
-      'columnas_orden' => ['id_datos_hora', 'id'],
-      'columna_fo' => 'estado_fo_churro',
-      'campos' => [
-        'solidos' => [
-          'label' => 'Sólidos',
-          'field' => 'churro_solidos',
-          'unit' => '%',
-          'empty_label' => 'Sin dato',
-          'semaforo' => [
-            'modo' => 'minimo',
-            'verde_min' => 34,
-          ],
-          'optimo_label' => '≥ 34 %',
-        ],
-      ],
-    ],
-    'votator_campos_overlay' => [
-      'tunel_1' => [
-        'votator_1' => [
-          'campos' => [
-            'amperaje_bomba' => [
-              'label' => 'Amp bomba',
-              'source' => 'sqlserver',
-              'field' => 'CORRIENTE_DE_EXTRUSOR_V1_SA',
-              'unit' => 'A',
-              'available' => true,
-              'empty_label' => 'Sin dato',
-            ],
-          ],
-        ],
-        'votator_2' => [
-          'campos' => [
-            'amperaje_bomba' => [
-              'label' => 'Amp bomba',
-              'source' => 'sqlserver',
-              'field' => 'CORRIENTE_DE_EXTRUSOR',
-              'unit' => 'A',
-              'available' => true,
-              'empty_label' => 'Sin dato',
-            ],
-          ],
-        ],
-      ],
-      'tunel_2' => [
-        'votator_5' => [
-          'label' => 'Votator 5',
-          'campos' => [
-            'flujo' => [
-              'label' => 'Flujo',
-              'source' => 'sqlserver',
-              'field' => 'flujo_votator_3',
-              'unit' => '',
-              'available' => true,
-              'empty_label' => 'Sin dato',
-              'semaforo' => [
-                'modo' => 'bandas',
-                'bandas' => [
-                  ['max' => 10, 'estado' => 'rojo'],
-                  ['min' => 10.5, 'max' => 11.499999, 'estado' => 'amarillo'],
-                  ['min' => 11.5, 'max' => 12.5, 'estado' => 'verde'],
-                  ['min' => 12.500001, 'max' => 13, 'estado' => 'amarillo'],
-                  ['min' => 13, 'estado' => 'rojo'],
-                ],
-              ],
-              'leyenda' => '11.5-12.5',
-            ],
-          ],
-        ],
-        'votator_6' => [
-          'label' => 'Votator 6',
-          'campos' => [
-            'flujo' => [
-              'label' => 'Flujo',
-              'source' => 'sqlserver',
-              'field' => 'FLujo_votator_4',
-              'unit' => '',
-              'available' => true,
-              'empty_label' => 'Sin dato',
-              'semaforo' => [
-                'modo' => 'bandas',
-                'bandas' => [
-                  ['max' => 10, 'estado' => 'rojo'],
-                  ['min' => 10.5, 'max' => 11.499999, 'estado' => 'amarillo'],
-                  ['min' => 11.5, 'max' => 12.5, 'estado' => 'verde'],
-                  ['min' => 12.500001, 'max' => 13, 'estado' => 'amarillo'],
-                  ['min' => 13, 'estado' => 'rojo'],
-                ],
-              ],
-              'leyenda' => '11.5-12.5',
-            ],
-          ],
-        ],
-      ],
-    ],
-    'votator_campos_extra' => [
-      'flujo' => [
-        'label' => 'Flujo',
-        'unit' => '',
-        'optimo_label' => 'Por definir',
-      ],
-      'presion_cuajado' => [
-        'label' => 'Presión de cuajado',
-        'unit' => 'kg/cm2',
-        'rule' => [
-          'verde_min' => 24,
-          'verde_max' => 26,
-        ],
-      ],
-      'solidos' => [
-        'label' => 'Sólidos',
-        'unit' => '%',
-        'optimo_label' => 'Por definir',
-      ],
-      'amperaje_bomba' => [
-        'label' => 'Amp bomba',
-        'unit' => 'A',
-        'optimo_label' => 'Por definir',
-      ],
-      'amperaje_reductor' => [
-        'label' => 'Amp reductor',
-        'unit' => 'A',
-        'optimo_label' => 'Por definir',
-      ],
-    ],
-  ],
-  'cocedores' => [
-    'mysql_105' => [
-      'host' => '192.168.1.105',
-      'port' => 3306,
-      'dbname' => 'progel_procesos',
-      'user' => 'user_pro',
-      'pass' => 'Pr0g3l2025PR',
-      'charset' => 'utf8mb4',
-      'timeout' => 3,
-    ],
-    'tabla_datos' => 'datos_cocedores',
-    'columna_numero' => 'numero_cocedor',
-    'columna_fo' => 'estado_fo',
-    'columnas_orden' => ['id_datos_hora', 'id'],
-    'encabezado' => [
-      'temperatura_entrada' => [
-        'label' => 'Entrada',
-        'field' => 'COCEDORES_TEMPERATURA_DE_ENTRADA',
-        'unit' => '°C',
-        'semaforo' => [
-          'modo' => 'rango',
-          'verde_min' => 60,
-          'verde_max' => 68,
-          'amarillo_min' => 59,
-          'amarillo_max' => 69,
-        ],
-        'leyenda' => '60-68 °C',
-      ],
-      'temperatura_salida' => [
-        'label' => 'Salida',
-        'field' => 'COCEDORES_TEMPERATURA_DE_SALIDA',
-        'unit' => '°C',
-        'semaforo' => [
-          'modo' => 'rango',
-          'verde_min' => 55,
-          'verde_max' => 63,
-          'amarillo_min' => 54,
-          'amarillo_max' => 64,
-        ],
-        'leyenda' => '55-63 °C',
-      ],
-    ],
-    'metricas_mysql' => [
-      'ntu' => [
-        'label' => 'NTU',
-        'field' => 'ntu',
-        'unit' => '',
-        'semaforo' => [
-          'modo' => 'rango',
-          'verde_min' => 60,
-          'verde_max' => 600,
-          'amarillo_min' => 50,
-          'amarillo_max' => 610,
-        ],
-        'leyenda' => '60-600',
-      ],
-      'solidos' => [
-        'label' => 'Sólidos',
-        'field' => 'solidos',
-        'unit' => '%',
-        'semaforo' => [
-          'modo' => 'rango',
-          'verde_min' => 2.5,
-          'verde_max' => 3.5,
-          'amarillo_min' => 2.3,
-          'amarillo_max' => 3.7,
-        ],
-        'leyenda' => '2.5-3.5 %',
-      ],
-      'ph' => [
-        'label' => 'pH',
-        'field' => 'ph',
-        'unit' => '',
-        'semaforo' => [
-          'modo' => 'rango',
-          'verde_min' => 3,
-          'verde_max' => 3.8,
-          'amarillo_min' => 2.9,
-          'amarillo_max' => 3.9,
-        ],
-        'leyenda' => '3-3.8',
-      ],
-    ],
-    'equipos' => [
-    'cocedor_1' => [
-      'titulo' => 'Cocedor 1',
-      'flujo_field' => 'Flujo_cocedor_1',
-      'flujo_semaforo' => [
-        'modo' => 'rango',
-        'verde_min' => 150,
-        'verde_max' => 155,
-        'amarillo_min' => 149,
-        'amarillo_max' => 156,
-      ],
-      'flujo_leyenda' => '150-155',
-    ],
-    'cocedor_2' => [
-      'titulo' => 'Cocedor 2',
-      'flujo_field' => 'Flujo_cocedor_2',
-      'flujo_semaforo' => [
-        'modo' => 'rango',
-        'verde_min' => 150,
-        'verde_max' => 155,
-        'amarillo_min' => 149,
-        'amarillo_max' => 156,
-      ],
-      'flujo_leyenda' => '150-155',
-    ],
-    'cocedor_3' => [
-      'titulo' => 'Cocedor 3',
-      'flujo_field' => 'Flujo_cocedor_3',
-      'flujo_semaforo' => [
-        'modo' => 'rango',
-        'verde_min' => 150,
-        'verde_max' => 155,
-        'amarillo_min' => 149,
-        'amarillo_max' => 156,
-      ],
-      'flujo_leyenda' => '150-155',
-    ],
-    'cocedor_4' => [
-      'titulo' => 'Cocedor 4',
-      'flujo_field' => 'Flujo_cocedor_4',
-      'flujo_semaforo' => [
-        'modo' => 'rango',
-        'verde_min' => 150,
-        'verde_max' => 155,
-        'amarillo_min' => 149,
-        'amarillo_max' => 156,
-      ],
-      'flujo_leyenda' => '150-155',
-    ],
-    'cocedor_5' => [
-      'titulo' => 'Cocedor 5',
-      'flujo_field' => 'Flujo_cocedor_5',
-      'flujo_semaforo' => [
-        'modo' => 'rango',
-        'verde_min' => 150,
-        'verde_max' => 155,
-        'amarillo_min' => 149,
-        'amarillo_max' => 156,
-      ],
-      'flujo_leyenda' => '150-155',
-    ],
-    'cocedor_6' => [
-      'titulo' => 'Cocedor 6',
-      'flujo_field' => 'Flujo_cocedor_6',
-      'flujo_semaforo' => [
-        'modo' => 'rango',
-        'verde_min' => 170,
-        'verde_max' => 175,
-        'amarillo_min' => 169,
-        'amarillo_max' => 176,
-      ],
-      'flujo_leyenda' => '170-175',
-    ],
-    'cocedor_7' => [
-      'titulo' => 'Cocedor 7',
-      'flujo_field' => 'Flujo_cocedor_7',
-      'flujo_semaforo' => [
-        'modo' => 'rango',
-        'verde_min' => 170,
-        'verde_max' => 175,
-        'amarillo_min' => 169,
-        'amarillo_max' => 176,
-      ],
-      'flujo_leyenda' => '170-175',
-    ],
-    'cocedor_8' => [
-      'titulo' => 'Cocedor 8',
-      'flujo_field' => 'FLUJO_COCEDOR_8',
-      'flujo_semaforo' => [
-        'modo' => 'rango',
-        'verde_min' => 170,
-        'verde_max' => 175,
-        'amarillo_min' => 169,
-        'amarillo_max' => 176,
-      ],
-      'flujo_leyenda' => '170-175',
-    ],
-    'cocedor_9' => [
-      'titulo' => 'Cocedor 9',
-      'flujo_field' => 'FLUJO_COCEDOR_9',
-      'flujo_semaforo' => [
-        'modo' => 'rango',
-        'verde_min' => 170,
-        'verde_max' => 175,
-        'amarillo_min' => 169,
-        'amarillo_max' => 176,
-      ],
-      'flujo_leyenda' => '170-175',
-    ],
-    ],
-  ],
-  'clarificadores' => [
-    'key' => 'clarificador',
-    'titulo' => 'Clarificador',
-    'mysql_105' => [
-      'host' => '192.168.1.105',
-      'port' => 3306,
-      'dbname' => 'progel_procesos',
-      'user' => 'user_pro',
-      'pass' => 'Pr0g3l2025PR',
-      'charset' => 'utf8mb4',
-      'timeout' => 3,
-    ],
-    'tabla_datos' => 'datos_clarificador',
-    'columna_fo' => 'estado_fo',
-    'columnas_orden' => ['id_datos_hora', 'id'],
-    'sqlserver' => [
-      'tabla' => 'TREND001',
-      'campo_fecha' => 'Time_Stamp',
-    ],
-    'metricas' => [
-      'solidos' => [
-        'label' => 'Sólidos',
-        'field' => 'solidos',
-        'unit' => '%',
-        'semaforo' => [
-          'modo' => 'rango',
-          'verde_min' => 2.5,
-          'verde_max' => 3.5,
-          'amarillo_min' => 2.3,
-          'amarillo_max' => 3.7,
-        ],
-        'leyenda' => '2.5-3.5 %',
-      ],
-      'temperatura' => [
-        'label' => 'Temperatura',
-        'field' => 'temperatura',
-        'unit' => '°C',
-      ],
-      'flujo' => [
-        'label' => 'Flujo',
-        'field' => 'flujo',
-        'unit' => '',
-      ],
-      'flujo_polimero' => [
-        'label' => 'Flujo Polímero',
-        'source' => 'sqlserver',
-        'field' => 'FLUJO_POLIMERO_CLARIFICADOR',
-        'unit' => '',
-      ],
-      'ntu_entrada' => [
-        'label' => 'NTU Entrada',
-        'field' => 'ntu_entrada',
-        'unit' => '',
-        'semaforo' => [
-          'modo' => 'rango',
-          'verde_min' => 50,
-          'verde_max' => 600,
-          'amarillo_min' => 40,
-          'amarillo_max' => 610,
-        ],
-        'leyenda' => '50-600',
-      ],
-      'ntu_salida' => [
-        'label' => 'NTU Salida',
-        'field' => 'ntu_salida',
-        'unit' => '',
-        'semaforo' => [
-          'modo' => 'rango',
-          'verde_min' => 5,
-          'verde_max' => 12,
-          'amarillo_min' => 4,
-          'amarillo_max' => 13,
-        ],
-        'leyenda' => '5-12',
-      ],
-      'ph_entrada' => [
-        'label' => 'pH Entrada',
-        'field' => 'ph_entrada',
-        'unit' => '',
-        'semaforo' => [
-          'modo' => 'rango',
-          'verde_min' => 3,
-          'verde_max' => 3.8,
-          'amarillo_min' => 2.9,
-          'amarillo_max' => 3.9,
-        ],
-        'leyenda' => '3-3.8',
-      ],
-      'ph_electrodo' => [
-        'label' => 'pH Electrodo',
-        'field' => 'ph_electrodo',
-        'unit' => '',
-        'semaforo' => [
-          'modo' => 'rango',
-          'verde_min' => 5.5,
-          'verde_max' => 6.5,
-          'amarillo_min' => 5.3,
-          'amarillo_max' => 6.7,
-        ],
-        'leyenda' => '5.5-6.5',
-      ],
-      'ph_salida' => [
-        'label' => 'pH Salida',
-        'field' => 'ph_salida',
-        'unit' => '',
-        'semaforo' => [
-          'modo' => 'rango',
-          'verde_min' => 5.5,
-          'verde_max' => 6.5,
-          'amarillo_min' => 5.3,
-          'amarillo_max' => 6.7,
-        ],
-        'leyenda' => '5.5-6.5',
-      ],
-      'ce_salida' => [
-        'label' => 'CE Salida',
-        'field' => 'ce_salida',
-        'unit' => '',
-        'semaforo' => [
-          'modo' => 'maximo',
-          'verde_max' => 6.49,
-          'amarillo_max' => 6.69,
-        ],
-        'leyenda' => '< 6.5',
-      ],
-      'mez_balance' => [
-        'label' => 'Mez Balance',
-        'field' => 'mez_balance',
-        'unit' => '',
-      ],
-    ],
-  ],
-  'integracion' => [
-    'key' => 'integracion',
-    'titulo' => 'Integración',
-    'mysql_105' => [
-      'host' => '192.168.1.105',
-      'port' => 3306,
-      'dbname' => 'progel_procesos',
-      'user' => 'user_pro',
-      'pass' => 'Pr0g3l2025PR',
-      'charset' => 'utf8mb4',
-      'timeout' => 3,
-    ],
-    'tabla_datos' => 'datos_filtracion_integracion',
-    'columna_fo' => 'estado_fo_integ',
-    'columnas_orden' => ['id_datos_hora', 'id'],
-    'metricas' => [
-      'visc_integracion' => [
-        'label' => 'VISCOSIDAD',
-        'field' => 'integ_viscosidad',
-        'unit' => '',
-        'semaforo' => [
-          'modo' => 'minimo',
-          'verde_min' => 25.01,
-        ],
-        'leyenda' => '> 25',
-      ],
-      'flujo_integracion' => [
-        'label' => 'FLUJO',
-        'field' => 'integ_flujo',
-        'unit' => '',
-        'semaforo' => [
-          'modo' => 'rango',
-          'verde_min' => 2,
-          'verde_max' => 5,
-          'amarillo_min' => 1.5,
-          'amarillo_max' => 5.5,
-        ],
-        'leyenda' => '2-5',
-      ],
-    ],
-  ],
+  'sqlserver_aveva' => $configuracionSqlServerAveva,
+  'extraccion' => $configuracionExtraccion,
+  'secadores' => $configuracionSecadores,
+  'cocedores' => $configuracionCocedores,
+  'clarificadores' => $configuracionClarificador,
+  'integracion' => $configuracionIntegracion,
 ];
