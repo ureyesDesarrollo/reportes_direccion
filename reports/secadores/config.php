@@ -51,7 +51,7 @@ return array_replace_recursive($detailConfig, [
   ],
   'indicadores_superiores' => [
     'viscosidad_churro' => [
-      'label' => 'Viscosidad del churro',
+      'label' => 'Viscosidad churro',
       'source' => 'mysql_producto',
       'field' => 'churro_viscosidad',
       'unit' => '',
@@ -69,7 +69,7 @@ return array_replace_recursive($detailConfig, [
       'leyenda' => '< 40',
     ],
     'solido_entrada' => [
-      'label' => 'Sólido de entrada',
+      'label' => 'Sólido entrada',
       'source' => 'mysql_producto',
       'field' => 'churro_solidos',
       'unit' => '%',
@@ -91,7 +91,7 @@ return array_replace_recursive($detailConfig, [
     'tunel_1' => [
       'velocidad_banda' => [
         'group' => 'Banda',
-        'label' => 'Velocidad de banda',
+        'label' => 'Velocidad banda',
         'field' => 'FUNCIONAMIENTO_BANDA_TRANSPORTADORA',
         'unit' => '',
         'available' => true,
@@ -109,7 +109,7 @@ return array_replace_recursive($detailConfig, [
       ],
       'caudal_aire' => [
         'group' => 'Banda',
-        'label' => 'Caudal de aire',
+        'label' => 'Caudal aire',
         'source' => 'mysql_secadores',
         'field' => 'caudal',
         'unit' => 'm³/h',
@@ -120,7 +120,7 @@ return array_replace_recursive($detailConfig, [
           'key_column' => 'tunel_key',
           'key_value' => 'tunel_1',
           'timestamp_column' => 'fecha_hora',
-          'date' => '2026-07-25',
+          'date_filter' => false,
         ],
         'semaforo' => [
           'modo' => 'minimo',
@@ -131,7 +131,7 @@ return array_replace_recursive($detailConfig, [
       ],
       'agua_caliente_suministro' => [
         'group' => 'Agua y vapor',
-        'label' => 'Agua caliente / suministro',
+        'label' => 'Agua suministro',
         'field' => 'TEMPERATURA_ENTRADA_AGUA_CALIENTE',
         'unit' => '°C',
         'available' => true,
@@ -147,7 +147,7 @@ return array_replace_recursive($detailConfig, [
       ],
       'agua_caliente_retorno' => [
         'group' => 'Agua y vapor',
-        'label' => 'Agua caliente / retorno',
+        'label' => 'Agua retorno',
         'field' => 'TEMPERATURA_RETORNO_AGUA_CALIENTE',
         'unit' => '°C',
         'available' => true,
@@ -161,7 +161,7 @@ return array_replace_recursive($detailConfig, [
       ],
       'presion_vapor' => [
         'group' => 'Agua y vapor',
-        'label' => 'Presión de vapor',
+        'label' => 'Presión vapor',
         'field' => 'PRESION_DE_VAPOR',
         'unit' => 'bar(a)',
         'available' => true,
@@ -177,7 +177,7 @@ return array_replace_recursive($detailConfig, [
       ],
       'humedad_zona_1_inferior' => [
         'group' => 'Humedades',
-        'label' => 'Recamara 1',
+        'label' => 'REC 1',
         'field' => 'SECADOR_AS_HUMEDAD_ZONA_1_INFERIOR',
         'unit' => '%',
         'available' => true,
@@ -186,7 +186,7 @@ return array_replace_recursive($detailConfig, [
       ],
       'humedad_zona_2_inferior' => [
         'group' => 'Humedades',
-        'label' => 'Recamara 2',
+        'label' => 'REC 2',
         'field' => 'SECADOR_AS_HUMEDAD_ZONA_2_INFERIOR',
         'unit' => '%',
         'available' => true,
@@ -195,7 +195,7 @@ return array_replace_recursive($detailConfig, [
       ],
       'humedad_zona_3_inferior' => [
         'group' => 'Humedades',
-        'label' => 'Recamara 3',
+        'label' => 'REC 3',
         'field' => 'SECADOR_AS_HUMEDAD_ZONA_3_INFERIOR',
         'unit' => '%',
         'available' => true,
@@ -204,7 +204,7 @@ return array_replace_recursive($detailConfig, [
       ],
       'humedad_zona_4_inferior' => [
         'group' => 'Humedades',
-        'label' => 'Recamara 4',
+        'label' => 'REC 4',
         'field' => 'SECADOR_AS_HUMEDAD_ZONA_4_INFERIOR',
         'unit' => '%',
         'available' => true,
@@ -213,7 +213,7 @@ return array_replace_recursive($detailConfig, [
       ],
       'humedad_zona_5_inferior' => [
         'group' => 'Humedades',
-        'label' => 'Recamara 5',
+        'label' => 'REC 5',
         'field' => 'SECADOR_AS_HUMEDAD_ZONA_5_INFERIOR',
         'unit' => '%',
         'available' => true,
@@ -222,7 +222,7 @@ return array_replace_recursive($detailConfig, [
       ],
       'humedad_zona_6_inferior' => [
         'group' => 'Humedades',
-        'label' => 'Recamara 6',
+        'label' => 'REC 6',
         'field' => 'SECADOR_AS_HUMEDAD_ZONA_6_INFERIOR',
         'unit' => '%',
         'available' => true,
@@ -231,7 +231,7 @@ return array_replace_recursive($detailConfig, [
       ],
       'humedad_zona_7_inferior' => [
         'group' => 'Humedades',
-        'label' => 'Recamara 7',
+        'label' => 'REC 7',
         'field' => 'SECADOR_AS_HUMEDAD_ZONA_7_INFERIOR',
         'unit' => '%',
         'available' => true,
@@ -240,7 +240,7 @@ return array_replace_recursive($detailConfig, [
       ],
       'humedad_zona_8_inferior' => [
         'group' => 'Humedades',
-        'label' => 'Recamara 8',
+        'label' => 'REC 8',
         'field' => 'SECADOR_AS_HUMEDAD_ZONA_8_INFERIOR',
         'unit' => '%',
         'available' => true,
@@ -249,7 +249,7 @@ return array_replace_recursive($detailConfig, [
       ],
       'humedad_zona_9_inferior' => [
         'group' => 'Humedades',
-        'label' => 'Recamara 9',
+        'label' => 'REC 9',
         'field' => 'SECADOR_AS_HUMEDAD_ZONA_9_INFERIOR',
         'unit' => '%',
         'available' => true,
@@ -426,8 +426,8 @@ return array_replace_recursive($detailConfig, [
         'semaforo' => [
           'modo' => 'texto',
           'verde' => ['Firme'],
-          'amarillo' => ['Plástica', 'Plastica'],
-          'rojo' => ['Húmeda', 'Humeda'],
+          'amarillo' => ['Plástica'],
+          'rojo' => ['Húmeda'],
         ],
         'lookup' => [
           'table' => 'verificacion_secado',
@@ -442,7 +442,7 @@ return array_replace_recursive($detailConfig, [
     'tunel_2' => [
       'velocidad_banda' => [
         'group' => 'Banda',
-        'label' => 'Velocidad de banda',
+        'label' => 'Velocidad banda',
         'field' => 'T5VELB',
         'unit' => '',
         'available' => true,
@@ -456,7 +456,7 @@ return array_replace_recursive($detailConfig, [
       ],
       'caudal_aire' => [
         'group' => 'Banda',
-        'label' => 'Caudal de aire',
+        'label' => 'Caudal aire',
         'source' => 'mysql_secadores',
         'field' => 'caudal',
         'unit' => 'm³/h',
@@ -467,7 +467,7 @@ return array_replace_recursive($detailConfig, [
           'key_column' => 'tunel_key',
           'key_value' => 'tunel_2',
           'timestamp_column' => 'fecha_hora',
-          'date' => '2026-07-25',
+          'date_filter' => false,
         ],
         'semaforo' => [
           'modo' => 'rango',
@@ -480,7 +480,7 @@ return array_replace_recursive($detailConfig, [
       ],
       'agua_caliente_suministro' => [
         'group' => 'Agua y vapor',
-        'label' => 'Agua caliente / suministro',
+        'label' => 'Agua suministro',
         'field' => 'ENTRADA_DE_AGUA_CALIENTE_DE_TUNEL_1',
         'unit' => '°C',
         'available' => true,
@@ -496,7 +496,7 @@ return array_replace_recursive($detailConfig, [
       ],
       'agua_caliente_retorno' => [
         'group' => 'Agua y vapor',
-        'label' => 'Agua caliente / retorno',
+        'label' => 'Agua retorno',
         'field' => 'RETORNO_DE_AGUA_CALIENTE_DE_TUNEL_1',
         'unit' => '°C',
         'available' => true,
@@ -510,7 +510,7 @@ return array_replace_recursive($detailConfig, [
       ],
       'presion_vapor' => [
         'group' => 'Agua y vapor',
-        'label' => 'Presión de vapor',
+        'label' => 'Presión vapor',
         'field' => 'PRESION_DE_VAPOR',
         'unit' => 'bar(a)',
         'available' => true,
@@ -526,7 +526,7 @@ return array_replace_recursive($detailConfig, [
       ],
       'humedad_recamara_1' => [
         'group' => 'Humedades',
-        'label' => 'Recamara 1',
+        'label' => 'REC 1',
         'field' => '',
         'unit' => '%',
         'available' => true,
@@ -535,7 +535,7 @@ return array_replace_recursive($detailConfig, [
       ],
       'humedad_recamara_2' => [
         'group' => 'Humedades',
-        'label' => 'Recamara 2',
+        'label' => 'REC 2',
         'field' => 'T5SHZ2PV',
         'unit' => '%',
         'available' => true,
@@ -544,7 +544,7 @@ return array_replace_recursive($detailConfig, [
       ],
       'humedad_recamara_3' => [
         'group' => 'Humedades',
-        'label' => 'Recamara 3',
+        'label' => 'REC 3',
         'field' => '',
         'unit' => '%',
         'available' => true,
@@ -553,7 +553,7 @@ return array_replace_recursive($detailConfig, [
       ],
       'humedad_recamara_4' => [
         'group' => 'Humedades',
-        'label' => 'Recamara 4',
+        'label' => 'REC 4',
         'field' => 'T5SHZ4PV',
         'unit' => '%',
         'available' => true,
@@ -562,7 +562,7 @@ return array_replace_recursive($detailConfig, [
       ],
       'humedad_recamara_5' => [
         'group' => 'Humedades',
-        'label' => 'Recamara 5',
+        'label' => 'REC 5',
         'field' => '',
         'unit' => '%',
         'available' => true,
@@ -571,7 +571,7 @@ return array_replace_recursive($detailConfig, [
       ],
       'humedad_recamara_6' => [
         'group' => 'Humedades',
-        'label' => 'Recamara 6',
+        'label' => 'REC 6',
         'field' => '',
         'unit' => '%',
         'available' => true,
@@ -580,7 +580,7 @@ return array_replace_recursive($detailConfig, [
       ],
       'humedad_recamara_7' => [
         'group' => 'Humedades',
-        'label' => 'Recamara 7',
+        'label' => 'REC 7',
         'field' => '',
         'unit' => '%',
         'available' => true,
@@ -589,7 +589,7 @@ return array_replace_recursive($detailConfig, [
       ],
       'humedad_recamara_8' => [
         'group' => 'Humedades',
-        'label' => 'Recamara 8',
+        'label' => 'Rec 8',
         'field' => 'T5SHZ8PV',
         'unit' => '%',
         'available' => true,
@@ -598,7 +598,7 @@ return array_replace_recursive($detailConfig, [
       ],
       'humedad_recamara_9' => [
         'group' => 'Humedades',
-        'label' => 'Recamara 9',
+        'label' => 'REC 9',
         'field' => '',
         'unit' => '%',
         'available' => true,
@@ -607,7 +607,7 @@ return array_replace_recursive($detailConfig, [
       ],
       'humedad_suministro_aire' => [
         'group' => 'Humedades',
-        'label' => 'Aire de suministro',
+        'label' => 'Aire suministro',
         'field' => 'T5HHVACZ1PV',
         'unit' => 'g/kg',
         'available' => true,
@@ -733,7 +733,7 @@ return array_replace_recursive($detailConfig, [
       ],
       'verificacion_rc9' => [
         'group' => 'Verificación de secado',
-        'label' => 'RC9',
+        'label' => 'REC 9',
         'source' => 'mysql_verificacion_secado',
         'field' => 'rc9',
         'unit' => '',
@@ -755,7 +755,7 @@ return array_replace_recursive($detailConfig, [
       ],
       'verificacion_hum_relativa_cam5' => [
         'group' => 'Verificación de secado',
-        'label' => 'Hum. rel. cam5',
+        'label' => 'Hum. rel. rec 5',
         'source' => 'mysql_verificacion_secado',
         'field' => 'hum_relativa_cam5',
         'unit' => '%',
@@ -787,8 +787,8 @@ return array_replace_recursive($detailConfig, [
         'semaforo' => [
           'modo' => 'texto',
           'verde' => ['Firme'],
-          'amarillo' => ['Plástica', 'Plastica'],
-          'rojo' => ['Húmeda', 'Humeda'],
+          'amarillo' => ['Plástica'],
+          'rojo' => ['Húmeda'],
         ],
         'lookup' => [
           'table' => 'verificacion_secado',
@@ -826,7 +826,7 @@ return array_replace_recursive($detailConfig, [
             'leyenda' => '11.5-12.5',
           ],
           'presion_cuajado' => [
-            'label' => 'Presión de cuajado',
+            'label' => 'Presión cuajado',
             'source' => 'sqlserver',
             'field' => 'PRESION_CUAJADO_VOTATOR_1',
             'unit' => 'kg/cm2',
@@ -866,7 +866,7 @@ return array_replace_recursive($detailConfig, [
             'leyenda' => '11.5-12.5',
           ],
           'presion_cuajado' => [
-            'label' => 'Presión de cuajado',
+            'label' => 'Presión cuajado',
             'source' => 'sqlserver',
             'field' => 'PRESION_CUAJADO_VOTATOR_2_SA',
             'unit' => 'kg/cm2',
@@ -908,7 +908,7 @@ return array_replace_recursive($detailConfig, [
             'leyenda' => '11.5-12.5',
           ],
           'presion_cuajado' => [
-            'label' => 'Presión de cuajado',
+            'label' => 'Presión cuajado',
             'source' => 'sqlserver',
             'field' => 'PRESION__CUAJADO_VOTATOR_3',
             'unit' => 'kg/cm2',
@@ -948,7 +948,7 @@ return array_replace_recursive($detailConfig, [
             'leyenda' => '11.5-12.5',
           ],
           'presion_cuajado' => [
-            'label' => 'Presión de cuajado',
+            'label' => 'Presión cuajado',
             'source' => 'sqlserver',
             'field' => 'PRESION__CUAJADO_VOTATOR_4',
             'unit' => 'kg/cm2',

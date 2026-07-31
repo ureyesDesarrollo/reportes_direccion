@@ -491,6 +491,7 @@ foreach ($tunelesConfig as $tunelKey => $tunelDef) {
         'key' => $fieldKey,
         'label' => (string)($fieldDef['label'] ?? $fieldKey),
         'rangeLabel' => $buildFieldRangeLabel((array)($fieldDef['semaforo'] ?? []), isset($fieldDef['leyenda']) ? (string)$fieldDef['leyenda'] : null),
+        'rule' => (array)($fieldDef['semaforo'] ?? []),
       ],
       array_keys($campos),
       array_values($campos)

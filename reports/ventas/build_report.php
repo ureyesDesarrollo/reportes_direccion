@@ -51,6 +51,7 @@ $objetivoMensualToneladas = 600.0;
 $objetivoDiarioToneladas = $daysInMonth > 0 ? $objetivoMensualToneladas / $daysInMonth : 0.0;
 $pedidosSaldoTotal = 0.0;
 $pedidosCantidad = 0;
+$backorderPartidas = [];
 $productosCalidadConfig = (array)($config['productos_calidad'] ?? []);
 $calidadPorProducir = [];
 $calidadIndex = [];
@@ -81,6 +82,17 @@ foreach ($productosCalidadConfig as $producto) {
   $calidadIndex[$clave] = $grupo;
 }
 uasort($calidadPorProducir, static fn(array $a, array $b): int => (int)($b['orden'] ?? 0) <=> (int)($a['orden'] ?? 0));
+
+$firstScalarValue = static function (array $row, array $keys, string $fallback = ''): string {
+  foreach ($keys as $key) {
+    $value = $row[$key] ?? null;
+    if (is_scalar($value) && trim((string)$value) !== '') {
+      return trim((string)$value);
+    }
+  }
+
+  return $fallback;
+};
 
 $pedidosApiConfig = (array)($config['pedidos_api'] ?? []);
 $pedidosApiUrl = trim((string)($pedidosApiConfig['url'] ?? ''));
@@ -141,21 +153,48 @@ if ($pedidosDetalleApiUrl !== '' && $pedidosApiKey !== '') {
     $payload = json_decode($response, true, 512, JSON_THROW_ON_ERROR);
     $pedidosDetalle = (array)($payload['data']['pedidos'] ?? []);
     foreach ($pedidosDetalle as $pedidoDetalle) {
+      $clienteData = is_array($pedidoDetalle['cliente'] ?? null) ? (array)$pedidoDetalle['cliente'] : [];
+      $cliente = $firstScalarValue(
+        (array)$pedidoDetalle,
+        ['cliente_nombre', 'nombre_cliente', 'razon_social', 'cliente'],
+        $firstScalarValue($clienteData, ['nombre', 'razon_social', 'cliente_nombre'], 'Cliente sin identificar')
+      );
+      $pedidoReferencia = $firstScalarValue(
+        (array)$pedidoDetalle,
+        ['pedido', 'numero_pedido', 'folio', 'pedido_folio', 'id'],
+        '-'
+      );
       $partidas = (array)($pedidoDetalle['partidas'] ?? []);
-      foreach ($partidas as $partida) {
+      foreach ($partidas as $partidaIndex => $partida) {
         $clave = strtoupper(trim((string)($partida['clave_producto'] ?? '')));
-        if ($clave === '' || !isset($calidadIndex[$clave])) {
-          continue;
-        }
+        $cantidadSolicitada = $partida['cantidad'] ?? ($partida['peso_total'] ?? ($partida['saldo_pendiente'] ?? 0));
+        $cantidadPendiente = $partida['saldo_pendiente'] ?? $cantidadSolicitada;
+        $calidad = isset($calidadIndex[$clave])
+          ? (string)$calidadIndex[$clave]
+          : $firstScalarValue((array)$partida, ['calidad', 'bloom'], 'Sin clasificar');
+        $partidaReferencia = $firstScalarValue(
+          (array)$partida,
+          ['partida', 'numero_partida', 'renglon', 'partida_id', 'id'],
+          (string)($partidaIndex + 1)
+        );
 
-        $cantidad = $partida['saldo_pendiente'] ?? ($partida['cantidad'] ?? ($partida['peso_total'] ?? 0));
-        if (!is_numeric($cantidad)) {
+        $backorderPartidas[] = [
+          'pedido' => $pedidoReferencia,
+          'partida' => $partidaReferencia,
+          'cliente' => $cliente,
+          'clave_producto' => $clave !== '' ? $clave : '-',
+          'calidad' => $calidad,
+          'toneladas_solicitadas' => is_numeric($cantidadSolicitada) ? ((float)$cantidadSolicitada) / 1000 : 0.0,
+          'toneladas_pendientes' => is_numeric($cantidadPendiente) ? ((float)$cantidadPendiente) / 1000 : 0.0,
+        ];
+
+        if ($clave === '' || !isset($calidadIndex[$clave]) || !is_numeric($cantidadPendiente)) {
           continue;
         }
 
         $grupo = $calidadIndex[$clave];
-        $calidadPorProducir[$grupo]['cantidad'] += (float)$cantidad;
-        $calidadPorProducir[$grupo]['toneladas'] += ((float)$cantidad) / 1000;
+        $calidadPorProducir[$grupo]['cantidad'] += (float)$cantidadPendiente;
+        $calidadPorProducir[$grupo]['toneladas'] += ((float)$cantidadPendiente) / 1000;
         $calidadPorProducir[$grupo]['partidas']++;
         $calidadPorProducir[$grupo]['pedidos']++;
       }
@@ -164,6 +203,18 @@ if ($pedidosDetalleApiUrl !== '' && $pedidosApiKey !== '') {
     $warnings[] = 'No se pudo consultar el detalle de pedidos: ' . $e->getMessage();
   }
 }
+
+usort($backorderPartidas, static function (array $a, array $b): int {
+  $clienteOrder = strcasecmp((string)($a['cliente'] ?? ''), (string)($b['cliente'] ?? ''));
+  if ($clienteOrder !== 0) {
+    return $clienteOrder;
+  }
+
+  $pedidoOrder = strnatcasecmp((string)($a['pedido'] ?? ''), (string)($b['pedido'] ?? ''));
+  return $pedidoOrder !== 0
+    ? $pedidoOrder
+    : strnatcasecmp((string)($a['partida'] ?? ''), (string)($b['partida'] ?? ''));
+});
 
 $calidadPorProducir = array_map(static function (array $row): array {
   $claves = array_values(array_unique(array_map('strval', (array)($row['claves'] ?? []))));
@@ -432,6 +483,7 @@ return [
       'saldo_total' => $pedidosSaldoTotal,
       'toneladas' => $pedidosSaldoTotal / 1000,
       'cantidad' => $pedidosCantidad,
+      'partidas' => $backorderPartidas,
     ],
     'backorder_venta' => [
       'label' => 'Back order + venta',

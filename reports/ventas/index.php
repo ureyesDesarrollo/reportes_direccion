@@ -25,6 +25,7 @@ $titulo = (string)($report['titulo'] ?? 'Ventas');
 $filtros = (array)($report['filtros'] ?? []);
 $kpis = (array)($report['kpis'] ?? []);
 $pedidos = (array)($kpis['pedidos'] ?? []);
+$backorderPartidas = (array)($pedidos['partidas'] ?? []);
 $backorderVenta = (array)($kpis['backorder_venta'] ?? []);
 $ventas = (array)($kpis['ventas'] ?? []);
 $calidadPorProducir = (array)($kpis['calidad_por_producir'] ?? []);
@@ -152,6 +153,15 @@ $chartTarget = array_fill(0, count($chartLabels), round($objetivoDiario, 2));
     .ventas-kpi-card {
       min-height: 112px;
       padding: 14px 16px;
+    }
+
+    #ventasKpiPedidosCard {
+      cursor: pointer;
+    }
+
+    #ventasKpiPedidosCard:focus-visible {
+      outline: 3px solid #2563eb;
+      outline-offset: 3px;
     }
 
     .ventas-kpi-card .kpi-icon {
@@ -394,6 +404,147 @@ $chartTarget = array_fill(0, count($chartLabels), round($objetivoDiario, 2));
       font-size: 13px;
       font-weight: 800;
     }
+
+    .ventas-backorder-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    .ventas-backorder-modal.is-open {
+      display: flex;
+    }
+
+    .ventas-backorder-backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(15, 23, 42, .68);
+      backdrop-filter: blur(3px);
+    }
+
+    .ventas-backorder-dialog {
+      position: relative;
+      z-index: 1;
+      width: min(1180px, 100%);
+      max-height: calc(100vh - 48px);
+      overflow: hidden;
+      border: 1px solid #dbe7f5;
+      border-radius: 20px;
+      background: #ffffff;
+      box-shadow: 0 28px 80px rgba(15, 23, 42, .28);
+      display: grid;
+      grid-template-rows: auto auto minmax(0, 1fr);
+    }
+
+    .ventas-backorder-modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 18px 20px;
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    .ventas-backorder-modal-header h2 {
+      margin: 0;
+      color: #0f172a;
+      font-size: 1.35rem;
+      font-weight: 800;
+    }
+
+    .ventas-backorder-close {
+      width: 38px;
+      height: 38px;
+      border: 0;
+      border-radius: 999px;
+      color: #475569;
+      background: #f1f5f9;
+      cursor: pointer;
+      font-size: 1rem;
+    }
+
+    .ventas-backorder-summary {
+      padding: 12px 20px;
+      color: #475569;
+      background: #f8fafc;
+      border-bottom: 1px solid #e2e8f0;
+      font-size: .86rem;
+      font-weight: 800;
+    }
+
+    .ventas-backorder-table-wrap {
+      min-height: 0;
+      overflow: auto;
+    }
+
+    .ventas-backorder-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .82rem;
+    }
+
+    .ventas-backorder-table th,
+    .ventas-backorder-table td {
+      padding: 11px 12px;
+      border-bottom: 1px solid #e2e8f0;
+      text-align: left;
+      vertical-align: middle;
+    }
+
+    .ventas-backorder-table th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      color: #334155;
+      background: #f1f5f9;
+      font-size: .7rem;
+      font-weight: 900;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .ventas-backorder-table td.is-number,
+    .ventas-backorder-table th.is-number {
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    .ventas-backorder-quality {
+      display: inline-flex;
+      padding: 4px 8px;
+      border-radius: 999px;
+      color: #1e3a8a;
+      background: #dbeafe;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    .ventas-backorder-empty {
+      padding: 36px 20px !important;
+      color: #64748b;
+      text-align: center !important;
+      font-weight: 800;
+    }
+
+    body.ventas-modal-open {
+      overflow: hidden;
+    }
+
+    @media (max-width: 700px) {
+      .ventas-backorder-modal {
+        padding: 10px;
+      }
+
+      .ventas-backorder-dialog {
+        max-height: calc(100vh - 20px);
+        border-radius: 14px;
+      }
+    }
   </style>
 </head>
 
@@ -434,12 +585,18 @@ $chartTarget = array_fill(0, count($chartLabels), round($objetivoDiario, 2));
     <?php endforeach; ?>
 
     <section class="kpi-grid ventas-summary-grid" aria-label="Indicadores de ventas">
-      <article class="kpi-card ventas-kpi-card <?= $e($pedidosStatusClass) ?>" id="ventasKpiPedidosCard">
+      <article
+        class="kpi-card ventas-kpi-card <?= $e($pedidosStatusClass) ?>"
+        id="ventasKpiPedidosCard"
+        role="button"
+        tabindex="0"
+        aria-haspopup="dialog"
+        aria-controls="ventasBackorderModal">
         <div class="kpi-icon" style="color:#0ea5e9;"><i class="fa-solid fa-truck-ramp-box"></i></div>
         <div class="kpi-label">Back Order</div>
         <div class="kpi-value" id="ventasKpiPedidos"><?= $e($fmt($pedidos['toneladas'] ?? null, 1)) ?> TON</div>
         <div class="kpi-trend" id="ventasKpiPedidosDetalle">
-          <?= $e($fmt($pedidos['cantidad'] ?? null, 0)) ?> pedidos · saldo_total
+          <?= $e($fmt($pedidos['cantidad'] ?? null, 0)) ?> pedidos · Ver partidas
         </div>
       </article>
 
@@ -490,9 +647,44 @@ $chartTarget = array_fill(0, count($chartLabels), round($objetivoDiario, 2));
       </div>
     </section>
   </main>
+
+  <div class="ventas-backorder-modal" id="ventasBackorderModal" aria-hidden="true">
+    <div class="ventas-backorder-backdrop" data-backorder-close></div>
+    <section
+      class="ventas-backorder-dialog"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="ventasBackorderTitle">
+      <header class="ventas-backorder-modal-header">
+        <h2 id="ventasBackorderTitle">Partidas de Back Order</h2>
+        <button class="ventas-backorder-close" type="button" data-backorder-close aria-label="Cerrar detalle">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </header>
+      <div class="ventas-backorder-summary" id="ventasBackorderSummary"></div>
+      <div class="ventas-backorder-table-wrap">
+        <table class="ventas-backorder-table">
+          <thead>
+            <tr>
+              <th>Pedido</th>
+              <th>Partida</th>
+              <th>Cliente</th>
+              <th>Calidad</th>
+              <th>Clave</th>
+              <th class="is-number">TON solicitadas</th>
+              <th class="is-number">TON pendientes</th>
+            </tr>
+          </thead>
+          <tbody id="ventasBackorderTableBody"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
   <script>
     const ventasRefreshMs = <?= (int)($meta['intervaloActualizacion'] ?? 600000) ?>;
     const ventasSemaforoClasses = ['avance-semaforo-verde', 'avance-semaforo-amarillo', 'avance-semaforo-rojo'];
+    let ventasBackorderPartidas = <?= json_encode($backorderPartidas, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
     Chart.defaults.font.family = 'Inter, sans-serif';
     Chart.defaults.font.size = document.documentElement.classList.contains('executive-display') ? 12 : 11;
     Chart.defaults.color = '#475569';
@@ -514,6 +706,56 @@ $chartTarget = array_fill(0, count($chartLabels), round($objetivoDiario, 2));
         '"': '&quot;',
         "'": '&#039;'
       }[char]));
+    }
+
+    function ventasCalidadLabel(value) {
+      const calidad = String(value ?? '').trim();
+      if (calidad === '') return 'Sin clasificar';
+      return Number.isFinite(Number(calidad)) ? `Bloom ${calidad}` : calidad;
+    }
+
+    function renderBackorderPartidas() {
+      const tbody = document.getElementById('ventasBackorderTableBody');
+      const summary = document.getElementById('ventasBackorderSummary');
+      if (!tbody || !summary) return;
+
+      const rows = Array.isArray(ventasBackorderPartidas) ? ventasBackorderPartidas : [];
+      const toneladasSolicitadas = rows.reduce((total, row) => total + Number(row.toneladas_solicitadas || 0), 0);
+      const toneladasPendientes = rows.reduce((total, row) => total + Number(row.toneladas_pendientes || 0), 0);
+
+      summary.textContent = `${ventasFormatNumber(rows.length, 0)} partidas · ${ventasFormatNumber(toneladasSolicitadas, 1)} TON solicitadas · ${ventasFormatNumber(toneladasPendientes, 1)} TON pendientes`;
+      tbody.innerHTML = rows.length
+        ? rows.map((row) => `
+          <tr>
+            <td>${escapeHtml(row.pedido || '-')}</td>
+            <td>${escapeHtml(row.partida || '-')}</td>
+            <td><strong>${escapeHtml(row.cliente || 'Cliente sin identificar')}</strong></td>
+            <td><span class="ventas-backorder-quality">${escapeHtml(ventasCalidadLabel(row.calidad))}</span></td>
+            <td>${escapeHtml(row.clave_producto || '-')}</td>
+            <td class="is-number">${ventasFormatNumber(row.toneladas_solicitadas, 2)}</td>
+            <td class="is-number">${ventasFormatNumber(row.toneladas_pendientes, 2)}</td>
+          </tr>
+        `).join('')
+        : '<tr><td class="ventas-backorder-empty" colspan="7">No hay partidas disponibles para este Back Order.</td></tr>';
+    }
+
+    function openBackorderModal() {
+      const modal = document.getElementById('ventasBackorderModal');
+      if (!modal) return;
+      renderBackorderPartidas();
+      modal.classList.add('is-open');
+      modal.setAttribute('aria-hidden', 'false');
+      document.body.classList.add('ventas-modal-open');
+      modal.querySelector('.ventas-backorder-close')?.focus();
+    }
+
+    function closeBackorderModal() {
+      const modal = document.getElementById('ventasBackorderModal');
+      if (!modal) return;
+      modal.classList.remove('is-open');
+      modal.setAttribute('aria-hidden', 'true');
+      document.body.classList.remove('ventas-modal-open');
+      document.getElementById('ventasKpiPedidosCard')?.focus();
     }
 
     function ventasSemaforo(value) {
@@ -654,7 +896,12 @@ $chartTarget = array_fill(0, count($chartLabels), round($objetivoDiario, 2));
       }
 
       if (pedidosDetalle) {
-        pedidosDetalle.textContent = `${ventasFormatNumber(pedidos.cantidad, 0)} pedidos · saldo_total`;
+        pedidosDetalle.textContent = `${ventasFormatNumber(pedidos.cantidad, 0)} pedidos · Ver partidas`;
+      }
+
+      ventasBackorderPartidas = Array.isArray(pedidos.partidas) ? pedidos.partidas : [];
+      if (document.getElementById('ventasBackorderModal')?.classList.contains('is-open')) {
+        renderBackorderPartidas();
       }
 
       if (backorderVentaValue) {
@@ -704,6 +951,25 @@ $chartTarget = array_fill(0, count($chartLabels), round($objetivoDiario, 2));
       select.addEventListener('change', () => {
         select.form.submit();
       });
+    });
+
+    const ventasBackorderCard = document.getElementById('ventasKpiPedidosCard');
+    ventasBackorderCard?.addEventListener('click', openBackorderModal);
+    ventasBackorderCard?.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        openBackorderModal();
+      }
+    });
+
+    document.querySelectorAll('[data-backorder-close]').forEach((element) => {
+      element.addEventListener('click', closeBackorderModal);
+    });
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && document.getElementById('ventasBackorderModal')?.classList.contains('is-open')) {
+        closeBackorderModal();
+      }
     });
 
     setInterval(() => {

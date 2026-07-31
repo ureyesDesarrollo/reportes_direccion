@@ -389,17 +389,23 @@ $applyCentralHumidityRanges = static function (array $metricConfigByTunnel, arra
       continue;
     }
 
-    foreach ($metricGroup as &$metricConfig) {
+    foreach ($metricGroup as $metricKey => &$metricConfig) {
       if (mb_strtolower((string)($metricConfig['group'] ?? ''), 'UTF-8') !== 'humedades') {
         continue;
       }
 
       $label = (string)($metricConfig['label'] ?? '');
-      if (preg_match('/(?:zona|rec[aá]mara)\s+(\d+)/iu', $label, $matches) !== 1) {
+      $roomNumber = null;
+      if (preg_match('/(?:zona|recamara)_(\d+)/i', (string)$metricKey, $matches) === 1) {
+        $roomNumber = (int)$matches[1];
+      } elseif (preg_match('/(?:zona|rec[aá]mara|rec)\s*(\d+)/iu', $label, $matches) === 1) {
+        $roomNumber = (int)$matches[1];
+      }
+
+      if ($roomNumber === null) {
         continue;
       }
 
-      $roomNumber = (int)$matches[1];
       $range = (array)($roomRanges[$roomNumber] ?? []);
       if ($range === []) {
         continue;
@@ -898,6 +904,8 @@ $buildTopIndicators = static function (array $indicatorConfig, array $config) us
       'statusKey' => $statusKey,
       'statusColor' => $statusColor,
       'rangeLabel' => $buildSemaphoreRangeLabel($rule, $unit, (string)($indicator['leyenda'] ?? '')),
+      'rule' => $rule,
+      'unit' => $unit,
       'timestampLabel' => $indicatorTimestamp !== null ? (string)$indicatorTimestamp : '',
     ];
   }
@@ -910,12 +918,18 @@ $topIndicators = $buildTopIndicators((array)($config['indicadores_superiores'] ?
 $summarizeTunnel = static function (array $tunnel, array $summary, array $rows): array {
   $latestRow = $rows[0] ?? null;
   $fieldRanges = [];
-  foreach ((array)($tunnel['campos'] ?? []) as $fieldConfig) {
-    $fieldRanges[(string)($fieldConfig['key'] ?? '')] = (string)($fieldConfig['rangeLabel'] ?? '');
+  $fieldRules = [];
+  foreach ((array)($tunnel['campos'] ?? []) as $fieldKey => $fieldConfig) {
+    $resolvedFieldKey = (string)($fieldConfig['key'] ?? $fieldKey);
+    $fieldRanges[$resolvedFieldKey] = (string)($fieldConfig['rangeLabel'] ?? '');
+    $fieldRules[$resolvedFieldKey] = (array)($fieldConfig['rule'] ?? $fieldConfig['semaforo'] ?? []);
   }
 
-  $cells = array_map(static function (array $cell) use ($fieldRanges): array {
-    $cell['rangeLabel'] = $fieldRanges[(string)($cell['field'] ?? '')] ?? '';
+  $cells = array_map(static function (array $cell) use ($fieldRanges, $fieldRules): array {
+    $fieldKey = (string)($cell['field'] ?? '');
+    $cell['rangeLabel'] = $fieldRanges[$fieldKey] ?? '';
+    $cell['rule'] = $fieldRules[$fieldKey] ?? [];
+    $cell['unit'] = '°C';
     return $cell;
   }, (array)($latestRow['cells'] ?? []));
   $total = count($cells);
@@ -994,15 +1008,28 @@ $summarizeTunnel = static function (array $tunnel, array $summary, array $rows):
   ];
 };
 
-$ensureTemperatureRooms = static function (array $tunnelSummary, array $rooms): array {
+$extractTemperatureRoomNumber = static function (array $cell): ?int {
+  $field = (string)($cell['field'] ?? '');
+  if (preg_match('/recamara_(\d+)/i', $field, $matches) === 1) {
+    return (int)$matches[1];
+  }
+
+  $label = (string)($cell['label'] ?? '');
+  if (preg_match('/(?:rec[aá]mara|rec)\s*(\d+)/iu', $label, $matches) === 1) {
+    return (int)$matches[1];
+  }
+
+  return null;
+};
+
+$ensureTemperatureRooms = static function (array $tunnelSummary, array $rooms) use ($extractTemperatureRoomNumber): array {
   $cells = (array)($tunnelSummary['cells'] ?? []);
   $present = [];
 
   foreach ($cells as $cell) {
-    $label = (string)($cell['label'] ?? '');
-    if (preg_match('/rec[aá]mara\s+(\d+)/iu', $label, $matches) === 1) {
-      $room = (int)$matches[1];
-      $cell['label'] = 'Recamara ' . $room;
+    $room = $extractTemperatureRoomNumber($cell);
+    if ($room !== null) {
+      $cell['label'] = 'REC ' . $room;
       $present[$room] = true;
     }
     $normalizedCells[] = $cell;
@@ -1017,7 +1044,7 @@ $ensureTemperatureRooms = static function (array $tunnelSummary, array $rooms): 
 
     $cells[] = [
       'field' => 'recamara_' . $room . '_placeholder',
-      'label' => 'Recamara ' . $room,
+      'label' => 'REC ' . $room,
       'formatted' => '-',
       'value' => null,
       'statusLabel' => 'Sin dato',
@@ -1027,9 +1054,9 @@ $ensureTemperatureRooms = static function (array $tunnelSummary, array $rooms): 
     ];
   }
 
-  usort($cells, static function (array $a, array $b): int {
-    $roomA = preg_match('/rec[aá]mara\s+(\d+)/iu', (string)($a['label'] ?? ''), $matchesA) === 1 ? (int)$matchesA[1] : 999;
-    $roomB = preg_match('/rec[aá]mara\s+(\d+)/iu', (string)($b['label'] ?? ''), $matchesB) === 1 ? (int)$matchesB[1] : 999;
+  usort($cells, static function (array $a, array $b) use ($extractTemperatureRoomNumber): int {
+    $roomA = $extractTemperatureRoomNumber($a) ?? 999;
+    $roomB = $extractTemperatureRoomNumber($b) ?? 999;
     return $roomA <=> $roomB;
   });
 

@@ -34,9 +34,10 @@ capture_secador() {
     --disable-breakpad \
     --disable-background-networking \
     --disable-sync \
+    --force-device-scale-factor=2 \
     "--user-data-dir=${chrome_profile}" \
     --hide-scrollbars \
-    --window-size=1120,1600 \
+    --window-size=912,2000 \
     "--screenshot=${output}" \
     "$url" >/dev/null
 

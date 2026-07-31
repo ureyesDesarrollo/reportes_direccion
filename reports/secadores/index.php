@@ -85,8 +85,10 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
     .secadores-exec-tunnel h2 {
       margin: 0;
       font-size: 20px;
-      color: #0f172a;
-      font-weight: 700;
+      color: #475569;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: .05em;
     }
 
     .secadores-exec-tunnel-title-row {
@@ -129,57 +131,77 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
     }
 
     .secadores-exec-top-indicator {
-      flex: 0 0 auto;
-      min-width: 132px;
-      min-height: 52px;
-      padding: 7px 10px;
+      flex: 1 1 300px;
+      min-width: 280px;
+      min-height: 104px;
+      padding: 0;
       border: 1px solid #dbe7f5;
       border-radius: 12px;
       background: #ffffff;
       box-shadow: none;
       display: grid;
-      align-content: center;
-      gap: 2px;
+      grid-template-columns: minmax(95px, .45fr) minmax(0, 1.55fr);
+      gap: 0;
+      overflow: hidden;
+      color: #111827;
     }
 
-    .secadores-exec-top-indicator.ok {
+    .secadores-exec-top-indicator-status {
+      min-width: 0;
+      padding: 8px 6px;
+      background: #0ea5e9;
+      color: #ffffff;
+      border-right: 1px solid rgba(15, 23, 42, .12);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      text-align: center;
+    }
+
+    .secadores-exec-top-indicator-parameters {
+      min-width: 0;
+      padding: 10px 12px;
+      background: #ffffff;
+      color: #111827;
+      display: grid;
+      align-content: center;
+    }
+
+    .secadores-exec-top-indicator.ok .secadores-exec-top-indicator-status {
       color: #ffffff;
       background: #2e8b57;
-      border-color: #257447;
     }
 
-    .secadores-exec-top-indicator.warning {
+    .secadores-exec-top-indicator.warning .secadores-exec-top-indicator-status {
       color: #111827;
       background: #facc15;
-      border-color: #eab308;
     }
 
-    .secadores-exec-top-indicator.gold {
+    .secadores-exec-top-indicator.gold .secadores-exec-top-indicator-status {
       color: #111827;
       background: #d4a017;
-      border-color: #b8860b;
     }
 
-    .secadores-exec-top-indicator.danger {
+    .secadores-exec-top-indicator.danger .secadores-exec-top-indicator-status {
       color: #ffffff;
       background: #c94436;
-      border-color: #a9362c;
     }
 
-    .secadores-exec-top-indicator.neutral {
+    .secadores-exec-top-indicator.neutral .secadores-exec-top-indicator-status {
       color: #ffffff;
       background: #2563eb;
-      border-color: #1d4ed8;
     }
 
-    .secadores-exec-top-indicator.unavailable {
+    .secadores-exec-top-indicator.unavailable .secadores-exec-top-indicator-status {
       color: #ffffff;
       background: #94a3b8;
-      border-color: #64748b;
     }
 
     .secadores-exec-top-indicator-label {
-      font-size: 9px;
+      color: inherit;
+      font-size: 11px;
       font-weight: 900;
       text-transform: uppercase;
       letter-spacing: .04em;
@@ -187,15 +209,18 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
     }
 
     .secadores-exec-top-indicator-value {
-      font-size: 18px;
+      color: inherit;
+      font-size: 21px;
       font-weight: 900;
       line-height: 1;
     }
 
-    .secadores-exec-top-indicator-range {
-      font-size: 9px;
-      font-weight: 800;
-      opacity: .85;
+    .secadores-exec-tunnel-title-row {
+      flex-wrap: wrap;
+    }
+
+    .secadores-exec-tunnel-title-row h2 {
+      flex: 1 0 100%;
     }
 
     .secadores-exec-inline-group {
@@ -211,9 +236,18 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
       color: #475569;
     }
 
+    .secadores-exec-votator-section {
+      display: grid;
+      gap: 5px;
+    }
+
+    .secadores-exec-votator-section .secadores-exec-votators {
+      margin-top: 0;
+    }
+
     .secadores-exec-inline-group-items {
       display: grid;
-      grid-template-columns: repeat(var(--metric-cols, 3), minmax(0, 1fr));
+      grid-template-columns: repeat(var(--metric-cols, 2), minmax(0, 1fr));
       grid-auto-rows: minmax(82px, 1fr);
       gap: 4px;
     }
@@ -225,7 +259,7 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
     .secadores-exec-inline-group-items.is-agua-y-vapor,
     .secadores-exec-inline-group-items.is-humedades,
     .secadores-exec-inline-group-items.is-verificacion-de-secado {
-      --metric-cols: 4;
+      --metric-cols: 2;
     }
 
     .secadores-exec-inline-metric {
@@ -547,7 +581,7 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
 
     .secadores-exec-zones {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 4px;
     }
 
@@ -570,7 +604,7 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
       border-radius: 12px;
       border: 1px solid rgba(226, 232, 240, 0.4);
       transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+      box-shadow: none;
     }
 
     .secadores-exec-zone.is-placeholder {
@@ -581,7 +615,7 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
 
     .secadores-exec-zone:hover {
       transform: translateY(-2px);
-      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.10);
+      box-shadow: none;
     }
 
     /* Estados por color plano */
@@ -589,11 +623,11 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
     .secadores-exec-zone[data-status="ok"] {
       background: #2e8b57;
       border-color: #257447;
-      box-shadow: 0 4px 10px rgba(46, 139, 87, 0.18);
+      box-shadow: none;
     }
 
     .secadores-exec-zone[data-status="ok"]:hover {
-      box-shadow: 0 8px 24px rgba(46, 139, 87, 0.24);
+      box-shadow: none;
       border-color: #257447;
     }
 
@@ -601,22 +635,22 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
     .secadores-exec-zone[data-status="warning"] {
       background: #facc15;
       border-color: #eab308;
-      box-shadow: 0 4px 12px rgba(250, 204, 21, 0.24);
+      box-shadow: none;
     }
 
     .secadores-exec-zone[data-status="warning"]:hover {
-      box-shadow: 0 10px 24px rgba(250, 204, 21, 0.28);
+      box-shadow: none;
       border-color: #eab308;
     }
 
     .secadores-exec-zone[data-status="danger"] {
       background: #c94436;
       border-color: #a9362c;
-      box-shadow: 0 4px 10px rgba(201, 68, 54, 0.20);
+      box-shadow: none;
     }
 
     .secadores-exec-zone[data-status="danger"]:hover {
-      box-shadow: 0 8px 24px rgba(201, 68, 54, 0.26);
+      box-shadow: none;
       border-color: #a9362c;
     }
 
@@ -727,18 +761,12 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
     .secadores-exec-votator-title {
       display: inline-flex;
       align-items: center;
-      gap: 8px;
       min-width: 0;
-      color: #0f172a;
-      font-size: 13px;
+      color: #475569;
+      font-size: 20px;
       font-weight: 800;
       text-transform: uppercase;
-      letter-spacing: .04em;
-    }
-
-    .secadores-exec-votator-title i {
-      color: #2563eb;
-      font-size: 15px;
+      letter-spacing: .05em;
     }
 
     .secadores-exec-votator-badge {
@@ -756,70 +784,133 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
 
     .secadores-exec-votator-fields {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: 1fr;
       gap: 6px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
     }
 
     .secadores-exec-votator-field {
-      min-height: 94px;
-      padding: 8px 8px;
+      min-height: 112px;
+      padding: 0;
       border-radius: 12px;
-      background: #0ea5e9;
-      border: 1px solid #0284c7;
+      background: #ffffff;
+      border: 1px solid #d9e0ea;
       display: grid;
-      gap: 4px;
-      align-content: center;
-      color: #ffffff;
-    }
-
-    .secadores-exec-votator-field.status-verde {
-      background: #2e8b57;
-      color: white;
-      border-color: #257447;
-    }
-
-    .secadores-exec-votator-field.status-amarillo {
-      background: #facc15;
+      grid-template-columns: minmax(100px, .5fr) minmax(0, 1.5fr);
+      gap: 0;
+      overflow: hidden;
       color: #111827;
-      border-color: #eab308;
     }
 
-    .secadores-exec-votator-field.status-rojo {
-      background: #c94436;
-      color: white;
-      border-color: #a9362c;
+    .secadores-exec-votator-field-status {
+      min-width: 0;
+      padding: 10px 8px;
+      background: #0ea5e9;
+      color: #ffffff;
+      border-right: 1px solid rgba(15, 23, 42, .12);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      text-align: center;
     }
 
-    .secadores-exec-votator-field.status-azul {
+    .secadores-exec-votator-field-parameters {
+      min-width: 0;
+      padding: 12px 14px;
       background: #ffffff;
       color: #111827;
-      border-color: #d9e0ea;
+      display: grid;
+      align-content: center;
     }
 
-    .secadores-exec-votator-field.status-gris {
+    .secadores-exec-votator-range-list {
+      display: grid;
+      gap: 6px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .secadores-exec-votator-range-item {
+      display: grid;
+      grid-template-columns: 9px minmax(105px, auto) minmax(0, 1fr);
+      align-items: center;
+      gap: 7px;
+      color: #111827;
+      font-size: 12px;
+      font-weight: 800;
+      line-height: 1.2;
+    }
+
+    .secadores-exec-votator-range-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
       background: #94a3b8;
-      color: #ffffff;
-      border-color: #64748b;
     }
 
-    .secadores-exec-votator-field.status-verde .secadores-exec-votator-field-label,
-    .secadores-exec-votator-field.status-verde .secadores-exec-votator-field-label i,
-    .secadores-exec-votator-field.status-verde .secadores-exec-votator-field-value,
-    .secadores-exec-votator-field.status-verde .secadores-exec-votator-field-value small,
-    .secadores-exec-votator-field.status-verde .secadores-exec-votator-field-range,
-    .secadores-exec-votator-field.status-rojo .secadores-exec-votator-field-label,
-    .secadores-exec-votator-field.status-rojo .secadores-exec-votator-field-label i,
-    .secadores-exec-votator-field.status-rojo .secadores-exec-votator-field-value,
-    .secadores-exec-votator-field.status-rojo .secadores-exec-votator-field-value small,
-    .secadores-exec-votator-field.status-rojo .secadores-exec-votator-field-range {
+    .secadores-exec-votator-range-dot.rojo {
+      background: #c94436;
+    }
+
+    .secadores-exec-votator-range-dot.amarillo {
+      background: #facc15;
+    }
+
+    .secadores-exec-votator-range-dot.verde {
+      background: #2e8b57;
+    }
+
+    .secadores-exec-votator-range-name {
+      text-transform: uppercase;
+      letter-spacing: .02em;
+    }
+
+    .secadores-exec-votator-range-value {
+      color: #111827;
+      text-align: right;
+      font-weight: 800;
+      overflow-wrap: anywhere;
+    }
+
+    .secadores-exec-votator-field.status-verde .secadores-exec-votator-field-status {
+      background: #2e8b57;
       color: white;
     }
 
-    .secadores-exec-votator-field.status-amarillo .secadores-exec-votator-field-label,
-    .secadores-exec-votator-field.status-amarillo .secadores-exec-votator-field-label i,
+    .secadores-exec-votator-field.status-amarillo .secadores-exec-votator-field-status {
+      background: #facc15;
+      color: #111827;
+    }
+
+    .secadores-exec-votator-field.status-rojo .secadores-exec-votator-field-status {
+      background: #c94436;
+      color: white;
+    }
+
+    .secadores-exec-votator-field.status-azul .secadores-exec-votator-field-status {
+      background: #ffffff;
+      color: #111827;
+    }
+
+    .secadores-exec-votator-field.status-gris .secadores-exec-votator-field-status {
+      background: #94a3b8;
+      color: #ffffff;
+    }
+
+    .secadores-exec-votator-field.status-verde .secadores-exec-votator-field-value,
+    .secadores-exec-votator-field.status-verde .secadores-exec-votator-field-value small,
+    .secadores-exec-votator-field.status-rojo .secadores-exec-votator-field-value,
+    .secadores-exec-votator-field.status-rojo .secadores-exec-votator-field-value small {
+      color: white;
+    }
+
     .secadores-exec-votator-field.status-amarillo .secadores-exec-votator-field-value,
-    .secadores-exec-votator-field.status-amarillo .secadores-exec-votator-field-value small,
-    .secadores-exec-votator-field.status-amarillo .secadores-exec-votator-field-range {
+    .secadores-exec-votator-field.status-amarillo .secadores-exec-votator-field-value small {
       color: #111827;
     }
 
@@ -828,18 +919,18 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
       align-items: center;
       gap: 6px;
       color: inherit;
-      font-size: 9px;
+      font-size: 11px;
       font-weight: 800;
       text-transform: uppercase;
       letter-spacing: .04em;
       line-height: 1.2;
-      min-height: 22px;
+      min-height: auto;
       opacity: .86;
     }
 
     .secadores-exec-votator-field-label i {
       color: inherit;
-      font-size: 12px;
+      font-size: 14px;
     }
 
     .secadores-exec-votator-field-range {
@@ -849,7 +940,7 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
       font-size: 9px;
       font-weight: 800;
       line-height: 1.3;
-      min-height: 34px;
+      min-height: auto;
       opacity: .9;
       overflow: hidden;
       overflow-wrap: anywhere;
@@ -857,17 +948,182 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
 
     .secadores-exec-votator-field-value {
       color: inherit;
-      font-size: 17px;
+      font-size: 22px;
       font-weight: 800;
       line-height: 1;
       white-space: nowrap;
     }
 
     .secadores-exec-votator-field-value small {
-      margin-left: 4px;
-      color: #64748b;
-      font-size: 12px;
+      display: block;
+      margin: 5px 0 0;
+      color: inherit;
+      font-size: 14px;
       font-weight: 700;
+    }
+
+    /* Formato común para todas las tarjetas de métricas */
+    .secadores-exec-inline-metric,
+    .secadores-exec-zone {
+      display: grid;
+      grid-template-columns: minmax(100px, .5fr) minmax(0, 1.5fr);
+      align-items: stretch;
+      gap: 0;
+      min-height: 112px;
+      padding: 0;
+      overflow: hidden;
+      background: #ffffff;
+      color: #111827;
+      border: 1px solid #d9e0ea;
+    }
+
+    .secadores-exec-inline-metric {
+      box-shadow: 0 1px 3px rgba(15, 23, 42, .08);
+    }
+
+    .secadores-exec-zone {
+      box-shadow: none;
+    }
+
+    .secadores-exec-inline-metric-body,
+    .secadores-exec-zone-status {
+      min-width: 0;
+      width: auto;
+      padding: 10px 8px;
+      background: #0ea5e9;
+      color: #ffffff;
+      border-right: 1px solid rgba(15, 23, 42, .12);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      text-align: center;
+    }
+
+    .secadores-exec-inline-metric-parameters,
+    .secadores-exec-zone-parameters {
+      min-width: 0;
+      padding: 12px 14px;
+      background: #ffffff;
+      color: #111827;
+      display: grid;
+      align-content: center;
+      gap: 5px;
+    }
+
+    .secadores-exec-inline-metric.ok,
+    .secadores-exec-inline-metric.warning,
+    .secadores-exec-inline-metric.danger,
+    .secadores-exec-inline-metric.neutral,
+    .secadores-exec-inline-metric.unavailable,
+    .secadores-exec-zone[data-status="ok"],
+    .secadores-exec-zone[data-status="warning"],
+    .secadores-exec-zone[data-status="danger"],
+    .secadores-exec-zone[data-status="unknown"] {
+      background: #ffffff;
+      color: #111827;
+      border-color: #d9e0ea;
+    }
+
+    .secadores-exec-inline-metric.ok .secadores-exec-inline-metric-body,
+    .secadores-exec-zone[data-status="ok"] .secadores-exec-zone-status {
+      background: #2e8b57;
+      color: #ffffff;
+    }
+
+    .secadores-exec-inline-metric.warning .secadores-exec-inline-metric-body,
+    .secadores-exec-zone[data-status="warning"] .secadores-exec-zone-status {
+      background: #facc15;
+      color: #111827;
+    }
+
+    .secadores-exec-inline-metric.danger .secadores-exec-inline-metric-body,
+    .secadores-exec-zone[data-status="danger"] .secadores-exec-zone-status {
+      background: #c94436;
+      color: #ffffff;
+    }
+
+    .secadores-exec-inline-metric.unavailable .secadores-exec-inline-metric-body,
+    .secadores-exec-zone[data-status="unknown"] .secadores-exec-zone-status {
+      background: #94a3b8;
+      color: #ffffff;
+    }
+
+    .secadores-exec-inline-metric.neutral .secadores-exec-inline-metric-body {
+      background: #ffffff;
+      color: #111827;
+    }
+
+    .secadores-exec-inline-metric-label,
+    .secadores-exec-zone-label {
+      min-height: auto;
+      padding: 0;
+      color: inherit;
+      font-size: 11px;
+      justify-content: center;
+      text-align: center;
+    }
+
+    .secadores-exec-inline-metric-label {
+      flex-wrap: wrap;
+    }
+
+    .secadores-exec-inline-metric-value,
+    .secadores-exec-zone-value {
+      margin: 0;
+      padding: 0;
+      color: inherit;
+      font-size: 22px;
+      text-align: center;
+    }
+
+    .secadores-exec-inline-metric-value small {
+      display: block;
+      margin: 5px 0 0;
+      color: inherit;
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .secadores-exec-inline-metric[data-metric-key="caudal_aire"] .secadores-exec-inline-metric-value {
+      font-size: 19px;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -.02em;
+    }
+
+    .secadores-exec-zone-value small {
+      display: block;
+      margin: 5px 0 0;
+      color: inherit;
+      font-size: 14px;
+    }
+
+    /* Nombres de parámetros: alto contraste en todas las cards */
+    .secadores-exec-top-indicator-label,
+    .secadores-exec-inline-metric-label,
+    .secadores-exec-zone-label,
+    .secadores-exec-votator-field-label {
+      color: inherit;
+      font-size: 14px;
+      font-weight: 900;
+      line-height: 1.1;
+      letter-spacing: .02em;
+      opacity: 1;
+    }
+
+    .secadores-exec-inline-metric-date {
+      color: #475569;
+      font-size: 9px;
+      text-align: right;
+    }
+
+    .secadores-exec-votator-range-dot.dorado {
+      background: #d4a017;
+    }
+
+    .secadores-exec-votator-range-dot.azul {
+      background: #2563eb;
     }
 
     /* ============================================
@@ -1081,8 +1337,8 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
     }
 
     body.capture-mode .dashboard {
-      width: min(1120px, calc(100vw - 24px));
-      padding: 12px 0;
+      width: min(900px, calc(100vw - 12px));
+      padding: 4px 0;
     }
 
     body.capture-mode .header-left > div:first-child,
@@ -1092,23 +1348,213 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
     }
 
     body.capture-mode .header {
-      margin-bottom: 8px;
+      margin-bottom: 2px;
     }
 
     body.capture-mode .header h1 {
       margin: 0;
-      font-size: 24px;
+      font-size: 20px;
+      line-height: 1.05;
     }
 
     body.capture-mode .secadores-exec-grid {
       grid-template-columns: 1fr;
       gap: 0;
-      margin-top: 8px;
+      margin-top: 2px;
     }
 
     body.capture-mode .secadores-exec-tunnel {
       box-shadow: none;
       transform: none !important;
+      gap: 3px;
+      padding: 5px;
+    }
+
+    body.capture-mode .secadores-exec-tunnel-head {
+      gap: 3px;
+      padding: 5px;
+    }
+
+    body.capture-mode .secadores-exec-tunnel-title {
+      gap: 2px;
+    }
+
+    body.capture-mode .secadores-exec-tunnel-title-row {
+      gap: 2px;
+    }
+
+    body.capture-mode .secadores-exec-top-indicator {
+      grid-template-columns: minmax(120px, .65fr) minmax(0, 1.35fr);
+      min-height: 100px;
+    }
+
+    body.capture-mode .secadores-exec-top-indicator-status,
+    body.capture-mode .secadores-exec-votator-field-status,
+    body.capture-mode .secadores-exec-inline-metric-body,
+    body.capture-mode .secadores-exec-zone-status {
+      display: grid;
+      grid-template-rows: auto minmax(36px, 1fr);
+      align-items: stretch;
+      justify-content: stretch;
+      padding: 0;
+      gap: 0;
+    }
+
+    body.capture-mode .secadores-exec-top-indicator-parameters {
+      padding: 4px 6px;
+    }
+
+    body.capture-mode .secadores-exec-inline-metrics,
+    body.capture-mode .secadores-exec-tunnel-body {
+      gap: 2px;
+      margin-top: 0;
+    }
+
+    body.capture-mode .secadores-exec-inline-group,
+    body.capture-mode .secadores-exec-votator-section {
+      gap: 1px;
+    }
+
+    body.capture-mode .secadores-exec-inline-group-items,
+    body.capture-mode .secadores-exec-zones {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-auto-rows: auto;
+      gap: 2px;
+    }
+
+    body.capture-mode .secadores-exec-votators {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 3px;
+      margin-top: 0;
+    }
+
+    body.capture-mode .secadores-exec-votator {
+      gap: 2px;
+      padding: 4px;
+    }
+
+    body.capture-mode .secadores-exec-votator-fields {
+      gap: 2px;
+    }
+
+    body.capture-mode .secadores-exec-inline-metric,
+    body.capture-mode .secadores-exec-zone,
+    body.capture-mode .secadores-exec-votator-field {
+      grid-template-columns: minmax(120px, .65fr) minmax(0, 1.35fr);
+      min-height: 100px;
+    }
+
+    body.capture-mode .secadores-exec-inline-metric.is-placeholder,
+    body.capture-mode .secadores-exec-zone.is-placeholder {
+      display: none !important;
+    }
+
+    body.capture-mode .secadores-exec-votator-field-parameters,
+    body.capture-mode .secadores-exec-inline-metric-parameters,
+    body.capture-mode .secadores-exec-zone-parameters {
+      padding: 4px 6px;
+    }
+
+    body.capture-mode .secadores-exec-votator-range-list {
+      gap: 1px;
+    }
+
+    body.capture-mode .secadores-exec-votator-range-item {
+      grid-template-columns: 7px minmax(48px, auto) minmax(0, 1fr);
+      gap: 3px;
+      font-size: 9px;
+    }
+
+    body.capture-mode .secadores-exec-votator-range-name {
+      display: block;
+      font-size: 0;
+      line-height: 1;
+    }
+
+    body.capture-mode .secadores-exec-votator-range-item:has(.secadores-exec-votator-range-dot.rojo)
+      .secadores-exec-votator-range-name::after {
+      content: "Rojo";
+      font-size: 8px;
+    }
+
+    body.capture-mode .secadores-exec-votator-range-item:has(.secadores-exec-votator-range-dot.amarillo)
+      .secadores-exec-votator-range-name::after {
+      content: "Amarillo";
+      font-size: 8px;
+    }
+
+    body.capture-mode .secadores-exec-votator-range-item:has(.secadores-exec-votator-range-dot.verde)
+      .secadores-exec-votator-range-name::after {
+      content: "Verde";
+      font-size: 8px;
+    }
+
+    body.capture-mode .secadores-exec-votator-range-item:has(.secadores-exec-votator-range-dot.dorado)
+      .secadores-exec-votator-range-name::after {
+      content: "Dorado";
+      font-size: 8px;
+    }
+
+    body.capture-mode .secadores-exec-votator-range-item:has(.secadores-exec-votator-range-dot.azul)
+      .secadores-exec-votator-range-name::after {
+      content: "Azul";
+      font-size: 8px;
+    }
+
+    body.capture-mode .secadores-exec-votator-range-value {
+      text-align: left;
+    }
+
+    body.capture-mode .secadores-exec-votator-range-item:has(.secadores-exec-votator-range-dot.verde)
+      .secadores-exec-votator-range-value::after {
+      content: " (Objetivo)";
+      font-weight: 900;
+    }
+
+    body.capture-mode .secadores-exec-votator-range-dot {
+      width: 7px;
+      height: 7px;
+    }
+
+    body.capture-mode .secadores-exec-top-indicator-label,
+    body.capture-mode .secadores-exec-inline-metric-label,
+    body.capture-mode .secadores-exec-zone-label,
+    body.capture-mode .secadores-exec-votator-field-label {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 0;
+      padding: 3px;
+      border-bottom: 1px solid rgba(255, 255, 255, .35);
+      color: inherit;
+      font-size: 17px;
+      font-weight: 900;
+      line-height: 1.05;
+      opacity: 1;
+      text-align: center;
+    }
+
+    body.capture-mode .secadores-exec-top-indicator-value,
+    body.capture-mode .secadores-exec-inline-metric-value,
+    body.capture-mode .secadores-exec-zone-value,
+    body.capture-mode .secadores-exec-votator-field-value {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      margin: 0;
+      padding: 3px;
+      font-size: 24px;
+      text-align: center;
+    }
+
+    body.capture-mode .secadores-exec-inline-group-title,
+    body.capture-mode .secadores-exec-zone-section-title,
+    body.capture-mode .secadores-exec-votator-title,
+    body.capture-mode .secadores-exec-tunnel h2 {
+      margin-bottom: 1px;
+      font-size: 13px;
+      line-height: 1.05;
     }
 
     /* ============================================
@@ -1316,18 +1762,18 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
 
       .secadores-exec-inline-group-items,
       .secadores-exec-zones {
-        grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
-        grid-auto-rows: 62px !important;
-        gap: 3px !important;
+        grid-template-columns: 1fr !important;
+        grid-auto-rows: auto !important;
+        gap: 6px !important;
       }
 
       .secadores-exec-inline-group-items.is-banda {
-        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        grid-template-columns: 1fr !important;
       }
 
       .secadores-exec-votators {
-        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-        gap: 3px !important;
+        grid-template-columns: 1fr !important;
+        gap: 6px !important;
         margin-top: 2px !important;
       }
 
@@ -1357,6 +1803,54 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
         padding: 4px 5px !important;
         border-radius: 6px !important;
         gap: 2px !important;
+      }
+
+      .secadores-exec-votator-field {
+        grid-template-columns: minmax(82px, .45fr) minmax(0, 1.55fr) !important;
+        min-height: 104px !important;
+        padding: 0 !important;
+        gap: 0 !important;
+      }
+
+      .secadores-exec-inline-metric,
+      .secadores-exec-zone {
+        grid-template-columns: minmax(82px, .45fr) minmax(0, 1.55fr) !important;
+        min-height: 104px !important;
+        padding: 0 !important;
+        gap: 0 !important;
+      }
+
+      .secadores-exec-votator-field-status,
+      .secadores-exec-inline-metric-body,
+      .secadores-exec-zone-status {
+        padding: 5px 3px !important;
+        gap: 3px !important;
+      }
+
+      .secadores-exec-votator-field-parameters,
+      .secadores-exec-inline-metric-parameters,
+      .secadores-exec-zone-parameters {
+        padding: 8px 10px !important;
+      }
+
+      .secadores-exec-votator-range-list {
+        gap: 4px !important;
+      }
+
+      .secadores-exec-votator-range-item {
+        grid-template-columns: 7px minmax(92px, auto) minmax(0, 1fr) !important;
+        gap: 6px !important;
+        font-size: 10px !important;
+      }
+
+      .secadores-exec-votator-range-dot {
+        width: 7px !important;
+        height: 7px !important;
+      }
+
+      .secadores-exec-votator-range-value {
+        grid-column: auto;
+        text-align: right;
       }
 
       .secadores-exec-inline-metric {
@@ -1389,6 +1883,28 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
         font-size: 7px !important;
       }
 
+      .secadores-exec-votator-field-label i {
+        font-size: 10px !important;
+      }
+
+      .secadores-exec-votator-field-label,
+      .secadores-exec-inline-metric-label,
+      .secadores-exec-zone-label {
+        font-size: 10px !important;
+      }
+
+      .secadores-exec-votator-field-value,
+      .secadores-exec-inline-metric-value,
+      .secadores-exec-zone-value {
+        font-size: 18px !important;
+      }
+
+      .secadores-exec-votator-field-value small,
+      .secadores-exec-inline-metric-value small,
+      .secadores-exec-zone-value small {
+        font-size: 9px !important;
+      }
+
       .secadores-exec-inline-metric-range,
       .secadores-exec-zone-range,
       .secadores-exec-votator-field-range {
@@ -1416,6 +1932,205 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
         transform: none !important;
       }
     }
+
+    /* Impresión ejecutiva: conserva tarjetas completas y evita compresión */
+    @media print {
+      @page {
+        size: letter landscape;
+        margin: 6mm;
+      }
+
+      html,
+      body {
+        width: auto !important;
+        min-height: auto !important;
+        overflow: visible !important;
+      }
+
+      body {
+        margin: 0 !important;
+        font-size: 8px !important;
+      }
+
+      .dashboard {
+        width: 135.14% !important;
+        max-width: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        zoom: .74;
+        transform: none !important;
+      }
+
+      .header {
+        margin-bottom: 4px !important;
+      }
+
+      .header h1 {
+        font-size: 17px !important;
+      }
+
+      .secadores-exec-grid {
+        display: block !important;
+      }
+
+      .secadores-exec-tunnel {
+        display: block !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid-page !important;
+        page-break-after: always !important;
+        break-after: page !important;
+        padding: 6px !important;
+      }
+
+      .secadores-exec-tunnel:last-child {
+        page-break-after: auto !important;
+        break-after: auto !important;
+      }
+
+      .secadores-exec-tunnel-head,
+      .secadores-exec-tunnel-title,
+      .secadores-exec-tunnel-body {
+        display: block !important;
+        page-break-inside: auto !important;
+        break-inside: auto !important;
+      }
+
+      .secadores-exec-tunnel-title-row,
+      .secadores-exec-tunnel-sub {
+        margin-bottom: 4px !important;
+      }
+
+      .secadores-exec-top-indicator {
+        min-width: 0 !important;
+        min-height: 64px !important;
+        padding: 0 !important;
+        grid-template-columns: minmax(60px, .4fr) minmax(0, 1.6fr) !important;
+      }
+
+      .secadores-exec-top-indicator-status {
+        padding: 3px 2px !important;
+        gap: 2px !important;
+      }
+
+      .secadores-exec-top-indicator-parameters {
+        padding: 3px 4px !important;
+      }
+
+      .secadores-exec-top-indicator-label {
+        font-size: 9px !important;
+      }
+
+      .secadores-exec-top-indicator-value {
+        font-size: 17px !important;
+      }
+
+      .secadores-exec-inline-metrics,
+      .secadores-exec-inline-group,
+      .secadores-exec-tunnel-body {
+        margin-top: 5px !important;
+      }
+
+      .secadores-exec-inline-group-title,
+      .secadores-exec-zone-section-title,
+      .secadores-exec-votator-title,
+      .secadores-exec-tunnel h2 {
+        break-after: avoid !important;
+        page-break-after: avoid !important;
+        font-size: 10px !important;
+      }
+
+      .secadores-exec-inline-group-items,
+      .secadores-exec-inline-group-items.is-banda,
+      .secadores-exec-zones {
+        grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+        grid-auto-rows: auto !important;
+        gap: 3px !important;
+      }
+
+      .secadores-exec-votators {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        gap: 4px !important;
+      }
+
+      .secadores-exec-votator-fields {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        gap: 3px !important;
+      }
+
+      .secadores-exec-inline-metric.is-placeholder,
+      .secadores-exec-zone.is-placeholder {
+        display: none !important;
+      }
+
+      .secadores-exec-inline-metric,
+      .secadores-exec-zone,
+      .secadores-exec-votator,
+      .secadores-exec-votator-field {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+      }
+
+      .secadores-exec-inline-metric,
+      .secadores-exec-zone,
+      .secadores-exec-votator-field {
+        grid-template-columns: minmax(60px, .4fr) minmax(0, 1.6fr) !important;
+        min-height: 68px !important;
+        padding: 0 !important;
+        gap: 0 !important;
+      }
+
+      .secadores-exec-votator-field-status,
+      .secadores-exec-inline-metric-body,
+      .secadores-exec-zone-status {
+        padding: 3px 2px !important;
+        gap: 2px !important;
+      }
+
+      .secadores-exec-votator-field-parameters,
+      .secadores-exec-inline-metric-parameters,
+      .secadores-exec-zone-parameters {
+        padding: 3px 4px !important;
+      }
+
+      .secadores-exec-votator-range-list {
+        gap: 1px !important;
+      }
+
+      .secadores-exec-votator-range-item {
+        grid-template-columns: 5px minmax(66px, auto) minmax(0, 1fr) !important;
+        gap: 3px !important;
+        font-size: 8px !important;
+        line-height: 1.05 !important;
+      }
+
+      .secadores-exec-votator-range-dot {
+        width: 5px !important;
+        height: 5px !important;
+      }
+
+      .secadores-exec-votator-range-value {
+        text-align: right !important;
+      }
+
+      .secadores-exec-inline-metric-label,
+      .secadores-exec-zone-label,
+      .secadores-exec-votator-field-label {
+        font-size: 9px !important;
+      }
+
+      .secadores-exec-inline-metric-value,
+      .secadores-exec-zone-value,
+      .secadores-exec-votator-field-value {
+        font-size: 17px !important;
+      }
+
+      .secadores-exec-inline-metric-value small,
+      .secadores-exec-zone-value small,
+      .secadores-exec-votator-field-value small {
+        margin-top: 3px !important;
+        font-size: 7px !important;
+      }
+    }
   </style>
 </head>
 
@@ -1437,17 +2152,14 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
         </div>
 
         <h1>
-          <i class="fas fa-fan" style="margin-right: 12px;"></i>
           <?= htmlspecialchars($titulo) ?>
         </h1>
 
         <div class="sub">
           <span>
-            <i class="fas fa-temperature-three-quarters"></i>
             Vista rápida para dirección
           </span>
           <span>
-            <i class="fas fa-clock"></i>
             Refresco: <?= n(((float)(($meta['intervaloActualizacion'] ?? 600000) / 1000)) / 60, 0) ?> min
           </span>
           <span id="secadoresExecRefreshBadge" class="badge">
@@ -1623,12 +2335,25 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
             ? `${escapeHtml(item.formatted || '-')} ${escapeHtml(item.unit || '')}`.trim()
             : '-';
           const statusClass = statusClassFromKey(String(item.statusKey || 'gris'), hasData);
+          const rangeRows = buildMetricRangeRows(item);
 
           return `
             <article class="secadores-exec-top-indicator ${statusClass}">
-              <div class="secadores-exec-top-indicator-label">${escapeHtml(item.label || 'Indicador')}</div>
-              <div class="secadores-exec-top-indicator-value">${value}</div>
-              <div class="secadores-exec-top-indicator-range">${escapeHtml(item.rangeLabel || '')}</div>
+              <div class="secadores-exec-top-indicator-status">
+                <div class="secadores-exec-top-indicator-label">${escapeHtml(item.label || 'Indicador')}</div>
+                <div class="secadores-exec-top-indicator-value">${value}</div>
+              </div>
+              <div class="secadores-exec-top-indicator-parameters">
+                <ul class="secadores-exec-votator-range-list" aria-label="Rangos de ${escapeHtml(item.label || 'Indicador')}">
+                  ${rangeRows.map((row) => `
+                    <li class="secadores-exec-votator-range-item">
+                      <span class="secadores-exec-votator-range-dot ${escapeHtml(row.status)}" aria-hidden="true"></span>
+                      <span class="secadores-exec-votator-range-name">${escapeHtml(row.label)}</span>
+                      <span class="secadores-exec-votator-range-value">${escapeHtml(row.range)}</span>
+                    </li>
+                  `).join('')}
+                </ul>
+              </div>
             </article>
           `;
         }).join('');
@@ -1637,8 +2362,13 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
       const renderInlineMetric = (groupName, metricKey, metric, tunnelKey) => {
         const formattedValue = String(metric.formatted || '').trim();
         const hasFormattedValue = formattedValue !== '' && formattedValue !== '-' && formattedValue.toLowerCase() !== 'sin dato';
+        const numericValue = Number(metric.value);
+        const displayValue = metricKey === 'caudal_aire' && Number.isFinite(numericValue)
+          ? numericValue.toLocaleString('es-MX', { maximumFractionDigits: 0 })
+          : formattedValue;
+        const metricUnit = String(metric.unit || '').trim();
         const renderedValue = hasFormattedValue
-          ? `${escapeHtml(formattedValue)} ${escapeHtml(metric.unit || '')}`.trim()
+          ? `<span>${escapeHtml(displayValue)}</span>${metricUnit ? `<small>${escapeHtml(metricUnit)}</small>` : ''}`
           : escapeHtml(metric.emptyLabel || 'Sin dato');
         const plainValue = String(formattedValue || renderedValue || '').trim();
         const hasData = plainValue !== '' && plainValue !== '-' && plainValue.toLowerCase() !== 'sin dato';
@@ -1658,21 +2388,26 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
         const timestampLabel = String(metric.timestampLabel || '').trim();
         const rangeClass = rangeLabel ? '' : ' is-empty';
         const rangeAttrs = rangeLabel ? '' : ' aria-hidden="true"';
-        const metricIcon =
-          groupName === 'Agua y vapor' ? 'fa-fire-flame-curved' :
-          groupName === 'Humedades' ? 'fa-droplet' :
-          'fa-gauge-high';
-
+        const rangeRows = buildMetricRangeRows(metric);
         return `
           <div class="secadores-exec-inline-metric${statusClass}${isClickable ? ' clickable' : ''}" data-tunnel-key="${escapeHtml(tunnelKey)}" data-metric-key="${escapeHtml(metricKey)}">
-            <i class="fas ${metricIcon}"></i>
-              <div class="secadores-exec-inline-metric-body">
+            <div class="secadores-exec-inline-metric-body">
               <div class="secadores-exec-inline-metric-label">
                 <span>${escapeHtml(metric.label || 'Métrica')}</span>
-                ${timestampLabel ? `<span class="secadores-exec-inline-metric-date">${escapeHtml(timestampLabel)}</span>` : ''}
               </div>
               <div class="secadores-exec-inline-metric-value">${renderedValue}</div>
-              <div class="secadores-exec-inline-metric-range${rangeClass}"${rangeAttrs}>${escapeHtml(rangeLabel || 'Rango pendiente de definir')}</div>
+            </div>
+            <div class="secadores-exec-inline-metric-parameters">
+              ${timestampLabel ? `<div class="secadores-exec-inline-metric-date">${escapeHtml(timestampLabel)}</div>` : ''}
+              <ul class="secadores-exec-votator-range-list${rangeClass}"${rangeAttrs} aria-label="Rangos de ${escapeHtml(metric.label || 'Métrica')}">
+                ${rangeRows.map((row) => `
+                  <li class="secadores-exec-votator-range-item">
+                    <span class="secadores-exec-votator-range-dot ${escapeHtml(row.status)}" aria-hidden="true"></span>
+                    <span class="secadores-exec-votator-range-name">${escapeHtml(row.label)}</span>
+                    <span class="secadores-exec-votator-range-value">${escapeHtml(row.range)}</span>
+                  </li>
+                `).join('')}
+              </ul>
             </div>
           </div>
         `;
@@ -1695,7 +2430,7 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
           'humedades': 9,
           'verificacion-de-secado': 8,
         };
-        const columns = normalized === 'banda' ? 2 : ['humedades', 'verificacion-de-secado'].includes(normalized) ? 4 : 3;
+        const columns = 2;
         const minimum = minimums[normalized] || columns;
         return Math.max(minimum, Math.ceil(total / columns) * columns);
       };
@@ -1757,11 +2492,14 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
           <div class="secadores-exec-inline-metrics">
             ${Object.entries(grouped).map(([groupName, groupMetrics]) => {
               const groupClass = metricGroupClass(groupName);
+              const displayGroupName = groupName === 'Verificación de secado'
+                ? 'Verificación secado'
+                : groupName;
               const targetSlots = metricGroupSlots(groupName, groupMetrics.length);
               const placeholders = renderMetricPlaceholders(targetSlots - groupMetrics.length);
               return `
                 <div class="secadores-exec-inline-group">
-                  <div class="secadores-exec-inline-group-title">${escapeHtml(groupName)}</div>
+	                  <div class="secadores-exec-inline-group-title">${escapeHtml(displayGroupName)}</div>
 	                  <div class="secadores-exec-inline-group-items is-${escapeHtml(groupClass)}">
 	                    ${groupMetrics.map(([metricKey, metric]) => renderInlineMetric(groupName, metricKey, metric, tunnelKey)).join('')}
                       ${placeholders}
@@ -1884,20 +2622,133 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
 
       const renderZone = (cell, tunnelKey) => {
         const statusAttr = getStatusAttribute(cell.statusLabel);
+        const cellLabel = String(cell.label || 'REC')
+          .replace(/^rec[aá]mara\s*/i, 'REC ')
+          .trim();
         const rangeLabel = String(cell.rangeLabel || '').trim();
         const rangeClass = rangeLabel ? '' : ' is-empty';
         const rangeAttrs = rangeLabel ? '' : ' aria-hidden="true"';
+        const rangeRows = buildMetricRangeRows(cell);
 
         return `
     <article class="secadores-exec-zone unavailable" data-status="${statusAttr}" data-open-temperature="1" data-tunnel-key="${escapeHtml(tunnelKey)}">
-      <div class="secadores-exec-zone-label">${escapeHtml(cell.label || 'Recámara')}</div>
-      <div class="secadores-exec-zone-value">
-        ${escapeHtml(cell.formatted || '-')}
-        <small>°C</small>
+      <div class="secadores-exec-zone-status">
+        <div class="secadores-exec-zone-label">${escapeHtml(cellLabel)}</div>
+        <div class="secadores-exec-zone-value">
+          ${escapeHtml(cell.formatted || '-')}
+          <small>°C</small>
+        </div>
       </div>
-      <div class="secadores-exec-zone-range${rangeClass}"${rangeAttrs}>${escapeHtml(rangeLabel || 'Rango pendiente de definir')}</div>
+      <div class="secadores-exec-zone-parameters">
+        <ul class="secadores-exec-votator-range-list${rangeClass}"${rangeAttrs} aria-label="Rangos de ${escapeHtml(cellLabel)}">
+          ${rangeRows.map((row) => `
+            <li class="secadores-exec-votator-range-item">
+              <span class="secadores-exec-votator-range-dot ${escapeHtml(row.status)}" aria-hidden="true"></span>
+              <span class="secadores-exec-votator-range-name">${escapeHtml(row.label)}</span>
+              <span class="secadores-exec-votator-range-value">${escapeHtml(row.range)}</span>
+            </li>
+          `).join('')}
+        </ul>
+      </div>
 	    </article>
 	  `;
+      };
+
+      const formatVotatorRangeNumber = (value) => {
+        if (value === null || value === undefined || value === '') {
+          return '';
+        }
+        const numericValue = Number(value);
+        return Number.isFinite(numericValue)
+          ? numericValue.toLocaleString('es-MX', { maximumFractionDigits: 2 })
+          : '';
+      };
+
+      const buildMetricRangeRows = (field) => {
+        const rule = field?.rule && typeof field.rule === 'object' ? field.rule : {};
+        const mode = String(rule.modo || 'rango');
+        const unit = String(field?.unit || '').trim();
+        const withUnit = (text) => `${text}${unit ? ` ${unit}` : ''}`;
+        const makeRow = (status, range) => ({
+          status,
+          label: status === 'verde' ? 'Verde (objetivo)' : status.charAt(0).toUpperCase() + status.slice(1),
+          range: ['Por definir', 'No aplica'].includes(range) ? range : withUnit(range),
+        });
+        const makeFiveRows = (lowerRed, lowerYellow, green, upperYellow, upperRed) => [
+          makeRow('rojo', lowerRed || 'Por definir'),
+          makeRow('amarillo', lowerYellow || 'Por definir'),
+          makeRow('verde', green || 'Por definir'),
+          makeRow('amarillo', upperYellow || 'Por definir'),
+          makeRow('rojo', upperRed || 'Por definir'),
+        ];
+
+        if (mode === 'bandas' && Array.isArray(rule.bandas) && rule.bandas.length) {
+          const bandDefinitions = rule.bandas.map((band) => {
+            const status = ['rojo', 'amarillo', 'verde', 'dorado', 'azul'].includes(String(band?.estado || '').toLowerCase())
+              ? String(band.estado).toLowerCase()
+              : 'gris';
+            const min = formatVotatorRangeNumber(band?.min);
+            const max = formatVotatorRangeNumber(band?.max);
+            const range = min && max ? `${min} – ${max}` : (min ? `≥ ${min}` : (max ? `≤ ${max}` : 'Sin límite'));
+            return { status, range };
+          });
+          return bandDefinitions.map((band) => makeRow(band.status, band.range));
+        }
+
+        if (mode === 'rango') {
+          const greenMin = formatVotatorRangeNumber(rule.verde_min);
+          const greenMax = formatVotatorRangeNumber(rule.verde_max);
+          const yellowMin = formatVotatorRangeNumber(rule.amarillo_min);
+          const yellowMax = formatVotatorRangeNumber(rule.amarillo_max);
+          const hasUpperYellow = greenMax && yellowMax && Number(rule.amarillo_max) > Number(rule.verde_max);
+          const lowerRedLimit = yellowMin || greenMin;
+          const upperRedLimit = hasUpperYellow ? yellowMax : greenMax;
+
+          return makeFiveRows(
+            lowerRedLimit ? `< ${lowerRedLimit}` : '',
+            yellowMin && greenMin ? `${yellowMin} – < ${greenMin}` : '',
+            greenMin && greenMax ? `${greenMin} – ${greenMax}` : '',
+            hasUpperYellow ? `> ${greenMax} – ${yellowMax}` : '',
+            upperRedLimit ? `> ${upperRedLimit}` : ''
+          );
+        }
+
+        if (mode === 'minimo') {
+          const greenMin = formatVotatorRangeNumber(rule.verde_min);
+          const yellowMin = formatVotatorRangeNumber(rule.amarillo_min);
+          return makeFiveRows(
+            yellowMin ? `< ${yellowMin}` : (greenMin ? `< ${greenMin}` : ''),
+            yellowMin && greenMin ? `${yellowMin} – < ${greenMin}` : '',
+            greenMin ? `≥ ${greenMin}` : '',
+            'No aplica',
+            'No aplica'
+          );
+        }
+
+        if (mode === 'maximo') {
+          const greenMax = formatVotatorRangeNumber(rule.verde_max);
+          const yellowMax = formatVotatorRangeNumber(rule.amarillo_max);
+          return makeFiveRows(
+            'No aplica',
+            'No aplica',
+            greenMax ? `≤ ${greenMax}` : '',
+            greenMax && yellowMax ? `> ${greenMax} – ${yellowMax}` : '',
+            yellowMax ? `> ${yellowMax}` : (greenMax ? `> ${greenMax}` : '')
+          );
+        }
+
+        if (mode === 'texto') {
+          const values = (status) => Array.isArray(rule[status]) && rule[status].length
+            ? rule[status].join(', ')
+            : '';
+          return [
+            makeRow('rojo', values('rojo') || 'Por definir'),
+            makeRow('amarillo', values('amarillo') || 'Por definir'),
+            makeRow('verde', values('verde') || 'Por definir'),
+          ];
+        }
+
+        return makeFiveRows('', '', '', '', '');
       };
 
       const renderVotators = (votators, tunnelKey) => {
@@ -1906,23 +2757,21 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
         }
 
         return `
-          <div class="secadores-exec-votators" data-tunnel-key="${escapeHtml(tunnelKey)}">
-            ${votators.map((votator) => {
+          <section class="secadores-exec-votator-section" data-tunnel-key="${escapeHtml(tunnelKey)}">
+            <div class="secadores-exec-votators">
+              ${votators.map((votator) => {
               const fields = Array.isArray(votator.fields) ? votator.fields : [];
 
               return `
                 <article class="secadores-exec-votator">
                   <div class="secadores-exec-votator-head">
                     <div class="secadores-exec-votator-title">
-                      <i class="fas fa-arrows-spin"></i>
                       <span>${escapeHtml(votator.label || 'Votator')}</span>
                     </div>
                     <span class="secadores-exec-votator-badge">${escapeHtml(votator.statusLabel || 'Visual')}</span>
                   </div>
-                  <div class="secadores-exec-votator-fields">
+                  <ul class="secadores-exec-votator-fields">
                     ${fields.map((field) => {
-                      const fieldKey = String(field.key || '');
-                      const fieldIcon = field.icon || (fieldKey === 'flujo' ? 'fa-water' : 'fa-gauge-high');
                       const unit = String(field.unit || '').trim();
                       const value = field.value !== null && field.value !== undefined
                         ? escapeHtml(field.formatted || '-')
@@ -1931,26 +2780,38 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
                       const statusKey = plainValue !== '' && plainValue !== '-' && plainValue.toLowerCase() !== 'sin dato'
                         ? String(field.statusKey || 'gris').replace(/[^a-z0-9_-]/gi, '').toLowerCase()
                         : 'gris';
-                      const rangeLabel = String(field.rangeLabel || '').trim();
+                      const rangeRows = buildMetricRangeRows(field);
 
                       return `
-                        <div class="secadores-exec-votator-field status-${escapeHtml(statusKey)}" title="${escapeHtml(field.rangeLabel || field.statusLabel || '')}">
-                          <div class="secadores-exec-votator-field-label">
-                            <i class="fas ${escapeHtml(fieldIcon)}"></i>
-                            <span>${escapeHtml(field.label || 'Campo')}</span>
+                        <li class="secadores-exec-votator-field status-${escapeHtml(statusKey)}" title="${escapeHtml(field.rangeLabel || field.statusLabel || '')}">
+                          <div class="secadores-exec-votator-field-status">
+                            <div class="secadores-exec-votator-field-label">
+                              <span>${escapeHtml(field.label || 'Campo')}</span>
+                            </div>
+                            <div class="secadores-exec-votator-field-value">
+                              ${value}${unit ? `<small>${escapeHtml(unit)}</small>` : ''}
+                            </div>
                           </div>
-                          <div class="secadores-exec-votator-field-value">
-                            ${value}${unit ? `<small>${escapeHtml(unit)}</small>` : ''}
+                          <div class="secadores-exec-votator-field-parameters">
+                            <ul class="secadores-exec-votator-range-list" aria-label="Rangos de ${escapeHtml(field.label || 'Campo')}">
+                              ${rangeRows.map((row) => `
+                                <li class="secadores-exec-votator-range-item">
+                                  <span class="secadores-exec-votator-range-dot ${escapeHtml(row.status)}" aria-hidden="true"></span>
+                                  <span class="secadores-exec-votator-range-name">${escapeHtml(row.label)}</span>
+                                  <span class="secadores-exec-votator-range-value">${escapeHtml(row.range)}</span>
+                                </li>
+                              `).join('')}
+                            </ul>
                           </div>
-                          <div class="secadores-exec-votator-field-range">${escapeHtml(rangeLabel || 'Rango pendiente de definir')}</div>
-                        </div>
+                        </li>
                       `;
                     }).join('')}
-                  </div>
+                  </ul>
                 </article>
               `;
-            }).join('')}
-          </div>
+              }).join('')}
+            </div>
+          </section>
         `;
       };
 
@@ -1966,10 +2827,6 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
                 <div class="secadores-exec-tunnel-title-row">
                   <h2>${escapeHtml(tunnel.titulo || 'Túnel')}</h2>
                   ${headerIndicator}
-                </div>
-                <div class="secadores-exec-tunnel-sub">
-                  <span><i class="fas fa-clock"></i> ${escapeHtml(tunnel.ultimaLectura || '-')}</span>
-                  <span>${renderStatus(tunnel.statusLabel || 'Referencia', tunnel.statusColor || '#94a3b8')}</span>
                 </div>
                 ${renderVotators(tunnel.votators || [], tunnel.key || '')}
                 ${renderInlineMetrics(tunnel.metricas || {}, tunnel.key || '', 'main')}
@@ -2050,22 +2907,29 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
             return;
           }
 
-          const incomingPresionVapor = incomingTunnel?.metricas?.presion_vapor;
-          if (incomingPresionVapor) {
-            currentTunnel.metricas = currentTunnel.metricas || {};
-            currentTunnel.metricas.presion_vapor = incomingPresionVapor;
+          [
+            ['presion_vapor', 'Agua y vapor'],
+            ['caudal_aire', 'Banda'],
+          ].forEach(([metricKey, groupName]) => {
+            const incomingMetric = incomingTunnel?.metricas?.[metricKey];
+            if (!incomingMetric) {
+              return;
+            }
 
-            const card = findMetricCard(tunnelKey, 'presion_vapor');
+            currentTunnel.metricas = currentTunnel.metricas || {};
+            currentTunnel.metricas[metricKey] = incomingMetric;
+
+            const card = findMetricCard(tunnelKey, metricKey);
             if (card) {
-              card.outerHTML = renderInlineMetric('Agua y vapor', 'presion_vapor', incomingPresionVapor, tunnelKey);
+              card.outerHTML = renderInlineMetric(groupName, metricKey, incomingMetric, tunnelKey);
               updated = true;
             }
-          }
+          });
 
           if (Array.isArray(incomingTunnel?.votators)) {
             currentTunnel.votators = incomingTunnel.votators;
 
-            const votatorBlock = Array.from(document.querySelectorAll('.secadores-exec-votators'))
+            const votatorBlock = Array.from(document.querySelectorAll('.secadores-exec-votator-section'))
               .find((element) => element.dataset.tunnelKey === tunnelKey);
             if (votatorBlock) {
               votatorBlock.outerHTML = renderVotators(currentTunnel.votators, tunnelKey);

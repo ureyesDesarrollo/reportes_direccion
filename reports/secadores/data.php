@@ -26,6 +26,7 @@ try {
       $fastReport['tuneles'][$tunnelKey] = [
         'metricas' => [
           'presion_vapor' => $tunnel['metricas']['presion_vapor'] ?? null,
+          'caudal_aire' => $tunnel['metricas']['caudal_aire'] ?? null,
         ],
         'votators' => $tunnel['votators'] ?? [],
       ];
