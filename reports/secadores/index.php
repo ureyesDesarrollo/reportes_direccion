@@ -585,6 +585,47 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
       gap: 4px;
     }
 
+    .secadores-exec-room-climate-section {
+      display: grid;
+      gap: 6px;
+    }
+
+    .secadores-exec-room-climate-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 7px;
+    }
+
+    .secadores-exec-room-climate {
+      min-width: 0;
+      padding: 6px;
+      border: 2px solid #64748b;
+      border-radius: 13px;
+      background: #ffffff;
+      box-shadow: 0 2px 5px rgba(15, 23, 42, .16);
+    }
+
+    .secadores-exec-room-climate-title {
+      margin: 0 0 5px;
+      color: #1e293b;
+      font-size: 19px;
+      font-weight: 900;
+      letter-spacing: .04em;
+      text-align: center;
+    }
+
+    .secadores-exec-room-climate-cards {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 4px;
+    }
+
+    .secadores-exec-room-climate-cards .secadores-exec-inline-metric,
+    .secadores-exec-room-climate-cards .secadores-exec-zone {
+      min-width: 0;
+      height: 100%;
+    }
+
     .secadores-exec-zone-section-title {
       margin: 0 0 8px;
       color: #475569;
@@ -1332,6 +1373,26 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
       box-shadow: 0 4px 12px rgba(37, 99, 235, 0.18);
     }
 
+    .secadores-exec-inline-metric-value,
+    .secadores-exec-zone-value,
+    .secadores-exec-votator-field-value {
+      display: flex;
+      flex-direction: row;
+      align-items: baseline;
+      justify-content: center;
+      gap: 4px;
+      white-space: nowrap;
+    }
+
+    .secadores-exec-inline-metric-value small,
+    .secadores-exec-zone-value small,
+    .secadores-exec-votator-field-value small {
+      display: inline;
+      margin: 0;
+      font-size: .55em;
+      line-height: 1;
+    }
+
     body.capture-mode {
       background: #ffffff;
     }
@@ -1385,7 +1446,7 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
 
     body.capture-mode .secadores-exec-top-indicator {
       grid-template-columns: minmax(120px, .65fr) minmax(0, 1.35fr);
-      min-height: 100px;
+      min-height: 84px;
     }
 
     body.capture-mode .secadores-exec-top-indicator-status,
@@ -1393,7 +1454,7 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
     body.capture-mode .secadores-exec-inline-metric-body,
     body.capture-mode .secadores-exec-zone-status {
       display: grid;
-      grid-template-rows: auto minmax(36px, 1fr);
+      grid-template-rows: auto minmax(30px, 1fr);
       align-items: stretch;
       justify-content: stretch;
       padding: 0;
@@ -1401,7 +1462,7 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
     }
 
     body.capture-mode .secadores-exec-top-indicator-parameters {
-      padding: 4px 6px;
+      padding: 3px 5px;
     }
 
     body.capture-mode .secadores-exec-inline-metrics,
@@ -1422,6 +1483,33 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
       gap: 2px;
     }
 
+    body.capture-mode .secadores-exec-room-climate-section,
+    body.capture-mode .secadores-exec-room-climate-grid {
+      gap: 3px;
+    }
+
+    body.capture-mode .secadores-exec-room-climate-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    body.capture-mode .secadores-exec-room-climate {
+      padding: 2px;
+      border: 2px solid #64748b;
+      border-radius: 8px;
+      background: #ffffff;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, .18);
+    }
+
+    body.capture-mode .secadores-exec-room-climate-title {
+      margin-bottom: 1px;
+      font-size: 17px;
+      line-height: 1;
+    }
+
+    body.capture-mode .secadores-exec-room-climate-cards {
+      gap: 2px;
+    }
+
     body.capture-mode .secadores-exec-votators {
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 3px;
@@ -1430,7 +1518,7 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
 
     body.capture-mode .secadores-exec-votator {
       gap: 2px;
-      padding: 4px;
+      padding: 3px;
     }
 
     body.capture-mode .secadores-exec-votator-fields {
@@ -1441,7 +1529,7 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
     body.capture-mode .secadores-exec-zone,
     body.capture-mode .secadores-exec-votator-field {
       grid-template-columns: minmax(120px, .65fr) minmax(0, 1.35fr);
-      min-height: 100px;
+      min-height: 84px;
     }
 
     body.capture-mode .secadores-exec-inline-metric.is-placeholder,
@@ -1452,7 +1540,7 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
     body.capture-mode .secadores-exec-votator-field-parameters,
     body.capture-mode .secadores-exec-inline-metric-parameters,
     body.capture-mode .secadores-exec-zone-parameters {
-      padding: 4px 6px;
+      padding: 3px 5px;
     }
 
     body.capture-mode .secadores-exec-votator-range-list {
@@ -1524,7 +1612,7 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
       align-items: center;
       justify-content: center;
       min-height: 0;
-      padding: 3px;
+      padding: 2px;
       border-bottom: 1px solid rgba(255, 255, 255, .35);
       color: inherit;
       font-size: 17px;
@@ -1539,13 +1627,84 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
     body.capture-mode .secadores-exec-zone-value,
     body.capture-mode .secadores-exec-votator-field-value {
       display: flex;
+      flex-direction: row;
+      align-items: baseline;
+      justify-content: center;
+      gap: 4px;
+      margin: 0;
+      padding: 2px;
+      font-size: 24px;
+      text-align: center;
+      white-space: nowrap;
+    }
+
+    body.capture-mode .secadores-exec-inline-metric-value small,
+    body.capture-mode .secadores-exec-zone-value small,
+    body.capture-mode .secadores-exec-votator-field-value small {
+      display: inline;
+      margin: 0;
+      font-size: .55em;
+      line-height: 1;
+    }
+
+    body.capture-mode .secadores-exec-room-climate-cards .secadores-exec-inline-metric-value,
+    body.capture-mode .secadores-exec-room-climate-cards .secadores-exec-zone-value {
+      flex-direction: row;
+      align-items: baseline;
+      gap: 4px;
+      white-space: nowrap;
+    }
+
+    body.capture-mode .secadores-exec-room-climate-cards .secadores-exec-inline-metric-value small,
+    body.capture-mode .secadores-exec-room-climate-cards .secadores-exec-zone-value small {
+      display: inline;
+      margin: 0;
+      font-size: .55em;
+      line-height: 1;
+    }
+
+    body.capture-mode .secadores-exec-room-climate-cards {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    body.capture-mode .secadores-exec-room-climate-cards .secadores-exec-zone {
+      order: 1;
+    }
+
+    body.capture-mode .secadores-exec-room-climate-cards .secadores-exec-inline-metric {
+      order: 2;
+    }
+
+    body.capture-mode .secadores-exec-room-climate-cards .secadores-exec-inline-metric,
+    body.capture-mode .secadores-exec-room-climate-cards .secadores-exec-zone {
+      display: grid;
+      grid-template-columns: minmax(135px, .55fr) minmax(0, 1.45fr);
+      min-height: 0;
+      height: 100%;
+      padding: 0;
+      gap: 0;
+      box-shadow: none;
+    }
+
+    body.capture-mode .secadores-exec-room-climate-cards .secadores-exec-inline-metric-body,
+    body.capture-mode .secadores-exec-room-climate-cards .secadores-exec-zone-status {
+      display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      margin: 0;
+      width: 100%;
+      min-height: 62px;
       padding: 3px;
-      font-size: 24px;
-      text-align: center;
+      gap: 2px;
+      border-right: 1px solid rgba(15, 23, 42, .14);
+      border-bottom: 0;
+    }
+
+    body.capture-mode .secadores-exec-room-climate-cards .secadores-exec-inline-metric-parameters,
+    body.capture-mode .secadores-exec-room-climate-cards .secadores-exec-zone-parameters {
+      width: 100%;
+      padding: 3px 5px;
+      align-content: center;
     }
 
     body.capture-mode .secadores-exec-inline-group-title,
@@ -1586,6 +1745,10 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
     }
 
     @media (max-width: 640px) {
+      .secadores-exec-room-climate-grid {
+        grid-template-columns: 1fr;
+      }
+
       .secadores-exec-zones {
         grid-template-columns: 1fr;
       }
@@ -2335,7 +2498,7 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
             ? `${escapeHtml(item.formatted || '-')} ${escapeHtml(item.unit || '')}`.trim()
             : '-';
           const statusClass = statusClassFromKey(String(item.statusKey || 'gris'), hasData);
-          const rangeRows = buildMetricRangeRows(item);
+          const rangeRows = compactMetricRangeRows(item);
 
           return `
             <article class="secadores-exec-top-indicator ${statusClass}">
@@ -2359,7 +2522,7 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
         }).join('');
       };
 
-      const renderInlineMetric = (groupName, metricKey, metric, tunnelKey) => {
+      const renderInlineMetric = (groupName, metricKey, metric, tunnelKey, rangeRowsOverride = null) => {
         const formattedValue = String(metric.formatted || '').trim();
         const hasFormattedValue = formattedValue !== '' && formattedValue !== '-' && formattedValue.toLowerCase() !== 'sin dato';
         const numericValue = Number(metric.value);
@@ -2388,7 +2551,7 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
         const timestampLabel = String(metric.timestampLabel || '').trim();
         const rangeClass = rangeLabel ? '' : ' is-empty';
         const rangeAttrs = rangeLabel ? '' : ' aria-hidden="true"';
-        const rangeRows = buildMetricRangeRows(metric);
+        const rangeRows = Array.isArray(rangeRowsOverride) ? rangeRowsOverride : compactMetricRangeRows(metric);
         return `
           <div class="secadores-exec-inline-metric${statusClass}${isClickable ? ' clickable' : ''}" data-tunnel-key="${escapeHtml(tunnelKey)}" data-metric-key="${escapeHtml(metricKey)}">
             <div class="secadores-exec-inline-metric-body">
@@ -2473,6 +2636,10 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
           }
 
           const isVerification = metricGroupClass(metric.group || 'General') === 'verificacion-de-secado';
+          const isHumidity = metricGroupClass(metric.group || 'General') === 'humedades';
+          if (groupMode === 'main' && isHumidity) {
+            return false;
+          }
           return groupMode === 'verification' ? isVerification : !isVerification;
         });
         if (!entries.length) {
@@ -2620,7 +2787,7 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
         modal.setAttribute('aria-hidden', 'false');
       };
 
-      const renderZone = (cell, tunnelKey) => {
+      const renderZone = (cell, tunnelKey, rangeRowsOverride = null) => {
         const statusAttr = getStatusAttribute(cell.statusLabel);
         const cellLabel = String(cell.label || 'REC')
           .replace(/^rec[aá]mara\s*/i, 'REC ')
@@ -2628,7 +2795,7 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
         const rangeLabel = String(cell.rangeLabel || '').trim();
         const rangeClass = rangeLabel ? '' : ' is-empty';
         const rangeAttrs = rangeLabel ? '' : ' aria-hidden="true"';
-        const rangeRows = buildMetricRangeRows(cell);
+        const rangeRows = Array.isArray(rangeRowsOverride) ? rangeRowsOverride : compactMetricRangeRows(cell);
 
         return `
     <article class="secadores-exec-zone unavailable" data-status="${statusAttr}" data-open-temperature="1" data-tunnel-key="${escapeHtml(tunnelKey)}">
@@ -2654,6 +2821,82 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
 	  `;
       };
 
+      const extractRoomNumber = (key, item) => {
+        const candidates = [key, item?.label, item?.field];
+        for (const candidate of candidates) {
+          const match = String(candidate || '').match(/(?:zona|rec[aá]mara|rec)[^0-9]*(\d+)/i);
+          if (match) {
+            return Number(match[1]);
+          }
+        }
+        return null;
+      };
+
+      const renderRoomClimate = (metrics, cells, tunnelKey) => {
+        const humidityByRoom = new Map();
+        Object.entries(metrics || {}).forEach(([metricKey, metric]) => {
+          if (metric.hidden || metricGroupClass(metric.group || 'General') !== 'humedades') {
+            return;
+          }
+          const room = extractRoomNumber(metricKey, metric);
+          if (room !== null) {
+            humidityByRoom.set(room, [metricKey, metric]);
+          }
+        });
+
+        const temperatureByRoom = new Map();
+        (cells || []).forEach((cell) => {
+          const room = extractRoomNumber('', cell);
+          if (room !== null) {
+            temperatureByRoom.set(room, cell);
+          }
+        });
+
+        const rooms = [...new Set([...humidityByRoom.keys(), ...temperatureByRoom.keys()])]
+          .sort((left, right) => left - right);
+        if (!rooms.length) {
+          return '';
+        }
+
+        return `
+          <div class="secadores-exec-room-climate-section">
+            <div class="secadores-exec-zone-section-title">Humedad y temperatura de recámaras</div>
+            <div class="secadores-exec-room-climate-grid">
+              ${rooms.map((room) => {
+                const humidityEntry = humidityByRoom.get(room);
+                const temperature = temperatureByRoom.get(room);
+                const humidityCard = humidityEntry
+                  ? renderInlineMetric(
+                    'Humedades',
+                    humidityEntry[0],
+                    { ...humidityEntry[1], label: 'Humedad' },
+                    tunnelKey,
+                    compactMetricRangeRows(humidityEntry[1])
+                  )
+                  : '<div class="secadores-exec-inline-metric is-placeholder" aria-hidden="true"></div>';
+                const temperatureCard = temperature
+                  ? renderZone(
+                    { ...temperature, label: 'Temperatura' },
+                    tunnelKey,
+                    compactMetricRangeRows(temperature)
+                  )
+                  : '<div class="secadores-exec-zone is-placeholder" aria-hidden="true"></div>';
+
+                return `
+                  <section class="secadores-exec-room-climate">
+                    <h3 class="secadores-exec-room-climate-title">REC ${room}</h3>
+                    <div class="secadores-exec-room-climate-cards">
+                      ${humidityCard}
+                      ${temperatureCard}
+                    </div>
+                  </section>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        `;
+      };
+
       const formatVotatorRangeNumber = (value) => {
         if (value === null || value === undefined || value === '') {
           return '';
@@ -2667,12 +2910,10 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
       const buildMetricRangeRows = (field) => {
         const rule = field?.rule && typeof field.rule === 'object' ? field.rule : {};
         const mode = String(rule.modo || 'rango');
-        const unit = String(field?.unit || '').trim();
-        const withUnit = (text) => `${text}${unit ? ` ${unit}` : ''}`;
         const makeRow = (status, range) => ({
           status,
           label: status === 'verde' ? 'Verde (objetivo)' : status.charAt(0).toUpperCase() + status.slice(1),
-          range: ['Por definir', 'No aplica'].includes(range) ? range : withUnit(range),
+          range,
         });
         const makeFiveRows = (lowerRed, lowerYellow, green, upperYellow, upperRed) => [
           makeRow('rojo', lowerRed || 'Por definir'),
@@ -2751,6 +2992,33 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
         return makeFiveRows('', '', '', '', '');
       };
 
+      const compactMetricRangeRows = (field) => {
+        const rows = buildMetricRangeRows(field);
+        const presentStatuses = [...new Set(rows.map((row) => row.status).filter((status) => status && status !== 'gris'))];
+        const standardStatuses = ['verde', 'amarillo', 'rojo'];
+        const statuses = presentStatuses.every((status) => standardStatuses.includes(status))
+          ? standardStatuses
+          : presentStatuses.slice(0, 3);
+
+        return statuses.map((status) => {
+          const statusRows = rows.filter((row) => row.status === status);
+          const definedRanges = [...new Set(
+            statusRows
+              .map((row) => String(row.range || '').trim())
+              .filter((range) => range !== '' && range !== 'No aplica' && range !== 'Por definir')
+          )];
+          const fallback = statusRows.some((row) => row.range === 'Por definir')
+            ? 'Por definir'
+            : 'No aplica';
+
+          return {
+            status,
+            label: status === 'verde' ? 'Verde (objetivo)' : status.charAt(0).toUpperCase() + status.slice(1),
+            range: definedRanges.length ? definedRanges.join(' o ') : fallback,
+          };
+        });
+      };
+
       const renderVotators = (votators, tunnelKey) => {
         if (!Array.isArray(votators) || !votators.length) {
           return '';
@@ -2780,7 +3048,7 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
                       const statusKey = plainValue !== '' && plainValue !== '-' && plainValue.toLowerCase() !== 'sin dato'
                         ? String(field.statusKey || 'gris').replace(/[^a-z0-9_-]/gi, '').toLowerCase()
                         : 'gris';
-                      const rangeRows = buildMetricRangeRows(field);
+                      const rangeRows = compactMetricRangeRows(field);
 
                       return `
                         <li class="secadores-exec-votator-field status-${escapeHtml(statusKey)}" title="${escapeHtml(field.rangeLabel || field.statusLabel || '')}">
@@ -2817,7 +3085,6 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
 
       const renderTunnel = (tunnel) => {
         const cells = tunnel.cells || [];
-        const targetCells = Math.max(12, Math.ceil(cells.length / 4) * 4);
         const headerIndicator = renderHeaderIndicator(state.payload.indicadores || {});
 
         return `
@@ -2831,11 +3098,7 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
                 ${renderVotators(tunnel.votators || [], tunnel.key || '')}
                 ${renderInlineMetrics(tunnel.metricas || {}, tunnel.key || '', 'main')}
                 <div class="secadores-exec-tunnel-body">
-                  <div class="secadores-exec-zone-section-title">Temperaturas</div>
-                  <div class="secadores-exec-zones">
-                  ${cells.map((cell) => renderZone(cell, tunnel.key || '')).join('')}
-                  ${renderZonePlaceholders(targetCells - cells.length)}
-                  </div>
+                  ${renderRoomClimate(tunnel.metricas || {}, cells, tunnel.key || '')}
                 </div>
                 ${renderInlineMetrics(tunnel.metricas || {}, tunnel.key || '', 'verification')}
               </div>

@@ -157,6 +157,16 @@ return [
       'enabled' => true,
     ],
     [
+      'slug' => 'reporte-produccion-supervisor',
+      'title' => 'Producción Supervisor',
+      'description' => 'Resumen diario por turno con supervisor, kilos por hora y semáforo contra rangos operativos.',
+      'icon' => 'fa-user-gear',
+      'color' => '#10b981',
+      'groups' => ['produccion'],
+      'url' => './reporte-produccion-supervisor/index.php',
+      'enabled' => true,
+    ],
+    [
       'slug' => 'concentradores',
       'title' => 'CONCENTRADORES',
       'description' => 'Monitoreo de flujo, temperatura, vacio y solidos por concentrador con semaforos configurables.',

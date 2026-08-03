@@ -46,6 +46,8 @@ $processTotal = (array)($tablas['procesos_total'] ?? []);
 $objetivoDiario = (float)($objetivos['diario_toneladas'] ?? 20.0);
 $objetivoPeriodo = max($objetivoDiario, (float)($objetivos['periodo_toneladas'] ?? 600.0));
 $objetivoComparacion = max($objetivoDiario, (float)($objetivos['comparacion_toneladas'] ?? ($objetivos['acumulado_toneladas'] ?? $objetivoPeriodo)));
+$produccionAmarilloMinComparacion = max(0.0, (float)($objetivos['produccion_amarillo_min_comparacion'] ?? 21.0));
+$produccionVerdeMinComparacion = max($produccionAmarilloMinComparacion, (float)($objetivos['produccion_verde_min_comparacion'] ?? 24.0));
 $objetivoTarimasPeriodo = max(0.0, (float)($objetivos['tarimas_periodo'] ?? 0.0));
 $tarimasAmarilloMinPeriodo = max(0.0, (float)($objetivos['tarimas_amarillo_min_periodo'] ?? 0.0));
 $totalToneladas = (float)($kpis['toneladas'] ?? 0.0);
@@ -100,16 +102,16 @@ $semaforoTarimasPeriodo = static function ($value) use ($objetivoTarimasPeriodo,
 
   return 'avance-semaforo-verde';
 };
-$semaforoProduccion = static function ($value): string {
+$semaforoProduccion = static function ($value) use ($produccionAmarilloMinComparacion, $produccionVerdeMinComparacion): string {
   if (!is_numeric($value)) {
     return '';
   }
 
   $number = (float)$value;
-  if ($number < 630) {
+  if ($number < $produccionAmarilloMinComparacion) {
     return 'avance-semaforo-rojo';
   }
-  if ($number <= 670) {
+  if ($number < $produccionVerdeMinComparacion) {
     return 'avance-semaforo-amarillo';
   }
 
@@ -342,6 +344,16 @@ $semaforoDeficit = static function ($value): string {
       background: #facc15;
       color: #111827;
       border-color: #eab308;
+    }
+
+    .avance-kpi-card.avance-semaforo-amarillo .kpi-icon,
+    .avance-kpi-card.avance-semaforo-amarillo .kpi-label,
+    .avance-kpi-card.avance-semaforo-amarillo .kpi-value,
+    .avance-kpi-card.avance-semaforo-amarillo .kpi-trend,
+    .avance-kpi-card.avance-semaforo-amarillo .avance-progress-main strong,
+    .avance-kpi-card.avance-semaforo-amarillo .avance-progress-main span,
+    .avance-kpi-card.avance-semaforo-amarillo .avance-progress-meta span {
+      color: #111827 !important;
     }
 
     .avance-kpi-card.avance-semaforo-rojo {
@@ -842,11 +854,13 @@ $semaforoDeficit = static function ($value): string {
         if (number < greenTarget) return 'avance-semaforo-amarillo';
         return 'avance-semaforo-verde';
       };
-      const semaforoProduccion = (value) => {
+      const semaforoProduccion = (value, amarilloMin, verdeMin) => {
         const number = asNumber(value);
-        if (number === null) return '';
-        if (number < 630) return 'avance-semaforo-rojo';
-        if (number <= 670) return 'avance-semaforo-amarillo';
+        const yellowTarget = asNumber(amarilloMin);
+        const greenTarget = asNumber(verdeMin);
+        if (number === null || yellowTarget === null || greenTarget === null) return '';
+        if (number < yellowTarget) return 'avance-semaforo-rojo';
+        if (number < greenTarget) return 'avance-semaforo-amarillo';
         return 'avance-semaforo-verde';
       };
       const semaforoFinos = (value) => {
@@ -1092,7 +1106,14 @@ $semaforoDeficit = static function ($value): string {
         setText('avanceKpiDeficitDias', fmtNumber(kpis.deficit_dias, 2));
         setText('avanceBarreduraBadge', `${fmtNumber(kpis.barredura_toneladas, 1)} t`);
         setText('avanceFootnote', `Corte ${meta.hora_corte || ''} · ${filtros.periodo_inicio || ''} - ${filtros.periodo_fin || ''}`);
-        setSemaforo('avanceProduccionCard', semaforoProduccion(kpis.toneladas));
+        setSemaforo(
+          'avanceProduccionCard',
+          semaforoProduccion(
+            kpis.toneladas,
+            objetivos.produccion_amarillo_min_comparacion,
+            objetivos.produccion_verde_min_comparacion
+          )
+        );
         setSemaforo('avanceKpiRendimientoCard', semaforoRendimiento(kpis.rendimiento));
         setSemaforo('avanceKpiFinosCard', semaforoFinos(kpis.porcentaje_finos));
         setSemaforo('avanceKpiPromedioCard', semaforoTarimas(kpis.promedio_diario));

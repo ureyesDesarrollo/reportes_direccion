@@ -148,12 +148,6 @@ return [
 
         'TEMPERATURA_RECAMARA_3_TUNEL_1' => [
           'label' => 'Recámara 3',
-          'leyenda' => 'Recirculación',
-          'estado_fijo' => [
-            'label' => 'Recirculación',
-            'key' => 'gris',
-            'color' => '#94a3b8',
-          ],
           'semaforo' => [
             'modo' => 'rango',
             'verde_min' => 41,
@@ -213,8 +207,8 @@ return [
             'modo' => 'rango',
             'verde_min' => 61,
             'verde_max' => 62,
-            'amarillo_min' => 60,
-            'amarillo_max' => 63
+            'amarillo_min' => 59,
+            'amarillo_max' => 64
           ],
         ],
       ],

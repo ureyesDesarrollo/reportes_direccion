@@ -80,11 +80,11 @@ return array_replace_recursive($detailConfig, [
         'modo' => 'bandas',
         'bandas' => [
           ['max' => 34.999999, 'estado' => 'rojo'],
-          ['min' => 35, 'max' => 37, 'estado' => 'amarillo'],
-          ['min' => 37.000001, 'estado' => 'verde'],
+          ['min' => 35, 'max' => 36.999999, 'estado' => 'amarillo'],
+          ['min' => 37, 'estado' => 'verde'],
         ],
       ],
-      'leyenda' => '> 37 %',
+      'leyenda' => '>= 37 %',
     ],
   ],
   'metricas_por_tunel' => [
@@ -112,7 +112,7 @@ return array_replace_recursive($detailConfig, [
         'label' => 'Caudal aire',
         'source' => 'mysql_secadores',
         'field' => 'caudal',
-        'unit' => 'm³/h',
+        'unit' => '',
         'available' => true,
         'empty_label' => '-',
         'lookup' => [
@@ -459,7 +459,7 @@ return array_replace_recursive($detailConfig, [
         'label' => 'Caudal aire',
         'source' => 'mysql_secadores',
         'field' => 'caudal',
-        'unit' => 'm³/h',
+        'unit' => '',
         'available' => true,
         'empty_label' => '-',
         'lookup' => [
@@ -829,7 +829,7 @@ return array_replace_recursive($detailConfig, [
             'label' => 'Presión cuajado',
             'source' => 'sqlserver',
             'field' => 'PRESION_CUAJADO_VOTATOR_1',
-            'unit' => 'kg/cm2',
+            'unit' => '',
             'available' => true,
             'empty_label' => 'Sin dato',
             'semaforo' => [
@@ -869,7 +869,7 @@ return array_replace_recursive($detailConfig, [
             'label' => 'Presión cuajado',
             'source' => 'sqlserver',
             'field' => 'PRESION_CUAJADO_VOTATOR_2_SA',
-            'unit' => 'kg/cm2',
+            'unit' => '',
             'available' => true,
             'empty_label' => 'Sin dato',
             'semaforo' => [
@@ -911,7 +911,7 @@ return array_replace_recursive($detailConfig, [
             'label' => 'Presión cuajado',
             'source' => 'sqlserver',
             'field' => 'PRESION__CUAJADO_VOTATOR_3',
-            'unit' => 'kg/cm2',
+            'unit' => '',
             'available' => true,
             'empty_label' => 'Sin dato',
             'semaforo' => [
@@ -951,7 +951,7 @@ return array_replace_recursive($detailConfig, [
             'label' => 'Presión cuajado',
             'source' => 'sqlserver',
             'field' => 'PRESION__CUAJADO_VOTATOR_4',
-            'unit' => 'kg/cm2',
+            'unit' => '',
             'available' => true,
             'empty_label' => 'Sin dato',
             'semaforo' => [

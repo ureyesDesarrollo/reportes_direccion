@@ -7,6 +7,8 @@ return [
   'hora_corte' => '07:00:00',
   'objetivo_diario_toneladas' => 22.0,
   'objetivo_mensual_toneladas' => 670.0,
+  'produccion_amarillo_min_diario' => 21.0,
+  'produccion_verde_min_diario' => 24.0,
   'objetivo_diario_tarimas' => 22.0,
   'tarimas_amarillo_min_diario' => 20.0,
   'barredura_pro_id' => 2,
