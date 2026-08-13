@@ -1,8 +1,12 @@
 <?php
 
 $detailConfig = require __DIR__ . '/../secadores-temperatura/config.php';
+$parameterCatalog = require __DIR__ . '/../../config/parameter_catalog.php';
+$masterSecadores = (array)($parameterCatalog['secadores'] ?? []);
+$masterVotators = (array)($parameterCatalog['produccion_monitoreo']['votators'] ?? []);
+$masterTopIndicators = (array)($masterSecadores['indicadores_superiores'] ?? []);
 
-return array_replace_recursive($detailConfig, [
+$config = array_replace_recursive($detailConfig, [
   'titulo' => 'Secadores',
   'intervalo_actualizacion_ms' => 600000,
   'intervalo_actualizacion_rapida_ms' => 60000,
@@ -968,3 +972,39 @@ return array_replace_recursive($detailConfig, [
     ],
   ],
 ]);
+
+$config['monitoreo_produccion']['humedad_rangos_recamaras'] = (array)($masterSecadores['humedad_recamaras'] ?? []);
+$sharedMetricRules = (array)($masterSecadores['metricas_compartidas'] ?? []);
+$airflowRules = (array)($masterSecadores['caudal_aire'] ?? []);
+
+foreach (array_keys((array)($config['metricas_por_tunel'] ?? [])) as $tunnelKey) {
+  foreach ($sharedMetricRules as $metricKey => $rule) {
+    if (isset($config['metricas_por_tunel'][$tunnelKey][$metricKey])) {
+      $config['metricas_por_tunel'][$tunnelKey][$metricKey]['semaforo'] = $rule;
+    }
+  }
+  if (isset($airflowRules[$tunnelKey], $config['metricas_por_tunel'][$tunnelKey]['caudal_aire'])) {
+    $config['metricas_por_tunel'][$tunnelKey]['caudal_aire']['semaforo'] = $airflowRules[$tunnelKey];
+  }
+}
+
+foreach ((array)($config['votators_por_tunel'] ?? []) as $tunnelKey => $votators) {
+  foreach ((array)$votators as $votatorKey => $votator) {
+    if (isset($config['votators_por_tunel'][$tunnelKey][$votatorKey]['campos']['flujo'])) {
+      $config['votators_por_tunel'][$tunnelKey][$votatorKey]['campos']['flujo']['semaforo'] = (array)($masterVotators['flujo'] ?? []);
+    }
+    if (isset($config['votators_por_tunel'][$tunnelKey][$votatorKey]['campos']['presion_cuajado'])) {
+      $config['votators_por_tunel'][$tunnelKey][$votatorKey]['campos']['presion_cuajado']['semaforo'] = (array)($masterVotators['presion_cuajado'] ?? []);
+    }
+  }
+}
+
+foreach ($masterTopIndicators as $indicatorKey => $rule) {
+  if (!isset($config['indicadores_superiores'][$indicatorKey])) {
+    continue;
+  }
+  $config['indicadores_superiores'][$indicatorKey]['semaforo'] = (array)$rule;
+  $config['indicadores_superiores'][$indicatorKey]['leyenda'] = (string)($rule['leyenda'] ?? '');
+}
+
+return $config;

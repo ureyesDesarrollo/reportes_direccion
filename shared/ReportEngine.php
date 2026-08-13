@@ -54,9 +54,9 @@ class ReportEngine
     $sql = "
             SELECT
                 YEARWEEK(tar_fecha, 3) AS periodo,
-                DATE_FORMAT(tar_fecha, '%x-S%v') AS semana_iso,
-                DATE_FORMAT(DATE_SUB(DATE(tar_fecha), INTERVAL WEEKDAY(tar_fecha) DAY), '%Y-%m-%d') AS semana_inicio,
-                DATE_FORMAT(DATE_ADD(DATE(tar_fecha), INTERVAL (6 - WEEKDAY(tar_fecha)) DAY), '%Y-%m-%d') AS semana_fin,
+                DATE_FORMAT(MIN(tar_fecha), '%x-S%v') AS semana_iso,
+                DATE_FORMAT(DATE_SUB(DATE(MIN(tar_fecha)), INTERVAL WEEKDAY(MIN(tar_fecha)) DAY), '%Y-%m-%d') AS semana_inicio,
+                DATE_FORMAT(DATE_ADD(DATE(MIN(tar_fecha)), INTERVAL (6 - WEEKDAY(MIN(tar_fecha))) DAY), '%Y-%m-%d') AS semana_fin,
                 SUM(tar_kilos) AS kilos_producidos
             FROM rev_tarimas
             WHERE tar_fecha >= ?

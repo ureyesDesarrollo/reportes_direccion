@@ -24,8 +24,8 @@ $objetivoDiario = max(0.01, (float)($config['objetivo_diario_toneladas'] ?? 20.0
 $objetivoMensual = max($objetivoDiario, (float)($config['objetivo_mensual_toneladas'] ?? 600.0));
 $produccionAmarilloMinDiario = max(0.0, (float)($config['produccion_amarillo_min_diario'] ?? 21.0));
 $produccionVerdeMinDiario = max($produccionAmarilloMinDiario, (float)($config['produccion_verde_min_diario'] ?? 24.0));
-$objetivoDiarioTarimas = max(0.01, (float)($config['objetivo_diario_tarimas'] ?? 22.0));
-$tarimasAmarilloMinDiario = max(0.0, (float)($config['tarimas_amarillo_min_diario'] ?? 20.0));
+$objetivoDiarioTarimas = max(0.01, (float)($config['objetivo_diario_tarimas'] ?? 24.0));
+$tarimasAmarilloMinDiario = max(0.0, (float)($config['tarimas_amarillo_min_diario'] ?? 21.0));
 $barreduraProId = (int)($config['barredura_pro_id'] ?? 2);
 $intervaloActualizacion = (int)($config['intervalo_actualizacion_ms'] ?? ($appConfig['intervalo_actualizacion'] ?? 300000));
 
@@ -323,6 +323,13 @@ $totalTarimas = array_sum(array_map(static fn(array $row): int => (int)$row['tar
 $totalTarimasFinos = array_sum(array_map(static fn(array $row): int => (int)$row['tarimas_finos'], $dailySeries));
 $totalBarreduraTon = array_sum(array_map(static fn(array $row): float => (float)$row['barredura_ton'], $dailySeries));
 $totalKilosTarimas = array_sum(array_map(static fn(array $row): float => (float)$row['kilos'], $dailySeries));
+$currentProductionDateKey = $currentProductionDate->format('Y-m-d');
+$totalToneladasCerradas = array_sum(array_map(
+  static fn(array $row): float => (string)($row['date'] ?? '') < $currentProductionDateKey
+    ? (float)($row['toneladas'] ?? 0)
+    : 0.0,
+  $dailySeries
+));
 $totalMpKilos = array_sum($mpByProcessId);
 $porcentajeFinos = $totalTarimas > 0 ? ($totalTarimasFinos / $totalTarimas) * 100 : 0.0;
 $rendimientoGlobal = $totalMpKilos > 0 ? ($totalKilosTarimas / $totalMpKilos) * 100 : 0.0;
@@ -349,7 +356,7 @@ $objetivoAcumulado = $objetivoDiario * max(0, $diasTranscurridos);
 $objetivoComparacion = $objetivoDiario * max(1, $diasPromedio);
 $produccionAmarilloMinComparacion = $produccionAmarilloMinDiario * max(1, $diasPromedio);
 $produccionVerdeMinComparacion = $produccionVerdeMinDiario * max(1, $diasPromedio);
-$deficitToneladas = max(0.0, $objetivoAcumulado - $totalToneladas);
+$deficitToneladas = max(0.0, $objetivoAcumulado - $totalToneladasCerradas);
 $deficitDias = $deficitToneladas / $objetivoDiario;
 
 $barreduraRows = array_values(array_filter(array_map(static function (array $row): array {
@@ -402,6 +409,7 @@ return [
     'dias_para_meta' => $diasParaMeta,
     'deficit_toneladas' => $deficitToneladas,
     'deficit_dias' => $deficitDias,
+    'toneladas_cerradas_deficit' => $totalToneladasCerradas,
     'tarimas' => $totalTarimas,
     'barredura_toneladas' => $totalBarreduraTon,
     'kilos_tarimas' => $totalKilosTarimas,

@@ -260,7 +260,7 @@ $chartTarget = array_fill(0, count($chartLabels), round($objetivoDiario, 2));
 
     .ventas-quality-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(170px, 180px));
+      grid-template-columns: repeat(auto-fit, minmax(205px, 1fr));
       gap: 10px;
       justify-content: start;
     }
@@ -275,6 +275,15 @@ $chartTarget = array_fill(0, count($chartLabels), round($objetivoDiario, 2));
       border-radius: 14px;
       background: #ffffff;
       box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+      cursor: pointer;
+      transition: transform .18s ease, box-shadow .18s ease;
+    }
+
+    .ventas-quality-card:hover,
+    .ventas-quality-card:focus-visible {
+      box-shadow: 0 8px 18px rgba(15, 23, 42, .18);
+      outline: none;
+      transform: translateY(-2px);
     }
 
     .ventas-quality-card[data-quality-card="315"] {
@@ -341,7 +350,8 @@ $chartTarget = array_fill(0, count($chartLabels), round($objetivoDiario, 2));
 
     .ventas-quality-card[data-quality-card] .ventas-quality-key,
     .ventas-quality-card[data-quality-card] .ventas-quality-value,
-    .ventas-quality-card[data-quality-card] .ventas-quality-meta {
+    .ventas-quality-card[data-quality-card] .ventas-quality-meta,
+    .ventas-quality-card[data-quality-card] .ventas-quality-detail {
       color: inherit;
     }
 
@@ -350,6 +360,16 @@ $chartTarget = array_fill(0, count($chartLabels), round($objetivoDiario, 2));
       font-size: clamp(1.35rem, 2vw, 1.9rem);
       font-weight: 900;
       line-height: 1;
+      white-space: nowrap;
+    }
+
+    .ventas-quality-detail {
+      margin-top: 7px;
+      color: #475569;
+      font-size: .68rem;
+      font-weight: 800;
+      line-height: 1.25;
+      opacity: .9;
       white-space: nowrap;
     }
 
@@ -524,6 +544,21 @@ $chartTarget = array_fill(0, count($chartLabels), round($objetivoDiario, 2));
       white-space: nowrap;
     }
 
+    .ventas-backorder-status {
+      display: inline-flex;
+      padding: 4px 8px;
+      border-radius: 999px;
+      color: #7c2d12;
+      background: #ffedd5;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    .ventas-backorder-status.is-partial {
+      color: #854d0e;
+      background: #fef9c3;
+    }
+
     .ventas-backorder-empty {
       padding: 36px 20px !important;
       color: #64748b;
@@ -637,11 +672,12 @@ $chartTarget = array_fill(0, count($chartLabels), round($objetivoDiario, 2));
       </div>
       <div class="ventas-quality-grid" id="ventasQualityGrid">
         <?php foreach ($calidadPorProducir as $producto): ?>
-          <article class="ventas-quality-card" data-quality-card="<?= $e($producto['grupo'] ?? '') ?>">
+          <article class="ventas-quality-card" data-quality-card="<?= $e($producto['grupo'] ?? '') ?>" role="button" tabindex="0" aria-label="Ver detalle de inventario Bloom <?= $e($producto['grupo'] ?? '') ?>">
             <div class="ventas-quality-top">
               <div class="ventas-quality-key"><?= is_numeric($producto['grupo'] ?? null) ? 'Bloom ' : '' ?><?= $e($producto['grupo'] ?? '-') ?></div>
-            </div>
-            <div class="ventas-quality-value" data-quality-value><?= $e($fmt($producto['toneladas'] ?? null, 1)) ?> TON</div>
+          </div>
+          <div class="ventas-quality-value" data-quality-value><?= $e($fmt($producto['toneladas'] ?? null, 1)) ?> TON</div>
+          <div class="ventas-quality-detail">Pedido <?= $e($fmt($producto['toneladas_pedido'] ?? null, 1)) ?> · Disponible <?= $e($fmt($producto['toneladas_inventario'] ?? null, 1)) ?> TON</div>
           </article>
         <?php endforeach; ?>
       </div>
@@ -667,6 +703,7 @@ $chartTarget = array_fill(0, count($chartLabels), round($objetivoDiario, 2));
           <thead>
             <tr>
               <th>Pedido</th>
+              <th>Estatus</th>
               <th>Partida</th>
               <th>Cliente</th>
               <th>Calidad</th>
@@ -681,10 +718,40 @@ $chartTarget = array_fill(0, count($chartLabels), round($objetivoDiario, 2));
     </section>
   </div>
 
+  <div class="ventas-backorder-modal" id="ventasQualityModal" aria-hidden="true">
+    <div class="ventas-backorder-backdrop" data-quality-close></div>
+    <section class="ventas-backorder-dialog" role="dialog" aria-modal="true" aria-labelledby="ventasQualityTitle">
+      <header class="ventas-backorder-modal-header">
+        <h2 id="ventasQualityTitle">Detalle de inventario</h2>
+        <button class="ventas-backorder-close" type="button" data-quality-close aria-label="Cerrar detalle">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </header>
+      <div class="ventas-backorder-summary" id="ventasQualitySummary"></div>
+      <div class="ventas-backorder-table-wrap">
+        <table class="ventas-backorder-table">
+          <thead>
+            <tr>
+              <th>Revoltura</th>
+              <th>Origen</th>
+              <th>Cliente asignado</th>
+              <th>Calidad</th>
+              <th>Presentación</th>
+              <th class="is-number">Unidades</th>
+              <th class="is-number">Kg</th>
+            </tr>
+          </thead>
+          <tbody id="ventasQualityTableBody"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
   <script>
     const ventasRefreshMs = <?= (int)($meta['intervaloActualizacion'] ?? 600000) ?>;
     const ventasSemaforoClasses = ['avance-semaforo-verde', 'avance-semaforo-amarillo', 'avance-semaforo-rojo'];
     let ventasBackorderPartidas = <?= json_encode($backorderPartidas, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+    let ventasCalidadPorProducir = <?= json_encode($calidadPorProducir, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
     Chart.defaults.font.family = 'Inter, sans-serif';
     Chart.defaults.font.size = document.documentElement.classList.contains('executive-display') ? 12 : 11;
     Chart.defaults.color = '#475569';
@@ -714,6 +781,10 @@ $chartTarget = array_fill(0, count($chartLabels), round($objetivoDiario, 2));
       return Number.isFinite(Number(calidad)) ? `Bloom ${calidad}` : calidad;
     }
 
+    function ventasBackorderStatusClass(value) {
+      return String(value ?? '').trim().toLowerCase() === 'parcial' ? ' is-partial' : '';
+    }
+
     function renderBackorderPartidas() {
       const tbody = document.getElementById('ventasBackorderTableBody');
       const summary = document.getElementById('ventasBackorderSummary');
@@ -728,6 +799,7 @@ $chartTarget = array_fill(0, count($chartLabels), round($objetivoDiario, 2));
         ? rows.map((row) => `
           <tr>
             <td>${escapeHtml(row.pedido || '-')}</td>
+            <td><span class="ventas-backorder-status${ventasBackorderStatusClass(row.estatus)}">${escapeHtml(row.estatus || 'Sin estatus')}</span></td>
             <td>${escapeHtml(row.partida || '-')}</td>
             <td><strong>${escapeHtml(row.cliente || 'Cliente sin identificar')}</strong></td>
             <td><span class="ventas-backorder-quality">${escapeHtml(ventasCalidadLabel(row.calidad))}</span></td>
@@ -736,7 +808,7 @@ $chartTarget = array_fill(0, count($chartLabels), round($objetivoDiario, 2));
             <td class="is-number">${ventasFormatNumber(row.toneladas_pendientes, 2)}</td>
           </tr>
         `).join('')
-        : '<tr><td class="ventas-backorder-empty" colspan="7">No hay partidas disponibles para este Back Order.</td></tr>';
+        : '<tr><td class="ventas-backorder-empty" colspan="8">No hay partidas disponibles para este Back Order.</td></tr>';
     }
 
     function openBackorderModal() {
@@ -779,13 +851,54 @@ $chartTarget = array_fill(0, count($chartLabels), round($objetivoDiario, 2));
       if (!grid) return;
 
       grid.innerHTML = (rows || []).map((row) => `
-        <article class="ventas-quality-card" data-quality-card="${escapeHtml(row.grupo || '')}">
+        <article class="ventas-quality-card" data-quality-card="${escapeHtml(row.grupo || '')}" role="button" tabindex="0" aria-label="Ver detalle de inventario Bloom ${escapeHtml(row.grupo || '')}">
           <div class="ventas-quality-top">
             <div class="ventas-quality-key">${Number.isFinite(Number(row.grupo)) ? 'Bloom ' : ''}${escapeHtml(row.grupo || '-')}</div>
           </div>
           <div class="ventas-quality-value" data-quality-value>${ventasFormatNumber(row.toneladas, 1)} TON</div>
+          <div class="ventas-quality-detail">Pedido ${ventasFormatNumber(row.toneladas_pedido, 1)} · Disponible ${ventasFormatNumber(row.toneladas_inventario, 1)} TON</div>
         </article>
       `).join('');
+    }
+
+    function openQualityInventoryModal(group) {
+      const modal = document.getElementById('ventasQualityModal');
+      const title = document.getElementById('ventasQualityTitle');
+      const summary = document.getElementById('ventasQualitySummary');
+      const tbody = document.getElementById('ventasQualityTableBody');
+      if (!modal || !title || !summary || !tbody) return;
+
+      const quality = ventasCalidadPorProducir.find((row) => String(row.grupo) === String(group));
+      const rows = Array.isArray(quality?.inventario_detalle) ? quality.inventario_detalle : [];
+      const kilos = rows.reduce((total, row) => total + Number(row.kilos || 0), 0);
+      title.textContent = `Inventario · ${Number.isFinite(Number(group)) ? 'Bloom ' : ''}${group}`;
+      summary.textContent = `${ventasFormatNumber(rows.length, 0)} registros · ${ventasFormatNumber(kilos, 1)} kg en existencia`;
+      tbody.innerHTML = rows.length ? rows.map((row) => `
+        <tr>
+          <td><strong>${escapeHtml(row.folio || '-')}</strong></td>
+          <td>${escapeHtml(row.origen || 'Sin asignar')}</td>
+          <td>${row.cliente ? `${escapeHtml(row.cliente)}${row.cliente_id ? ` (#${escapeHtml(row.cliente_id)})` : ''}` : '—'}</td>
+          <td><span class="ventas-backorder-quality">${escapeHtml(row.calidad || '-')}</span></td>
+          <td>${escapeHtml(row.presentacion || '-')} (${ventasFormatNumber(row.kg_presentacion, 2)} kg)</td>
+          <td class="is-number">${ventasFormatNumber(row.unidades, 2)}</td>
+          <td class="is-number"><strong>${ventasFormatNumber(row.kilos, 2)}</strong></td>
+        </tr>
+      `).join('') : '<tr><td class="ventas-backorder-empty" colspan="7">No hay producto empacado disponible para esta calidad.</td></tr>';
+
+      modal.classList.add('is-open');
+      modal.setAttribute('aria-hidden', 'false');
+      document.body.classList.add('ventas-modal-open');
+      modal.querySelector('.ventas-backorder-close')?.focus();
+    }
+
+    function closeQualityInventoryModal() {
+      const modal = document.getElementById('ventasQualityModal');
+      if (!modal) return;
+      modal.classList.remove('is-open');
+      modal.setAttribute('aria-hidden', 'true');
+      if (!document.getElementById('ventasBackorderModal')?.classList.contains('is-open')) {
+        document.body.classList.remove('ventas-modal-open');
+      }
     }
 
     const ventasValueLabelPlugin = {
@@ -932,7 +1045,8 @@ $chartTarget = array_fill(0, count($chartLabels), round($objetivoDiario, 2));
         }
       }
 
-      renderCalidadPorProducir(calidadPorProducir);
+      ventasCalidadPorProducir = Array.isArray(calidadPorProducir) ? calidadPorProducir : [];
+      renderCalidadPorProducir(ventasCalidadPorProducir);
       updateVentasChart(report);
     }
 
@@ -966,10 +1080,27 @@ $chartTarget = array_fill(0, count($chartLabels), round($objetivoDiario, 2));
       element.addEventListener('click', closeBackorderModal);
     });
 
+    document.getElementById('ventasQualityGrid')?.addEventListener('click', (event) => {
+      const card = event.target.closest('[data-quality-card]');
+      if (card) openQualityInventoryModal(card.dataset.qualityCard || '');
+    });
+
+    document.getElementById('ventasQualityGrid')?.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      const card = event.target.closest('[data-quality-card]');
+      if (!card) return;
+      event.preventDefault();
+      openQualityInventoryModal(card.dataset.qualityCard || '');
+    });
+
+    document.querySelectorAll('[data-quality-close]').forEach((element) => {
+      element.addEventListener('click', closeQualityInventoryModal);
+    });
+
     document.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape' && document.getElementById('ventasBackorderModal')?.classList.contains('is-open')) {
-        closeBackorderModal();
-      }
+      if (event.key !== 'Escape') return;
+      if (document.getElementById('ventasQualityModal')?.classList.contains('is-open')) closeQualityInventoryModal();
+      else if (document.getElementById('ventasBackorderModal')?.classList.contains('is-open')) closeBackorderModal();
     });
 
     setInterval(() => {

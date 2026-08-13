@@ -94,6 +94,12 @@ $firstScalarValue = static function (array $row, array $keys, string $fallback =
   return $fallback;
 };
 
+$normalizeCustomerName = static function (string $value): string {
+  $normalized = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $value);
+  $normalized = strtoupper($normalized !== false ? $normalized : $value);
+  return trim((string)preg_replace('/[^A-Z0-9]+/', ' ', $normalized));
+};
+
 $pedidosApiConfig = (array)($config['pedidos_api'] ?? []);
 $pedidosApiUrl = trim((string)($pedidosApiConfig['url'] ?? ''));
 $pedidosDetalleApiUrl = trim((string)($pedidosApiConfig['detalle_url'] ?? ''));
@@ -153,16 +159,40 @@ if ($pedidosDetalleApiUrl !== '' && $pedidosApiKey !== '') {
     $payload = json_decode($response, true, 512, JSON_THROW_ON_ERROR);
     $pedidosDetalle = (array)($payload['data']['pedidos'] ?? []);
     foreach ($pedidosDetalle as $pedidoDetalle) {
-      $clienteData = is_array($pedidoDetalle['cliente'] ?? null) ? (array)$pedidoDetalle['cliente'] : [];
+      $pedidoData = is_array($pedidoDetalle['pedido'] ?? null) ? (array)$pedidoDetalle['pedido'] : [];
+      $pedidoIdentificador = is_array($pedidoData['identificador'] ?? null)
+        ? (array)$pedidoData['identificador']
+        : [];
+      $clienteRaw = $pedidoData['cliente'] ?? ($pedidoDetalle['cliente'] ?? null);
+      $clienteData = is_array($clienteRaw) ? (array)$clienteRaw : [];
+      $estatusRaw = $pedidoData['estatus'] ?? ($pedidoDetalle['estatus'] ?? null);
+      $estatusData = is_array($estatusRaw) ? (array)$estatusRaw : [];
       $cliente = $firstScalarValue(
         (array)$pedidoDetalle,
         ['cliente_nombre', 'nombre_cliente', 'razon_social', 'cliente'],
-        $firstScalarValue($clienteData, ['nombre', 'razon_social', 'cliente_nombre'], 'Cliente sin identificar')
+        $firstScalarValue(
+          $pedidoData,
+          ['cliente_nombre', 'nombre_cliente', 'razon_social'],
+          $firstScalarValue($clienteData, ['nombre', 'razon_social', 'cliente_nombre'], 'Cliente sin identificar')
+        )
       );
       $pedidoReferencia = $firstScalarValue(
         (array)$pedidoDetalle,
-        ['pedido', 'numero_pedido', 'folio', 'pedido_folio', 'id'],
-        '-'
+        ['numero_pedido', 'pedido_folio', 'folio', 'id'],
+        $firstScalarValue(
+          $pedidoData,
+          ['numero_pedido', 'pedido_folio'],
+          $firstScalarValue($pedidoIdentificador, ['no_ped', 'numero_pedido', 'id'], $firstScalarValue($pedidoData, ['folio', 'id'], '-'))
+        )
+      );
+      $pedidoEstatus = $firstScalarValue(
+        (array)$pedidoDetalle,
+        ['estatus', 'status', 'estatus_pedido'],
+        $firstScalarValue(
+          $pedidoData,
+          ['status', 'estatus_pedido'],
+          $firstScalarValue($estatusData, ['nombre', 'valor_alphaerp', 'codigo'], 'Sin estatus')
+        )
       );
       $partidas = (array)($pedidoDetalle['partidas'] ?? []);
       foreach ($partidas as $partidaIndex => $partida) {
@@ -180,6 +210,7 @@ if ($pedidosDetalleApiUrl !== '' && $pedidosApiKey !== '') {
 
         $backorderPartidas[] = [
           'pedido' => $pedidoReferencia,
+          'estatus' => $pedidoEstatus,
           'partida' => $partidaReferencia,
           'cliente' => $cliente,
           'clave_producto' => $clave !== '' ? $clave : '-',
@@ -227,6 +258,12 @@ $calidadPorProducir = array_map(static function (array $row): array {
     'claves' => $claves,
     'claves_label' => implode(', ', $claves),
     'cantidad' => (float)($row['cantidad'] ?? 0),
+    'toneladas_pedido' => (float)($row['toneladas'] ?? 0),
+    'toneladas_inventario_cliente' => 0.0,
+    'toneladas_inventario_libre' => 0.0,
+    'toneladas_inventario_aplicado' => 0.0,
+    'toneladas_inventario' => 0.0,
+    'inventario_detalle' => [],
     'toneladas' => (float)($row['toneladas'] ?? 0),
     'partidas' => (int)($row['partidas'] ?? 0),
     'pedidos' => (int)($row['pedidos'] ?? 0),
@@ -239,6 +276,147 @@ usort($calidadPorProducir, static function (array $a, array $b): int {
 
 try {
   $pdo = $connectMysql((array)($config['mysql_105'] ?? []));
+
+  $qualityMap = [];
+  foreach ((array)($config['inventario_calidad_bloom'] ?? []) as $quality => $group) {
+    $qualityMap[strtoupper(trim((string)$quality))] = (string)$group;
+  }
+  $specialCustomerMap = array_map('strval', (array)($config['inventario_cliente_bloom'] ?? []));
+  $qualityPosition = [];
+  $remainingByGroupCustomer = [];
+  foreach ($calidadPorProducir as $position => $qualityRow) {
+    $group = (string)($qualityRow['grupo'] ?? '');
+    $qualityPosition[$group] = $position;
+    $remainingByGroupCustomer[$group] = [];
+  }
+  foreach ($backorderPartidas as $partida) {
+    $group = (string)($partida['calidad'] ?? '');
+    if (!isset($qualityPosition[$group])) {
+      continue;
+    }
+    $customerKey = $normalizeCustomerName((string)($partida['cliente'] ?? ''));
+    $pending = max(0.0, (float)($partida['toneladas_pendientes'] ?? 0));
+    $remainingByGroupCustomer[$group][$customerKey] = ($remainingByGroupCustomer[$group][$customerKey] ?? 0.0) + $pending;
+  }
+
+  $stockSql = "
+    SELECT 'libre' AS tipo, NULL AS cte_id, NULL AS cliente,
+      UPPER(TRIM(c.cal_descripcion)) AS calidad,
+      SUM(COALESCE(pt.rr_ext_real, 0) * COALESCE(p.pres_kg, 0)) / 1000 AS toneladas
+    FROM rev_revolturas_pt pt
+    INNER JOIN rev_revolturas r ON r.rev_id = pt.rev_id
+    INNER JOIN rev_calidad c ON c.cal_id = r.cal_id
+    INNER JOIN rev_presentacion p ON p.pres_id = pt.pres_id
+    WHERE pt.rr_ext_real > 0
+      AND COALESCE(r.rev_count_etiquetado, 0) > 0
+    GROUP BY UPPER(TRIM(c.cal_descripcion))
+    UNION ALL
+    SELECT 'cliente' AS tipo, pt.cte_id, COALESCE(cl.cte_nombre, cl.cte_razon_social, '') AS cliente,
+      UPPER(TRIM(c.cal_descripcion)) AS calidad,
+      SUM(COALESCE(pt.rrc_ext_real, 0) * COALESCE(p.pres_kg, 0)) / 1000 AS toneladas
+    FROM rev_revolturas_pt_cliente pt
+    INNER JOIN rev_revolturas r ON r.rev_id = pt.rev_id
+    INNER JOIN rev_calidad c ON c.cal_id = r.cal_id
+    INNER JOIN rev_presentacion p ON p.pres_id = pt.pres_id
+    LEFT JOIN rev_clientes cl ON cl.cte_id = pt.cte_id
+    WHERE pt.rrc_ext_real > 0
+      AND COALESCE(r.rev_count_etiquetado, 0) > 0
+    GROUP BY pt.cte_id, COALESCE(cl.cte_nombre, cl.cte_razon_social, ''), UPPER(TRIM(c.cal_descripcion))
+  ";
+  $freeStockByGroup = [];
+  $totalStockByGroup = [];
+  foreach ($pdo->query($stockSql)->fetchAll() ?: [] as $stockRow) {
+    $customerId = isset($stockRow['cte_id']) ? (int)$stockRow['cte_id'] : null;
+    $group = $customerId !== null && isset($specialCustomerMap[$customerId])
+      ? $specialCustomerMap[$customerId]
+      : ($qualityMap[(string)($stockRow['calidad'] ?? '')] ?? '');
+    if ($group === '' || !isset($qualityPosition[$group])) {
+      continue;
+    }
+    $stock = max(0.0, (float)($stockRow['toneladas'] ?? 0));
+    $totalStockByGroup[$group] = ($totalStockByGroup[$group] ?? 0.0) + $stock;
+    if (($stockRow['tipo'] ?? '') === 'libre') {
+      $freeStockByGroup[$group] = ($freeStockByGroup[$group] ?? 0.0) + $stock;
+      continue;
+    }
+
+    $position = $qualityPosition[$group];
+    if ($customerId !== null && isset($specialCustomerMap[$customerId])) {
+      $availableDemand = array_sum($remainingByGroupCustomer[$group]);
+      $applied = min($stock, $availableDemand);
+      foreach ($remainingByGroupCustomer[$group] as $customerKey => $customerDemand) {
+        if ($applied <= 0) break;
+        $discount = min($customerDemand, $applied);
+        $remainingByGroupCustomer[$group][$customerKey] -= $discount;
+        $applied -= $discount;
+      }
+      $calidadPorProducir[$position]['toneladas_inventario_cliente'] += min($stock, $availableDemand);
+      continue;
+    }
+
+    $customerKey = $normalizeCustomerName((string)($stockRow['cliente'] ?? ''));
+    $customerDemand = (float)($remainingByGroupCustomer[$group][$customerKey] ?? 0.0);
+    $applied = min($stock, $customerDemand);
+    $remainingByGroupCustomer[$group][$customerKey] = max(0.0, $customerDemand - $applied);
+    $calidadPorProducir[$position]['toneladas_inventario_cliente'] += $applied;
+  }
+
+  foreach ($qualityPosition as $group => $position) {
+    $remaining = array_sum($remainingByGroupCustomer[$group]);
+    $freeApplied = min((float)($freeStockByGroup[$group] ?? 0.0), $remaining);
+    $customerApplied = (float)$calidadPorProducir[$position]['toneladas_inventario_cliente'];
+    $calidadPorProducir[$position]['toneladas_inventario_libre'] = $freeApplied;
+    $calidadPorProducir[$position]['toneladas_inventario_aplicado'] = $customerApplied + $freeApplied;
+    $calidadPorProducir[$position]['toneladas_inventario'] = (float)($totalStockByGroup[$group] ?? 0.0);
+    $calidadPorProducir[$position]['toneladas'] = max(0.0, (float)$calidadPorProducir[$position]['toneladas_pedido'] - $customerApplied - $freeApplied);
+  }
+
+  $stockDetailSql = "
+    SELECT 'Sin asignar' AS origen, NULL AS cte_id, NULL AS cliente, r.rev_folio,
+      UPPER(TRIM(c.cal_descripcion)) AS calidad, p.pres_descrip AS presentacion,
+      p.pres_kg, pt.rr_ext_real AS unidades,
+      COALESCE(pt.rr_ext_real, 0) * COALESCE(p.pres_kg, 0) AS kilos
+    FROM rev_revolturas_pt pt
+    INNER JOIN rev_revolturas r ON r.rev_id = pt.rev_id
+    INNER JOIN rev_calidad c ON c.cal_id = r.cal_id
+    INNER JOIN rev_presentacion p ON p.pres_id = pt.pres_id
+    WHERE pt.rr_ext_real > 0
+      AND COALESCE(r.rev_count_etiquetado, 0) > 0
+    UNION ALL
+    SELECT 'Asignado' AS origen, pt.cte_id, COALESCE(cl.cte_nombre, cl.cte_razon_social, 'Cliente sin identificar') AS cliente,
+      r.rev_folio, UPPER(TRIM(c.cal_descripcion)) AS calidad, p.pres_descrip AS presentacion,
+      p.pres_kg, pt.rrc_ext_real AS unidades,
+      COALESCE(pt.rrc_ext_real, 0) * COALESCE(p.pres_kg, 0) AS kilos
+    FROM rev_revolturas_pt_cliente pt
+    INNER JOIN rev_revolturas r ON r.rev_id = pt.rev_id
+    INNER JOIN rev_calidad c ON c.cal_id = r.cal_id
+    INNER JOIN rev_presentacion p ON p.pres_id = pt.pres_id
+    LEFT JOIN rev_clientes cl ON cl.cte_id = pt.cte_id
+    WHERE pt.rrc_ext_real > 0
+      AND COALESCE(r.rev_count_etiquetado, 0) > 0
+    ORDER BY calidad, origen, cliente, rev_folio
+  ";
+  foreach ($pdo->query($stockDetailSql)->fetchAll() ?: [] as $detailRow) {
+    $customerId = isset($detailRow['cte_id']) ? (int)$detailRow['cte_id'] : null;
+    $group = $customerId !== null && isset($specialCustomerMap[$customerId])
+      ? $specialCustomerMap[$customerId]
+      : ($qualityMap[(string)($detailRow['calidad'] ?? '')] ?? '');
+    if ($group === '' || !isset($qualityPosition[$group])) {
+      continue;
+    }
+    $calidadPorProducir[$qualityPosition[$group]]['inventario_detalle'][] = [
+      'folio' => (string)($detailRow['rev_folio'] ?? '-'),
+      'origen' => (string)($detailRow['origen'] ?? 'Sin asignar'),
+      'cliente_id' => $customerId,
+      'cliente' => $customerId !== null ? (string)($detailRow['cliente'] ?? 'Cliente sin identificar') : null,
+      'calidad' => (string)($detailRow['calidad'] ?? '-'),
+      'presentacion' => (string)($detailRow['presentacion'] ?? '-'),
+      'kg_presentacion' => (float)($detailRow['pres_kg'] ?? 0),
+      'unidades' => (float)($detailRow['unidades'] ?? 0),
+      'kilos' => (float)($detailRow['kilos'] ?? 0),
+    ];
+  }
+
   $tables = (array)($config['tablas'] ?? []);
   $facturas = $quoteIdentifier((string)($tables['facturas'] ?? 'facturas_sai'));
   $facturaDetalle = $quoteIdentifier((string)($tables['factura_detalle'] ?? 'factura_sai_detalle'));

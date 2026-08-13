@@ -21,7 +21,7 @@ try {
   exit;
 }
 
-$titulo = (string)($report['titulo'] ?? 'Produccion Monitoreo');
+$titulo = (string)($report['titulo'] ?? 'Avance Producción');
 $cards = (array)($report['cards'] ?? []);
 $extraccionIndicadores = (array)($report['extraccion']['indicadores'] ?? []);
 $vista = strtolower(trim((string)($_GET['vista'] ?? '')));

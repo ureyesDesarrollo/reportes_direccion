@@ -2,9 +2,12 @@
 
 declare(strict_types=1);
 
+$parameterCatalog = require __DIR__ . '/../../config/parameter_catalog.php';
+$masterConcentratorRules = (array)($parameterCatalog['concentradores'] ?? []);
+
 $avevaConfig = require __DIR__ . '/../secadores-temperatura/config.php';
 
-return [
+$concentratorConfig = [
   'titulo' => 'Concentradores',
   'timezone' => 'America/Mexico_City',
   'intervalo_actualizacion_ms' => 60000,
@@ -405,65 +408,18 @@ return [
     ],
   ],
 
-  // Agrega rangos por metrica cuando esten definidos.
-  // Ejemplo:
-  // 'semaforos' => [
-  //   'temperatura' => ['modo' => 'rango', 'verde_min' => 70, 'verde_max' => 75, 'amarillo_min' => 68, 'amarillo_max' => 77],
-  // ],
-  'semaforos' => [
-    'invertido' => [
-      'flujo' => [
-        'modo' => 'minimo',
-        'verde_min' => 60,
-        'amarillo_min' => 50,
-      ],
-    ],
-    'vacio' => [
-      'modo' => 'minimo',
-      'verde_min' => 525,
-      'amarillo_min' => 500,
-    ],
-    'concentrador_1' => [
-      'temperatura' => [
-        'modo' => 'maximo',
-        'verde_max' => 50,
-        'amarillo_max' => 55,
-      ],
-    ],
-    'concentrador_2' => [
-      'temperatura' => [
-        'modo' => 'maximo',
-        'verde_max' => 50,
-        'amarillo_max' => 55,
-      ],
-    ],
-    'concentrador_3' => [
-      'temperatura' => [
-        'modo' => 'maximo',
-        'verde_max' => 50,
-        'amarillo_max' => 55,
-      ],
-    ],
-    'concentrador_4' => [
-      'temperatura' => [
-        'modo' => 'maximo',
-        'verde_max' => 50,
-        'amarillo_max' => 55,
-      ],
-    ],
-    'solidos_entrada' => [
-      'modo' => 'rango',
-      'verde_min' => 21,
-      'verde_max' => 22,
-      'amarillo_min' => 20,
-      'amarillo_max' => 20.999999,
-    ],
-    'solidos_salida' => [
-      'modo' => 'rango',
-      'verde_min' => 38,
-      'verde_max' => 40,
-      'amarillo_min' => 35,
-      'amarillo_max' => 37.999999,
-    ],
-  ],
+  'semaforos' => [],
 ];
+
+$concentratorConfig['semaforos']['invertido'] = (array)($masterConcentratorRules['invertido'] ?? []);
+$concentratorConfig['semaforos']['vacio'] = (array)($masterConcentratorRules['vacio'] ?? []);
+$concentratorConfig['semaforos']['solidos_entrada'] = (array)($masterConcentratorRules['solidos_entrada'] ?? []);
+$concentratorConfig['semaforos']['solidos_salida'] = (array)($masterConcentratorRules['solidos_salida'] ?? []);
+foreach (['concentrador_1', 'concentrador_2', 'concentrador_3', 'concentrador_4'] as $concentratorKey) {
+  $concentratorConfig['semaforos'][$concentratorKey]['flujo'] = (array)($masterConcentratorRules['flujo'][$concentratorKey] ?? []);
+  $concentratorConfig['semaforos'][$concentratorKey]['temperatura'] = (array)($masterConcentratorRules['temperatura'] ?? []);
+  $concentratorConfig['semaforos'][$concentratorKey]['corriente_concentrador'] = (array)($masterConcentratorRules['corriente'][$concentratorKey] ?? []);
+  $concentratorConfig['semaforos'][$concentratorKey]['presion_vapor'] = (array)($masterConcentratorRules['presion_vapor'] ?? []);
+}
+
+return $concentratorConfig;

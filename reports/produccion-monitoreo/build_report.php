@@ -5,7 +5,9 @@ declare(strict_types=1);
 $config = $config ?? require __DIR__ . '/config.php';
 require_once __DIR__ . '/../../shared/helpers.php';
 
-$secadoresConfig = require __DIR__ . '/../secadores/config.php';
+$secadoresConfig = (static function (): array {
+  return require __DIR__ . '/../secadores/config.php';
+})();
 $secadoresConfig = array_replace_recursive($secadoresConfig, [
   'votators_por_tunel' => (array)($config['secadores']['votator_campos_overlay'] ?? []),
 ]);
@@ -553,10 +555,14 @@ $buildTunnelSummary = static function (array $tunnel, array $summaryConfig) use 
     if ($value !== '-' && $value !== '') {
       $value .= ' C';
     }
+    $temperatureLabel = $compactLabel((string)($cell['label'] ?? 'Temperatura'));
+    if (preg_match('/^REC\s*(\d+)$/iu', trim($temperatureLabel), $temperatureRoomMatches) === 1) {
+      $temperatureLabel = 'Temp R' . (string)$temperatureRoomMatches[1];
+    }
 
     $items[] = $makeItem(
       'temp_' . (string)($cell['field'] ?? count($items)),
-      $compactLabel((string)($cell['label'] ?? 'Temperatura')),
+      $temperatureLabel,
       $value !== '' ? $value : '-',
       (string)($cell['statusKey'] ?? 'gris'),
       (string)($cell['statusLabel'] ?? 'Sin dato'),

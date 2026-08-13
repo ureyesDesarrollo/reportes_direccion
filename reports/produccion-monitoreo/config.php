@@ -19,6 +19,8 @@ $conexionMysqlProgelProcesos = [
 ];
 
 $configSecadoresBase = require __DIR__ . '/../secadores/config.php';
+$parameterCatalog = require __DIR__ . '/../../config/parameter_catalog.php';
+$masterMonitoringRules = (array)($parameterCatalog['produccion_monitoreo'] ?? []);
 
 $configuracionSqlServerAveva = [
   'conexion' => (array)($configSecadoresBase['sqlserver'] ?? []),
@@ -89,25 +91,9 @@ $crearCampoBase = static fn(string $label, string $unit = '', array $extra = [])
 |--------------------------------------------------------------------------
 */
 
-$reglaFlujoVotator = [
-  'modo' => 'bandas',
-  'bandas' => [
-    ['max' => 10, 'estado' => 'rojo'],
-    ['min' => 10.5, 'max' => 11.499999, 'estado' => 'amarillo'],
-    ['min' => 11.5, 'max' => 12.5, 'estado' => 'verde'],
-    ['min' => 12.500001, 'max' => 13, 'estado' => 'amarillo'],
-    ['min' => 13, 'estado' => 'rojo'],
-  ],
-];
-
-$reglaSolidosVotator = [
-  'modo' => 'bandas',
-  'bandas' => [
-    ['max' => 34.999999, 'estado' => 'rojo'],
-    ['min' => 35, 'max' => 37, 'estado' => 'amarillo'],
-    ['min' => 37.000001, 'estado' => 'verde'],
-  ],
-];
+$masterVotatorRules = (array)($masterMonitoringRules['votators'] ?? []);
+$reglaFlujoVotator = (array)($masterVotatorRules['flujo'] ?? []);
+$reglaSolidosVotator = (array)($masterVotatorRules['solidos'] ?? []);
 
 $camposBaseVotator = [
   'flujo' => $crearCampoBase('Flujo'),
@@ -215,14 +201,16 @@ $camposVotatorBitacora = [
 |--------------------------------------------------------------------------
 */
 
-$configFlujoCocedor150 = [
-  'semaforo' => $crearReglaRango(150, 155, 149, 156),
-  'leyenda' => '150-155',
+$masterCookerRules = (array)($masterMonitoringRules['cocedores'] ?? []);
+
+$configFlujoCocedorChico = [
+  'semaforo' => (array)($masterCookerRules['flujo_chicos'] ?? []),
+  'leyenda' => '140-155',
 ];
 
-$configFlujoCocedor170 = [
-  'semaforo' => $crearReglaRango(170, 175, 169, 176),
-  'leyenda' => '170-175',
+$configFlujoCocedorGrande = [
+  'semaforo' => (array)($masterCookerRules['flujo_grandes'] ?? []),
+  'leyenda' => '160-175',
 ];
 
 $crearCocedor = static function (int $numero, string $flujoField, array $flujoConfig): array {
@@ -236,40 +224,40 @@ $crearCocedor = static function (int $numero, string $flujoField, array $flujoCo
 
 $camposCocedoresCabecera = [
   'temperatura_entrada' => $crearSensor('Entrada', 'COCEDORES_TEMPERATURA_DE_ENTRADA', '°C', [
-    'semaforo' => $crearReglaRango(60, 68, 59, 69),
-    'leyenda' => '60-68 °C',
+    'semaforo' => (array)($masterCookerRules['temperatura_entrada'] ?? []),
+    'leyenda' => '60-68',
   ]),
   'temperatura_salida' => $crearSensor('Salida', 'COCEDORES_TEMPERATURA_DE_SALIDA', '°C', [
-    'semaforo' => $crearReglaRango(55, 63, 54, 64),
-    'leyenda' => '55-63 °C',
+    'semaforo' => (array)($masterCookerRules['temperatura_salida'] ?? []),
+    'leyenda' => '55-63',
   ]),
 ];
 
 $camposCocedoresBitacora = [
   'ntu' => $crearCampoBitacora('NTU', 'ntu', '', [
-    'semaforo' => $crearReglaRango(60, 600, 50, 610),
+    'semaforo' => (array)($masterCookerRules['ntu'] ?? []),
     'leyenda' => '60-600',
   ]),
   'solidos' => $crearCampoBitacora('Sólidos', 'solidos', '%', [
-    'semaforo' => $crearReglaRango(2.5, 3.5, 2.3, 3.7),
-    'leyenda' => '2.5-3.5 %',
+    'semaforo' => (array)($masterCookerRules['solidos'] ?? []),
+    'leyenda' => '2.5-3.5',
   ]),
   'ph' => $crearCampoBitacora('pH', 'ph', '', [
-    'semaforo' => $crearReglaRango(3, 3.8, 2.9, 3.9),
+    'semaforo' => (array)($masterCookerRules['ph'] ?? []),
     'leyenda' => '3-3.8',
   ]),
 ];
 
 $equiposCocedores = [
-  'cocedor_1' => $crearCocedor(1, 'Flujo_cocedor_1', $configFlujoCocedor150),
-  'cocedor_2' => $crearCocedor(2, 'Flujo_cocedor_2', $configFlujoCocedor150),
-  'cocedor_3' => $crearCocedor(3, 'Flujo_cocedor_3', $configFlujoCocedor150),
-  'cocedor_4' => $crearCocedor(4, 'Flujo_cocedor_4', $configFlujoCocedor150),
-  'cocedor_5' => $crearCocedor(5, 'Flujo_cocedor_5', $configFlujoCocedor150),
-  'cocedor_6' => $crearCocedor(6, 'Flujo_cocedor_6', $configFlujoCocedor170),
-  'cocedor_7' => $crearCocedor(7, 'Flujo_cocedor_7', $configFlujoCocedor170),
-  'cocedor_8' => $crearCocedor(8, 'FLUJO_COCEDOR_8', $configFlujoCocedor170),
-  'cocedor_9' => $crearCocedor(9, 'FLUJO_COCEDOR_9', $configFlujoCocedor170),
+  'cocedor_1' => $crearCocedor(1, 'Flujo_cocedor_1', $configFlujoCocedorChico),
+  'cocedor_2' => $crearCocedor(2, 'Flujo_cocedor_2', $configFlujoCocedorChico),
+  'cocedor_3' => $crearCocedor(3, 'Flujo_cocedor_3', $configFlujoCocedorChico),
+  'cocedor_4' => $crearCocedor(4, 'Flujo_cocedor_4', $configFlujoCocedorChico),
+  'cocedor_5' => $crearCocedor(5, 'Flujo_cocedor_5', $configFlujoCocedorChico),
+  'cocedor_6' => $crearCocedor(6, 'Flujo_cocedor_6', $configFlujoCocedorGrande),
+  'cocedor_7' => $crearCocedor(7, 'Flujo_cocedor_7', $configFlujoCocedorGrande),
+  'cocedor_8' => $crearCocedor(8, 'FLUJO_COCEDOR_8', $configFlujoCocedorGrande),
+  'cocedor_9' => $crearCocedor(9, 'FLUJO_COCEDOR_9', $configFlujoCocedorGrande),
 ];
 
 /*
@@ -278,39 +266,53 @@ $equiposCocedores = [
 |--------------------------------------------------------------------------
 */
 
+$masterClarifierRules = (array)($masterMonitoringRules['clarificador'] ?? []);
+
 $camposClarificador = [
   'solidos' => $crearCampoBitacora('Sólidos', 'solidos', '%', [
-    'semaforo' => $crearReglaRango(2.5, 3.5, 2.3, 3.7),
-    'leyenda' => '2.5-3.5 %',
+    'semaforo' => (array)($masterClarifierRules['solidos'] ?? []),
+    'leyenda' => '2.5-3.5',
   ]),
-  'temperatura' => $crearCampoBitacora('Temperatura', 'temperatura', '°C'),
-  'flujo' => $crearSensor('Flujo', 'FLUJO_TANQUE_DE_BALANCE'),
-  'flujo_polimero' => $crearSensor('Flujo Polímero', 'FLUJO_POLIMERO_CLARIFICADOR'),
+  'temperatura' => $crearCampoBitacora('Temperatura', 'temperatura', '°C', [
+    'semaforo' => (array)($masterClarifierRules['temperatura'] ?? []),
+    'leyenda' => '56-63',
+  ]),
+  'flujo' => $crearSensor('Flujo', 'FLUJO_TANQUE_DE_BALANCE', '', [
+    'semaforo' => (array)($masterClarifierRules['flujo'] ?? []),
+    'leyenda' => '900-1300',
+  ]),
+  'flujo_polimero' => $crearSensor('Flujo Polímero', 'FLUJO_POLIMERO_CLARIFICADOR', '', [
+    'semaforo' => (array)($masterClarifierRules['flujo_polimero'] ?? []),
+    'leyenda' => '11-13',
+  ]),
   'ntu_entrada' => $crearCampoBitacora('NTU Entrada', 'ntu_entrada', '', [
-    'semaforo' => $crearReglaRango(50, 600, 40, 610),
-    'leyenda' => '50-600',
+    'semaforo' => (array)($masterClarifierRules['ntu_entrada'] ?? []),
+    'leyenda' => '60-600',
   ]),
   'ntu_salida' => $crearCampoBitacora('NTU Salida', 'ntu_salida', '', [
-    'semaforo' => $crearReglaRango(5, 12, 4, 13),
-    'leyenda' => '5-12',
+    'semaforo' => (array)($masterClarifierRules['ntu_salida'] ?? []),
+    'leyenda' => '5-<10',
   ]),
   'ph_entrada' => $crearCampoBitacora('pH Entrada', 'ph_entrada', '', [
-    'semaforo' => $crearReglaRango(3, 3.8, 2.9, 3.9),
+    'semaforo' => (array)($masterClarifierRules['ph_entrada'] ?? []),
     'leyenda' => '3-3.8',
   ]),
   'ph_electrodo' => $crearCampoBitacora('pH Electrodo', 'ph_electrodo', '', [
-    'semaforo' => $crearReglaRango(5.5, 6.5, 5.3, 6.7),
+    'semaforo' => (array)($masterClarifierRules['ph_electrodo'] ?? []),
     'leyenda' => '5.5-6.5',
   ]),
   'ph_salida' => $crearSensor('pH Salida', 'PH_REAL', '', [
-    'semaforo' => $crearReglaRango(5.5, 6.5, 5.3, 6.7),
+    'semaforo' => (array)($masterClarifierRules['ph_salida'] ?? []),
     'leyenda' => '5.5-6.5',
   ]),
   'ce_salida' => $crearCampoBitacora('CE Salida', 'ce_salida', '', [
-    'semaforo' => $crearReglaMaximo(6.49, 6.69),
-    'leyenda' => '< 6.5',
+    'semaforo' => (array)($masterClarifierRules['ce_salida'] ?? []),
+    'leyenda' => '<6.5',
   ]),
-  'tanq_balance' => $crearSensor('Tanque Balance', 'NIVEL_TANQUE_DE_BALANCE'),
+  'tanq_balance' => $crearSensor('Tanque Balance', 'NIVEL_TANQUE_DE_BALANCE', '', [
+    'semaforo' => (array)($masterClarifierRules['tanq_balance'] ?? []),
+    'leyenda' => '50-80',
+  ]),
 ];
 
 /*
@@ -392,8 +394,8 @@ $configuracionIntegracion = [
   'metricas' => $camposIntegracion,
 ];
 
-return [
-  'titulo' => 'Produccion Monitoreo',
+$productionMonitoringConfig = [
+  'titulo' => 'Avance Producción',
   'intervalo_actualizacion_ms' => 60000,
   'sqlserver_aveva' => $configuracionSqlServerAveva,
   'extraccion' => $configuracionExtraccion,
@@ -402,3 +404,38 @@ return [
   'clarificadores' => $configuracionClarificador,
   'integracion' => $configuracionIntegracion,
 ];
+
+$productionMonitoringConfig['secadores']['votator_campos_extra']['presion_cuajado']['rule'] = (array)($masterVotatorRules['presion_cuajado'] ?? []);
+$productionMonitoringConfig['secadores']['votator_mysql']['campos']['solidos']['semaforo'] = (array)($masterVotatorRules['solidos'] ?? []);
+foreach ((array)($productionMonitoringConfig['secadores']['votator_campos_overlay'] ?? []) as $tunnelKey => $votators) {
+  foreach (array_keys((array)$votators) as $votatorKey) {
+    if (isset($productionMonitoringConfig['secadores']['votator_campos_overlay'][$tunnelKey][$votatorKey]['campos']['flujo'])) {
+      $productionMonitoringConfig['secadores']['votator_campos_overlay'][$tunnelKey][$votatorKey]['campos']['flujo']['semaforo'] = (array)($masterVotatorRules['flujo'] ?? []);
+    }
+  }
+}
+
+foreach ((array)($productionMonitoringConfig['cocedores']['equipos'] ?? []) as $cookerKey => $cooker) {
+  $number = (int)preg_replace('/\D+/', '', (string)$cookerKey);
+  $ruleKey = $number >= 6 ? 'flujo_grandes' : 'flujo_chicos';
+  $productionMonitoringConfig['cocedores']['equipos'][$cookerKey]['flujo_semaforo'] = (array)($masterCookerRules[$ruleKey] ?? []);
+}
+foreach (['temperatura_entrada', 'temperatura_salida'] as $metricKey) {
+  $productionMonitoringConfig['cocedores']['encabezado'][$metricKey]['semaforo'] = (array)($masterCookerRules[$metricKey] ?? []);
+}
+foreach (['ntu', 'solidos', 'ph'] as $metricKey) {
+  $productionMonitoringConfig['cocedores']['metricas_mysql'][$metricKey]['semaforo'] = (array)($masterCookerRules[$metricKey] ?? []);
+}
+
+foreach ((array)($masterMonitoringRules['clarificador'] ?? []) as $metricKey => $rule) {
+  if (isset($productionMonitoringConfig['clarificadores']['metricas'][$metricKey])) {
+    $productionMonitoringConfig['clarificadores']['metricas'][$metricKey]['semaforo'] = $rule;
+  }
+}
+foreach ((array)($masterMonitoringRules['integracion'] ?? []) as $metricKey => $rule) {
+  if (isset($productionMonitoringConfig['integracion']['metricas'][$metricKey])) {
+    $productionMonitoringConfig['integracion']['metricas'][$metricKey]['semaforo'] = $rule;
+  }
+}
+
+return $productionMonitoringConfig;

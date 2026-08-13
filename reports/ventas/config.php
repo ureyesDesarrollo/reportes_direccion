@@ -32,6 +32,19 @@ return [
     ['clave' => 'GRE300BL', 'grupo' => '300', 'orden' => 300, 'descripcion' => 'GRENETINA ALIMENTICIA DORADA'],
   ],
 
+  // Relación de la calidad física del producto empacado con las cards de Bloom.
+  'inventario_calidad_bloom' => [
+    '250' => '250',
+    '280' => '280',
+    'AZUL' => '315',
+    'DORADA' => '300',
+    'VERDE' => '265',
+    'MORADA' => '230',
+  ],
+  'inventario_cliente_bloom' => [
+    251 => '300',
+  ],
+
   'mysql_105' => [
     'host' => '192.168.1.105',
     'port' => 3306,

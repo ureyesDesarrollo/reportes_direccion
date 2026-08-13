@@ -1,6 +1,9 @@
 <?php
 
-return [
+$parameterCatalog = require __DIR__ . '/../../config/parameter_catalog.php';
+$masterTemperatureRules = (array)($parameterCatalog['secadores']['temperatura_recamaras'] ?? []);
+
+$temperatureConfig = [
   'titulo' => 'Secadores / Temperatura Detalle',
   'fecha_desde' => date('Y-m-d'),
   'intervalo_actualizacion_ms' => 600000,
@@ -215,3 +218,36 @@ return [
     ],
   ],
 ];
+
+$temperatureFieldRooms = [
+  'tunel_1' => [
+    'TEMPERATURA_ZONA_1' => 1,
+    'TEMPERATURA_ZONA_2' => 2,
+    'TEMPERATURA_ZONA_3' => 3,
+    'TEMPERATURA_ZONA_4' => 4,
+    'TEMPERATURA_ZONA_5' => 5,
+    'TEMPERATURA_ZONA_6' => 6,
+    'TEMPERATURA_ZONA_7' => 7,
+    'TEMPERATURA_ZONA_8' => 8,
+    'SECADOR_AS_TEMPERATURA_ZONA_9_INFERIOR' => 9,
+  ],
+  'tunel_2' => [
+    'TEMPERATURA_RECAMARA_2_TUNEL_1' => 2,
+    'TEMPERATURA_RECAMARA_3_TUNEL_1' => 3,
+    'TEMPERATURA_RECAMARA_4_TUNEL_1' => 4,
+    'TEMPERATURA_RECAMARA_5_TUNEL_1' => 5,
+    'TEMPERATURA_RECAMARA_6_TUNEL_1' => 6,
+    'TEMPERATURA_RECAMARA_7_TUNEL_1' => 7,
+    'TEMPERATURA_RECAMARA_8_TUNEL_1' => 8,
+  ],
+];
+
+foreach ($temperatureFieldRooms as $tunnelKey => $fieldRooms) {
+  foreach ($fieldRooms as $field => $room) {
+    if (isset($masterTemperatureRules[$tunnelKey][$room])) {
+      $temperatureConfig['tuneles'][$tunnelKey]['campos'][$field]['semaforo'] = $masterTemperatureRules[$tunnelKey][$room];
+    }
+  }
+}
+
+return $temperatureConfig;

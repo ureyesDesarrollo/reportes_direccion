@@ -39,6 +39,8 @@ $normalizeItem = static function (array $item, int $order = 0): array {
     'avance_real' => max(0.0, min(100.0, $avanceReal)),
     'indice_diamante' => max(0.0, min(100.0, $indiceDiamante)),
     'beneficio_principal' => (string)($item['beneficio_principal'] ?? ''),
+    'milestone_id' => isset($item['milestone_id']) && (int)$item['milestone_id'] > 0 ? (int)$item['milestone_id'] : null,
+    'milestone_titulo' => (string)($item['milestone_titulo'] ?? ''),
     'status_key' => $statusKey,
     'status_label' => $statusLabel,
     'orden' => (int)($item['orden'] ?? $order),
@@ -217,6 +219,7 @@ $ensureSchema = static function (PDO $pdo) use ($quoteIdentifier, $areasTable, $
       avance_real DECIMAL(5,2) NOT NULL DEFAULT 0,
       indice_diamante DECIMAL(5,2) NOT NULL DEFAULT 100,
       beneficio_principal TEXT NULL,
+      milestone_id BIGINT UNSIGNED NULL,
       status_key VARCHAR(40) NOT NULL DEFAULT 'blank',
       status_label VARCHAR(60) NOT NULL DEFAULT 'Pendiente',
       orden INT NOT NULL DEFAULT 0,
@@ -224,6 +227,7 @@ $ensureSchema = static function (PDO $pdo) use ($quoteIdentifier, $areasTable, $
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       INDEX idx_section_order (section_id, orden),
+      INDEX idx_proyectos_items_milestone (milestone_id),
       CONSTRAINT fk_proyectos_items_section
         FOREIGN KEY (section_id) REFERENCES {$sections} (id)
         ON DELETE CASCADE
@@ -240,12 +244,21 @@ $ensureSchema = static function (PDO $pdo) use ($quoteIdentifier, $areasTable, $
     'avance_real' => "DECIMAL(5,2) NOT NULL DEFAULT 0 AFTER avance_planeado",
     'indice_diamante' => "DECIMAL(5,2) NOT NULL DEFAULT 100 AFTER avance_real",
     'beneficio_principal' => "TEXT NULL AFTER indice_diamante",
+    'milestone_id' => "BIGINT UNSIGNED NULL AFTER beneficio_principal",
   ];
 
   foreach ($columnDefinitions as $column => $definition) {
     if (!isset($existingColumns[$column])) {
       $pdo->exec("ALTER TABLE {$items} ADD COLUMN {$column} {$definition}");
     }
+  }
+
+  $existingIndexes = [];
+  foreach ($pdo->query("SHOW INDEX FROM {$items}") ?: [] as $index) {
+    $existingIndexes[(string)($index['Key_name'] ?? '')] = true;
+  }
+  if (!isset($existingIndexes['idx_proyectos_items_milestone'])) {
+    $pdo->exec("ALTER TABLE {$items} ADD INDEX idx_proyectos_items_milestone (milestone_id)");
   }
 };
 
@@ -456,7 +469,7 @@ $normalizeProjectSections = static function (PDO $pdo) use ($quoteIdentifier, $a
   }
 };
 
-$fetchFromDatabase = static function (PDO $pdo) use ($quoteIdentifier, $areasTable, $sectionsTable, $itemsTable, $normalizeItem, $sortProjectItems, $attachAreaProjects): array {
+$fetchFromDatabase = static function (PDO $pdo, array $validMilestones = []) use ($quoteIdentifier, $areasTable, $sectionsTable, $itemsTable, $normalizeItem, $sortProjectItems, $attachAreaProjects): array {
   $areas = $quoteIdentifier($areasTable);
   $sections = $quoteIdentifier($sectionsTable);
   $items = $quoteIdentifier($itemsTable);
@@ -473,6 +486,8 @@ $fetchFromDatabase = static function (PDO $pdo) use ($quoteIdentifier, $areasTab
 
   $itemsBySection = [];
   foreach ($itemRows as $item) {
+    $linkedMilestoneId = (int)($item['milestone_id'] ?? 0);
+    $linkedMilestone = $validMilestones[$linkedMilestoneId] ?? null;
     $itemsBySection[(int)$item['section_id']][] = $normalizeItem([
       'id' => $item['id'] ?? null,
       'nombre' => $item['nombre'] ?? '',
@@ -482,9 +497,13 @@ $fetchFromDatabase = static function (PDO $pdo) use ($quoteIdentifier, $areasTab
       'inicio' => $item['inicio'] ?? '',
       'cierre' => $item['cierre'] ?? '',
       'avance_planeado' => $item['avance_planeado'] ?? 0,
-      'avance_real' => $item['avance_real'] ?? 0,
+      'avance_real' => is_array($linkedMilestone)
+        ? (float)($linkedMilestone['avance_real_actividades'] ?? 0)
+        : ($item['avance_real'] ?? 0),
       'indice_diamante' => $item['indice_diamante'] ?? 100,
       'beneficio_principal' => $item['beneficio_principal'] ?? '',
+      'milestone_id' => is_array($linkedMilestone) ? $linkedMilestoneId : null,
+      'milestone_titulo' => is_array($linkedMilestone) ? (string)($linkedMilestone['titulo'] ?? '') : '',
       'status_key' => $item['status_key'] ?? 'blank',
       'status_label' => $item['status_label'] ?? 'Pendiente',
       'orden' => $item['orden'] ?? 0,
@@ -530,7 +549,39 @@ try {
   $seedDatabase($pdo);
   $syncSeedStructure($pdo);
   $normalizeProjectSections($pdo);
-  [$areas, $totalProjects] = $fetchFromDatabase($pdo);
+  $validMilestones = [];
+  try {
+    $milestonesPdo = conectar((array)($dbConfig[(string)($config['milestones_database_key'] ?? 'hoshin_kanri')] ?? []));
+    $empresaId = (int)($config['empresa_id'] ?? 0);
+    $milestoneStmt = $milestonesPdo->prepare("
+      SELECT
+        m.milestone_id,
+        m.titulo,
+        CASE
+          WHEN COUNT(DISTINCT t.tarea_id) = 0 THEN 0
+          ELSE ROUND(
+            COUNT(DISTINCT CASE WHEN t.completada = 1 THEN t.tarea_id END)
+            / COUNT(DISTINCT t.tarea_id) * 100,
+            2
+          )
+        END AS avance_real_actividades
+      FROM milestones m
+      INNER JOIN estrategias e ON e.estrategia_id = m.estrategia_id
+      LEFT JOIN tareas t ON t.milestone_id = m.milestone_id
+      WHERE (:empresa_id = 0 OR e.empresa_id = :empresa_id_match)
+      GROUP BY m.milestone_id, m.titulo
+    ");
+    $milestoneStmt->execute([
+      'empresa_id' => $empresaId,
+      'empresa_id_match' => $empresaId,
+    ]);
+    foreach ($milestoneStmt->fetchAll() ?: [] as $milestone) {
+      $validMilestones[(int)$milestone['milestone_id']] = $milestone;
+    }
+  } catch (Throwable $e) {
+    $warnings[] = 'No se pudo validar la ligadura con los milestones de Hoshin Kanri.';
+  }
+  [$areas, $totalProjects] = $fetchFromDatabase($pdo, $validMilestones);
   $source = 'database';
 } catch (Throwable $e) {
   [$areas, $totalProjects] = $buildFromSeed();

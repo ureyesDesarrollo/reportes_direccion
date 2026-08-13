@@ -78,10 +78,10 @@ $semaforoTarimas = static function ($value): string {
   }
 
   $number = (float)$value;
-  if ($number < 20) {
+  if ($number < 21) {
     return 'avance-semaforo-rojo';
   }
-  if ($number < 22) {
+  if ($number < 24) {
     return 'avance-semaforo-amarillo';
   }
 
@@ -841,8 +841,8 @@ $semaforoDeficit = static function ($value): string {
       const semaforoTarimas = (value) => {
         const number = asNumber(value);
         if (number === null) return '';
-        if (number < 20) return 'avance-semaforo-rojo';
-        if (number < 22) return 'avance-semaforo-amarillo';
+        if (number < 21) return 'avance-semaforo-rojo';
+        if (number < 24) return 'avance-semaforo-amarillo';
         return 'avance-semaforo-verde';
       };
       const semaforoTarimasPeriodo = (value, objetivo, amarilloMin) => {

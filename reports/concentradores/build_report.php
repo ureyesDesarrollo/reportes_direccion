@@ -67,6 +67,24 @@ $evaluateMetricStatus = static function (?float $value, array $rule): array {
   $yellowMin = isset($rule['amarillo_min']) && is_numeric($rule['amarillo_min']) ? (float)$rule['amarillo_min'] : null;
   $yellowMax = isset($rule['amarillo_max']) && is_numeric($rule['amarillo_max']) ? (float)$rule['amarillo_max'] : null;
 
+  if ($mode === 'bandas') {
+    $statuses = [
+      'verde' => ['label' => 'Optimo', 'key' => 'verde', 'color' => '#2e8b57', 'class' => 'ok'],
+      'amarillo' => ['label' => 'Atencion', 'key' => 'amarillo', 'color' => '#facc15', 'class' => 'warning'],
+      'rojo' => ['label' => 'Critico', 'key' => 'rojo', 'color' => '#c94436', 'class' => 'danger'],
+    ];
+
+    foreach ((array)($rule['bandas'] ?? []) as $band) {
+      $min = isset($band['min']) && is_numeric($band['min']) ? (float)$band['min'] : null;
+      $max = isset($band['max']) && is_numeric($band['max']) ? (float)$band['max'] : null;
+      if (($min === null || $value >= $min) && ($max === null || $value <= $max)) {
+        return $statuses[(string)($band['estado'] ?? '')] ?? $statuses['rojo'];
+      }
+    }
+
+    return $statuses['rojo'];
+  }
+
   if ($mode === 'minimo') {
     if ($greenMin !== null && $value >= $greenMin) {
       return ['label' => 'Optimo', 'key' => 'verde', 'color' => '#2e8b57', 'class' => 'ok'];
@@ -397,7 +415,7 @@ foreach ($concentratorConfig as $concentratorKey => $concentrator) {
       'source' => $source,
       'source_column' => $sourceColumn,
       'status' => $status,
-      'leyenda' => (string)($metric['leyenda'] ?? ''),
+      'leyenda' => (string)($metric['leyenda'] ?? ($rule['leyenda'] ?? '')),
       'history' => $aplicarFo ? [] : $historyRows,
       'trends' => [
         'month' => (!$aplicarFo && $source === 'sqlserver' && $sourceColumn !== '') ? (array)($flowMonthHistoryByField[$sourceColumn] ?? []) : [],

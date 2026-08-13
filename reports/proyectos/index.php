@@ -24,6 +24,7 @@ $titulo = (string)($report['titulo'] ?? 'Tablero Directivo de Proyectos');
 $areas = (array)($report['areas'] ?? []);
 $meta = (array)($report['meta'] ?? []);
 $version = (int)($report['version'] ?? time());
+$milestoneDetailPath = (string)($config['milestone_detail_path'] ?? '../proyectos-milestones/detail.php');
 
 $e = static fn($value): string => htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
 $priorityClass = static fn($key): string => in_array((string)$key, ['very-high', 'high', 'medium', 'low'], true) ? (string)$key : 'blank';
@@ -325,6 +326,19 @@ $diamondClass = static function ($value): string {
     .col-project {
       width: 24%;
       font-weight: 800;
+    }
+
+    .project-link {
+      color: #1d4ed8;
+      text-decoration-color: #93c5fd;
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+    }
+
+    .project-link:hover,
+    .project-link:focus-visible {
+      color: #1e40af;
+      text-decoration-color: currentColor;
     }
 
     .col-priority {
@@ -671,7 +685,13 @@ $diamondClass = static function ($value): string {
                         <?php $doneDividerShown = true; ?>
                       <?php endif; ?>
                       <tr>
-                        <td class="col-project"><?= $e($item['nombre'] ?? '') ?></td>
+                        <td class="col-project">
+                          <?php if ((int)($item['milestone_id'] ?? 0) > 0): ?>
+                            <a class="project-link" href="<?= $e($milestoneDetailPath . '?' . http_build_query(['milestone' => (int)$item['milestone_id'], 'origen' => 'proyectos'])) ?>" title="Ver detalle del milestone: <?= $e($item['milestone_titulo'] ?? '') ?>"><?= $e($item['nombre'] ?? '') ?></a>
+                          <?php else: ?>
+                            <?= $e($item['nombre'] ?? '') ?>
+                          <?php endif; ?>
+                        </td>
                         <td class="col-priority">
                           <?php if (!empty($item['prioridad_label'])): ?>
                             <span class="priority <?= $e($priorityClass($item['prioridad_key'] ?? '')) ?>"><?= $e($item['prioridad_label']) ?></span>

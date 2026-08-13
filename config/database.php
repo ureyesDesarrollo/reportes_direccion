@@ -24,4 +24,12 @@ return [
     'pass' => getenv('HOSHIN_DB_PASS') ?: 'root',
     'charset' => getenv('HOSHIN_DB_CHARSET') ?: 'utf8mb4',
   ],
+  'hoshin_kanri' => [
+    'host' => getenv('HOSHIN_KANRI_DB_HOST') ?: (getenv('HOSHIN_DB_HOST') ?: 'sis_preparacion-db-1'),
+    'port' => (int)(getenv('HOSHIN_KANRI_DB_PORT') ?: (getenv('HOSHIN_DB_PORT') ?: 3306)),
+    'dbname' => getenv('HOSHIN_KANRI_DB_NAME') ?: (getenv('HOSHIN_DB_NAME') ?: 'hoshin_kanri'),
+    'user' => getenv('HOSHIN_KANRI_DB_USER') ?: (getenv('HOSHIN_DB_USER') ?: 'root'),
+    'pass' => getenv('HOSHIN_KANRI_DB_PASS') ?: (getenv('HOSHIN_DB_PASS') ?: 'root'),
+    'charset' => getenv('HOSHIN_KANRI_DB_CHARSET') ?: (getenv('HOSHIN_DB_CHARSET') ?: 'utf8mb4'),
+  ],
 ];

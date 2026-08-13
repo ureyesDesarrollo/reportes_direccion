@@ -2630,8 +2630,12 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
       };
 
       const renderInlineMetrics = (metrics, tunnelKey, groupMode = 'main') => {
-        const entries = Object.entries(metrics || {}).filter(([, metric]) => {
+        const entries = Object.entries(metrics || {}).filter(([metricKey, metric]) => {
           if (metric.hidden) {
+            return false;
+          }
+
+          if (['verificacion_hum_penultima', 'verificacion_hum_ultima', 'verificacion_hum_relativa_cam5', 'verificacion_flujo', 'verificacion_hz', 'verificacion_rc9'].includes(metricKey)) {
             return false;
           }
 
@@ -2662,13 +2666,21 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
               const displayGroupName = groupName === 'Verificación de secado'
                 ? 'Verificación secado'
                 : groupName;
-              const targetSlots = metricGroupSlots(groupName, groupMetrics.length);
+              const targetSlots = groupClass === 'verificacion-de-secado'
+                ? groupMetrics.length
+                : metricGroupSlots(groupName, groupMetrics.length);
               const placeholders = renderMetricPlaceholders(targetSlots - groupMetrics.length);
               return `
                 <div class="secadores-exec-inline-group">
 	                  <div class="secadores-exec-inline-group-title">${escapeHtml(displayGroupName)}</div>
 	                  <div class="secadores-exec-inline-group-items is-${escapeHtml(groupClass)}">
-	                    ${groupMetrics.map(([metricKey, metric]) => renderInlineMetric(groupName, metricKey, metric, tunnelKey)).join('')}
+	                    ${groupMetrics.map(([metricKey, metric]) => renderInlineMetric(
+                        groupName,
+                        metricKey,
+                        metric,
+                        tunnelKey,
+                        metricRangeRowsForDisplay(metricKey, metric, tunnelKey)
+                      )).join('')}
                       ${placeholders}
 	                  </div>
                 </div>
@@ -2833,6 +2845,9 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
       };
 
       const renderRoomClimate = (metrics, cells, tunnelKey) => {
+        const penultimateCookieHumidity = metrics?.verificacion_hum_penultima || null;
+        const cookieHumidity = metrics?.verificacion_hum_ultima || null;
+        const relativeHumidityRoom5 = metrics?.verificacion_hum_relativa_cam5 || null;
         const humidityByRoom = new Map();
         Object.entries(metrics || {}).forEach(([metricKey, metric]) => {
           if (metric.hidden || metricGroupClass(metric.group || 'General') !== 'humedades') {
@@ -2881,6 +2896,33 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
                     compactMetricRangeRows(temperature)
                   )
                   : '<div class="secadores-exec-zone is-placeholder" aria-hidden="true"></div>';
+                const cookieHumidityCard = room === 9 && cookieHumidity
+                  ? renderInlineMetric(
+                    'Humedades',
+                    'verificacion_hum_ultima',
+                    { ...cookieHumidity, label: 'Hum. Galleta', timestampLabel: '' },
+                    tunnelKey,
+                    compactMetricRangeRows(cookieHumidity)
+                  )
+                  : '';
+                const penultimateCookieHumidityCard = room === 8 && penultimateCookieHumidity
+                  ? renderInlineMetric(
+                    'Humedades',
+                    'verificacion_hum_penultima',
+                    { ...penultimateCookieHumidity, label: 'Hum. Galleta', timestampLabel: '' },
+                    tunnelKey,
+                    compactMetricRangeRows(penultimateCookieHumidity)
+                  )
+                  : '';
+                const relativeHumidityCard = room === 5 && relativeHumidityRoom5
+                  ? renderInlineMetric(
+                    'Humedades',
+                    'verificacion_hum_relativa_cam5',
+                    { ...relativeHumidityRoom5, label: 'Hum. Rel.', timestampLabel: '' },
+                    tunnelKey,
+                    compactMetricRangeRows(relativeHumidityRoom5)
+                  )
+                  : '';
 
                 return `
                   <section class="secadores-exec-room-climate">
@@ -2888,6 +2930,9 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
                     <div class="secadores-exec-room-climate-cards">
                       ${humidityCard}
                       ${temperatureCard}
+                      ${cookieHumidityCard}
+                      ${penultimateCookieHumidityCard}
+                      ${relativeHumidityCard}
                     </div>
                   </section>
                 `;
@@ -2930,7 +2975,8 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
               : 'gris';
             const min = formatVotatorRangeNumber(band?.min);
             const max = formatVotatorRangeNumber(band?.max);
-            const range = min && max ? `${min} – ${max}` : (min ? `≥ ${min}` : (max ? `≤ ${max}` : 'Sin límite'));
+            const explicitRange = String(band?.leyenda || '').trim();
+            const range = explicitRange || (min && max ? `${min} – ${max}` : (min ? `≥ ${min}` : (max ? `≤ ${max}` : 'Sin límite')));
             return { status, range };
           });
           return bandDefinitions.map((band) => makeRow(band.status, band.range));
@@ -3017,6 +3063,72 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
             range: definedRanges.length ? definedRanges.join(' o ') : fallback,
           };
         });
+      };
+
+      const metricRangeRowsForDisplay = (metricKey, field, tunnelKey) => {
+        if (metricKey === 'caudal_aire') {
+          const rule = field?.rule && typeof field.rule === 'object' ? field.rule : {};
+          const compactThousands = (value) => {
+            const number = Number(value);
+            return Number.isFinite(number)
+              ? `${(number / 1000).toLocaleString('es-MX', { maximumFractionDigits: 1 })}k`
+              : '';
+          };
+          const compactNumber = (value) => {
+            const number = Number(value);
+            return Number.isFinite(number)
+              ? (number / 1000).toLocaleString('es-MX', { maximumFractionDigits: 1 })
+              : '';
+          };
+          const greenMin = compactNumber(rule.verde_min);
+          const greenMax = compactNumber(rule.verde_max);
+          const yellowMin = compactNumber(rule.amarillo_min);
+          const yellowMax = compactNumber(rule.amarillo_max);
+
+          if (tunnelKey === 'tunel_1') {
+            return [
+              {
+                status: 'verde',
+                label: 'Verde (objetivo)',
+                range: `≥${compactThousands(rule.verde_min)}`,
+              },
+              {
+                status: 'amarillo',
+                label: 'Amarillo',
+                range: `${yellowMin}–${greenMin}k`,
+              },
+              {
+                status: 'rojo',
+                label: 'Rojo',
+                range: `<${compactThousands(rule.amarillo_min)}`,
+              },
+            ];
+          }
+
+          if (tunnelKey !== 'tunel_2') {
+            return compactMetricRangeRows(field);
+          }
+
+          return [
+            {
+              status: 'verde',
+              label: 'Verde (objetivo)',
+              range: greenMin && greenMax ? `${greenMin}–${greenMax}k` : 'Objetivo',
+            },
+            {
+              status: 'amarillo',
+              label: 'Amarillo',
+              range: `${yellowMin}–${greenMin}k / ${greenMax}–${yellowMax}k`,
+            },
+            {
+              status: 'rojo',
+              label: 'Rojo',
+              range: `<${compactThousands(rule.amarillo_min)} / >${compactThousands(rule.amarillo_max)}`,
+            },
+          ];
+        }
+
+        return compactMetricRangeRows(field);
       };
 
       const renderVotators = (votators, tunnelKey) => {

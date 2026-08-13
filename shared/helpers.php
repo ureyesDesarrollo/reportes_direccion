@@ -53,24 +53,44 @@ function getCache(string $key): ?array
     if (!file_exists($file)) {
         return null;
     }
-    $data = unserialize(file_get_contents($file));
-    if ($data['expires'] < time()) {
-        unlink($file);
+    $payload = @file_get_contents($file);
+    if ($payload === false || $payload === '') {
         return null;
     }
-    return $data['value'];
+    $data = @unserialize($payload, ['allowed_classes' => false]);
+    if (!is_array($data) || !array_key_exists('expires', $data) || !array_key_exists('value', $data)) {
+        return null;
+    }
+    if ((int)$data['expires'] < time()) {
+        @unlink($file);
+        return null;
+    }
+    return is_array($data['value']) ? $data['value'] : null;
 }
 
 function setCache(string $key, array $value, int $ttlSeconds = 3600): void
 {
     $cacheDir = __DIR__ . '/../cache';
     if (!is_dir($cacheDir)) {
-        mkdir($cacheDir, 0755, true);
+        if (!@mkdir($cacheDir, 0755, true) && !is_dir($cacheDir)) {
+            return;
+        }
+    }
+    if (!is_writable($cacheDir)) {
+        return;
     }
     $file = $cacheDir . '/' . md5($key) . '.cache';
     $data = [
         'value' => $value,
         'expires' => time() + $ttlSeconds,
     ];
-    file_put_contents($file, serialize($data));
+    $tempFile = $file . '.tmp.' . getmypid() . '.' . str_replace('.', '', uniqid('', true));
+    $written = @file_put_contents($tempFile, serialize($data), LOCK_EX);
+    if ($written === false) {
+        @unlink($tempFile);
+        return;
+    }
+    if (!@rename($tempFile, $file)) {
+        @unlink($tempFile);
+    }
 }

@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS proyectos_items (
   avance_real DECIMAL(5,2) NOT NULL DEFAULT 0,
   indice_diamante DECIMAL(5,2) NOT NULL DEFAULT 100,
   beneficio_principal TEXT NULL,
+  milestone_id BIGINT UNSIGNED NULL,
   status_key VARCHAR(40) NOT NULL DEFAULT 'blank',
   status_label VARCHAR(60) NOT NULL DEFAULT 'Pendiente',
   orden INT NOT NULL DEFAULT 0,
@@ -44,6 +45,7 @@ CREATE TABLE IF NOT EXISTS proyectos_items (
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_section_order (section_id, orden),
+  INDEX idx_proyectos_items_milestone (milestone_id),
   CONSTRAINT fk_proyectos_items_section
     FOREIGN KEY (section_id) REFERENCES proyectos_secciones (id)
     ON DELETE CASCADE

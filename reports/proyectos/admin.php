@@ -71,6 +71,8 @@ $message = '';
 $error = '';
 $sectionRows = [];
 $itemRows = [];
+$milestoneRows = [];
+$milestonesById = [];
 $groupedSections = [];
 
 try {
@@ -80,6 +82,25 @@ try {
   $areasSql = $quoteIdentifier($areasTable);
   $sectionsSql = $quoteIdentifier($sectionsTable);
   $itemsSql = $quoteIdentifier($itemsTable);
+  $empresaId = (int)($config['empresa_id'] ?? 0);
+  $milestonesPdo = conectar((array)($dbConfig[(string)($config['milestones_database_key'] ?? 'hoshin_kanri')] ?? []));
+
+  $milestoneStmt = $milestonesPdo->prepare("
+    SELECT m.milestone_id, m.titulo, e.titulo AS estrategia,
+      (SELECT COUNT(*) FROM tareas t WHERE t.milestone_id = m.milestone_id) AS total_tareas
+    FROM milestones m
+    INNER JOIN estrategias e ON e.estrategia_id = m.estrategia_id
+    WHERE (:empresa_id = 0 OR e.empresa_id = :empresa_id_match)
+    ORDER BY e.titulo, m.titulo, m.milestone_id
+  ");
+  $milestoneStmt->execute([
+    'empresa_id' => $empresaId,
+    'empresa_id_match' => $empresaId,
+  ]);
+  $milestoneRows = $milestoneStmt->fetchAll() ?: [];
+  foreach ($milestoneRows as $milestone) {
+    $milestonesById[(int)$milestone['milestone_id']] = $milestone;
+  }
 
   $renumberSection = static function (PDO $pdo, string $itemsSql, int $sectionId): void {
     $rows = $pdo->prepare("SELECT id FROM {$itemsSql} WHERE section_id = :section_id AND activo = 1 ORDER BY orden, id");
@@ -191,6 +212,25 @@ try {
       $priorityLabel = $clean($_POST['prioridad_label'] ?? '', 40);
       $statusKey = $clean($_POST['status_key'] ?? 'blank', 40);
       $statusLabel = $clean($_POST['status_label'] ?? '', 60);
+      $milestoneId = $safeInt($_POST['milestone_id'] ?? 0);
+
+      if ($milestoneId > 0) {
+        $milestoneCheck = $milestonesPdo->prepare("
+          SELECT COUNT(*)
+          FROM milestones m
+          INNER JOIN estrategias e ON e.estrategia_id = m.estrategia_id
+          WHERE m.milestone_id = :milestone_id
+            AND (:empresa_id = 0 OR e.empresa_id = :empresa_id_match)
+        ");
+        $milestoneCheck->execute([
+          'milestone_id' => $milestoneId,
+          'empresa_id' => $empresaId,
+          'empresa_id_match' => $empresaId,
+        ]);
+        if ((int)$milestoneCheck->fetchColumn() === 0) {
+          throw new RuntimeException('El milestone seleccionado no existe en Hoshin Kanri.');
+        }
+      }
 
       if ($priorityKey !== '' && $priorityLabel === '') {
         $priorityLabel = $defaultPriorityLabel($priorityKey);
@@ -226,6 +266,7 @@ try {
         'avance_real' => $safePercent($_POST['avance_real'] ?? 0),
         'indice_diamante' => $safePercent($_POST['indice_diamante'] ?? 100, 100.0),
         'beneficio_principal' => $clean($_POST['beneficio_principal'] ?? '', 1200),
+        'milestone_id' => $milestoneId > 0 ? $milestoneId : null,
         'status_key' => $statusKey,
         'status_label' => $statusLabel,
         'orden' => $safeInt($_POST['orden'] ?? 0),
@@ -255,6 +296,7 @@ try {
               avance_real = :avance_real,
               indice_diamante = :indice_diamante,
               beneficio_principal = :beneficio_principal,
+              milestone_id = :milestone_id,
               status_key = :status_key,
               status_label = :status_label,
               orden = :orden
@@ -266,9 +308,9 @@ try {
       } else {
         $stmt = $pdo->prepare("
           INSERT INTO {$itemsSql}
-            (section_id, nombre, prioridad_key, prioridad_label, responsable, inicio, cierre, avance_planeado, avance_real, indice_diamante, beneficio_principal, status_key, status_label, orden)
+            (section_id, nombre, prioridad_key, prioridad_label, responsable, inicio, cierre, avance_planeado, avance_real, indice_diamante, beneficio_principal, milestone_id, status_key, status_label, orden)
           VALUES
-            (:section_id, :nombre, :prioridad_key, :prioridad_label, :responsable, :inicio, :cierre, :avance_planeado, :avance_real, :indice_diamante, :beneficio_principal, :status_key, :status_label, :orden)
+            (:section_id, :nombre, :prioridad_key, :prioridad_label, :responsable, :inicio, :cierre, :avance_planeado, :avance_real, :indice_diamante, :beneficio_principal, :milestone_id, :status_key, :status_label, :orden)
         ");
         $stmt->execute($payload);
         $message = 'Proyecto creado.';
@@ -557,6 +599,23 @@ try {
       line-height: 1.35;
     }
 
+    .milestone-picker {
+      display: grid;
+      gap: 6px;
+    }
+
+    .milestone-search {
+      min-height: 34px;
+      background: #ffffff;
+    }
+
+    .milestone-result-count {
+      color: #64748b;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: none;
+    }
+
     .section-list {
       display: grid;
       gap: 16px;
@@ -736,6 +795,15 @@ try {
           <label>Responsable
             <input name="responsable">
           </label>
+          <label>Milestone en Hoshin Kanri
+            <span class="milestone-picker" data-milestone-picker>
+              <input class="milestone-search" type="search" placeholder="Buscar por estrategia o milestone..." autocomplete="off" data-milestone-search>
+              <select name="milestone_id" data-milestone-select>
+                <option value="0">Sin milestone vinculado</option>
+              </select>
+              <small class="milestone-result-count" data-milestone-count></small>
+            </span>
+          </label>
           <label>Inicio
             <input name="inicio" placeholder="11-Jun">
           </label>
@@ -832,6 +900,19 @@ try {
                     <label>Responsable
                       <input name="responsable" value="<?= $e($item['responsable']) ?>">
                     </label>
+                    <label>Milestone en Hoshin Kanri
+                      <span class="milestone-picker" data-milestone-picker>
+                        <input class="milestone-search" type="search" placeholder="Buscar por estrategia o milestone..." autocomplete="off" data-milestone-search>
+                        <select name="milestone_id" data-milestone-select>
+                          <option value="0">Sin milestone vinculado</option>
+                          <?php $selectedMilestone = $milestonesById[(int)($item['milestone_id'] ?? 0)] ?? null; ?>
+                          <?php if (is_array($selectedMilestone)): ?>
+                            <option value="<?= $e($selectedMilestone['milestone_id']) ?>" selected><?= $e($selectedMilestone['estrategia'] . ' — ' . $selectedMilestone['titulo'] . ' (' . $selectedMilestone['total_tareas'] . ' tareas)') ?></option>
+                          <?php endif; ?>
+                        </select>
+                        <small class="milestone-result-count" data-milestone-count></small>
+                      </span>
+                    </label>
                     <label>Inicio
                       <input name="inicio" value="<?= $e($item['inicio']) ?>">
                     </label>
@@ -909,6 +990,64 @@ try {
 
       bindDefaultLabel('prioridad_key', 'prioridad_label');
       bindDefaultLabel('status_key', 'status_label');
+
+      const normalizeSearch = (value) => String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLocaleLowerCase('es')
+        .trim();
+
+      const milestoneCatalog = <?= json_encode(array_map(static fn(array $milestone): array => [
+                                    'value' => (string)$milestone['milestone_id'],
+                                    'label' => (string)$milestone['estrategia'] . ' — ' . (string)$milestone['titulo'] . ' (' . (string)$milestone['total_tareas'] . ' tareas)',
+                                  ], $milestoneRows), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+      const searchableMilestones = milestoneCatalog.map((milestone) => ({
+        ...milestone,
+        search: normalizeSearch(`${milestone.value} ${milestone.label}`),
+      }));
+
+      document.querySelectorAll('[data-milestone-picker]').forEach((picker) => {
+        const search = picker.querySelector('[data-milestone-search]');
+        const select = picker.querySelector('[data-milestone-select]');
+        const count = picker.querySelector('[data-milestone-count]');
+        if (!search || !select) return;
+
+        const emptyOption = select.options[0].cloneNode(true);
+        const renderMilestones = () => {
+          const term = normalizeSearch(search.value);
+          const selectedValue = select.value;
+          const matches = term === ''
+            ? searchableMilestones
+            : searchableMilestones.filter((milestone) => milestone.search.includes(term) || milestone.value === selectedValue);
+
+          select.replaceChildren(emptyOption.cloneNode(true));
+          matches.forEach((milestone) => {
+            const option = document.createElement('option');
+            option.value = milestone.value;
+            option.textContent = milestone.label;
+            option.selected = milestone.value === selectedValue;
+            select.appendChild(option);
+          });
+
+          if (selectedValue === '0') {
+            select.value = '0';
+          }
+          if (count) {
+            count.textContent = term === ''
+              ? `${searchableMilestones.length} milestones disponibles`
+              : `${matches.length} resultado${matches.length === 1 ? '' : 's'}`;
+          }
+        };
+
+        search.addEventListener('input', renderMilestones);
+        search.addEventListener('keydown', (event) => {
+          if (event.key === 'ArrowDown') {
+            event.preventDefault();
+            select.focus();
+          }
+        });
+        renderMilestones();
+      });
 
       const scrollKey = 'proyectos_admin_scroll_y';
       document.querySelectorAll('form[method="post"]').forEach((form) => {

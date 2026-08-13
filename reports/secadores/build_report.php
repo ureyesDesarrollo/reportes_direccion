@@ -289,6 +289,11 @@ $buildSemaphoreRangeLabel = static function (array $rule, string $unit = '', str
 
     foreach ($bands as $band) {
       $status = ucfirst((string)($band['estado'] ?? 'Rango'));
+      $explicitLabel = trim((string)($band['leyenda'] ?? ''));
+      if ($explicitLabel !== '') {
+        $parts[] = $status . ' ' . $explicitLabel;
+        continue;
+      }
       $hasMin = isset($band['min']) && is_numeric($band['min']);
       $hasMax = isset($band['max']) && is_numeric($band['max']);
 
@@ -347,8 +352,8 @@ $buildSemaphoreRangeLabel = static function (array $rule, string $unit = '', str
     $yellowMax = isset($rule['amarillo_max']) && is_numeric($rule['amarillo_max']) ? (float)$rule['amarillo_max'] : null;
 
     if ($greenMax !== null && $yellowMax !== null) {
-      $parts[] = 'Verde <' . $formatRangeValue($greenMax);
-      $parts[] = 'Amarillo ' . $formatRangeValue($greenMax) . '-' . $formatRangeValue($yellowMax);
+      $parts[] = 'Verde ≤' . $formatRangeValue($greenMax);
+      $parts[] = 'Amarillo >' . $formatRangeValue($greenMax) . '-' . $formatRangeValue($yellowMax);
       $parts[] = 'Rojo >' . $formatRangeValue($yellowMax);
     }
   }
