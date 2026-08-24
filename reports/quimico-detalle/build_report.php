@@ -5,6 +5,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../shared/helpers.php';
 require_once __DIR__ . '/../../shared/ReportHelpers.php';
 require_once __DIR__ . '/../../shared/ReportEngine.php';
+require_once __DIR__ . '/../../shared/ChemicalMovementsApi.php';
 
 /*
 |--------------------------------------------------------------------------
@@ -78,49 +79,25 @@ if ($cached !== null) {
   return $cached;
 }
 
-$state = ReportEngine::createContext($config, $appConfig, $dbConfig);
-$pdoMovs = $state['pdoMovs'];
-$pdoProd = $state['pdoProd'];
-$campoFechaMovsSql = $state['campoFechaMovsSql'];
-$weekFields = $state['weekFields'];
-$campoCostoSql = "m.`{$campoCosto}`";
-$conversionCases = [];
-
-foreach ($conversionesUnidadProducto as $productoConversion => $unidadesConversion) {
-  foreach ((array)$unidadesConversion as $unidadConversion => $factorConversion) {
-    $productoConversion = trim((string)$productoConversion);
-    $unidadConversion = trim((string)$unidadConversion);
-    $factorConversion = (float)$factorConversion;
-
-    if ($productoConversion === '' || $unidadConversion === '' || $factorConversion <= 0) {
-      continue;
-    }
-
-    $conversionCases[] = "WHEN TRIM(m.CVE_PROD) = " . $pdoMovs->quote($productoConversion)
-      . " AND UPPER(TRIM(m.UNIUSU)) = " . $pdoMovs->quote(strtoupper($unidadConversion))
-      . " THEN m.CANT_PROD * " . $factorConversion;
-  }
+$sourceWarnings = [];
+$pdoProd = null;
+try {
+  $pdoProd = conectar($dbConfig['prod']);
+} catch (Throwable $exception) {
+  $sourceWarnings[] = 'La producción no está disponible; los ratios se muestran sin ese dato.';
 }
-
-$conversionCasesSql = $conversionCases !== [] ? implode("\n                ", $conversionCases) . "\n                " : '';
-$cantidadQuimicoExpr = "
-            CASE
-                $conversionCasesSql
-                WHEN UPPER(TRIM(m.UNIUSU)) IN ('KG','KGS','KILO','KILOS') THEN m.CANT_PROD
-                WHEN UPPER(TRIM(m.UNIUSU)) IN ('G','GR','GRAMO','GRAMOS') THEN m.CANT_PROD / 1000
-                ELSE m.CANT_PROD
-            END";
-$signoMovimientoExpr = "
-            CASE
-                WHEN UPPER(TRIM(m.TIPO_MOV)) = 'E' THEN -1
-                WHEN UPPER(TRIM(m.TIPO_MOV)) = 'S' THEN 1
-                ELSE 0
-            END";
-$consumoNetoExpr = "(($cantidadQuimicoExpr) * ($signoMovimientoExpr))";
-
-$consumoExpr = "SUM($consumoNetoExpr)";
-$impactoExpr = "SUM(COALESCE($campoCostoSql, 0) * $consumoNetoExpr)";
-$costoPromedioExpr = "CASE WHEN SUM($consumoNetoExpr) <> 0 THEN $impactoExpr / SUM($consumoNetoExpr) ELSE AVG($campoCostoSql) END";
+$timezone = new DateTimeZone((string)($config['timezone'] ?? 'America/Mexico_City'));
+$apiResult = loadChemicalMovementsApi(
+  (array)($config['movimientos_api'] ?? []),
+  [$anioAnterior, $anioActual],
+  (array)$conversionesUnidadProducto,
+  $timezone
+);
+$chemicalMovements = array_values(array_filter((array)$apiResult['movements'], static function ($movement) use ($fechaDesde): bool {
+  return is_array($movement) && (string)($movement['semana_fin'] ?? '') >= $fechaDesde;
+}));
+$sourceWarnings = array_merge($sourceWarnings, (array)($apiResult['warnings'] ?? []));
+$sourceWarning = implode(' ', array_values(array_unique($sourceWarnings)));
 
 /*
 |--------------------------------------------------------------------------
@@ -155,63 +132,14 @@ if ($modo === 'costo') {
 | 1) DETALLE SEMANAL DEL PRODUCTO
 |--------------------------------------------------------------------------
 */
-if ($modo === 'consumo') {
-  $sqlDetalle = "
-        SELECT
-            " . $weekFields . ",
-            TRIM(m.CVE_PROD) AS cve_prod,
-            $consumoExpr AS consumo_kg
-        FROM movs m
-        WHERE $campoFechaMovsSql >= ?
-          AND UPPER(TRIM(m.TIPO_MOV)) IN ('E', 'S')
-          AND TRIM(m.CVE_PROD) = ?
-    ";
-} elseif ($modo === 'costo') {
-  $sqlDetalle = "
-        SELECT
-            " . $weekFields . ",
-            TRIM(m.CVE_PROD) AS cve_prod,
-            $costoPromedioExpr AS costo_promedio
-        FROM movs m
-        WHERE $campoFechaMovsSql >= ?
-          AND UPPER(TRIM(m.TIPO_MOV)) IN ('E', 'S')
-          AND TRIM(m.CVE_PROD) = ?
-    ";
-} else {
-  // impacto
-  $sqlDetalle = "
-        SELECT
-            " . $weekFields . ",
-            TRIM(m.CVE_PROD) AS cve_prod,
-            $consumoExpr AS consumo_kg,
-            $costoPromedioExpr AS costo_promedio
-        FROM movs m
-        WHERE $campoFechaMovsSql >= ?
-          AND UPPER(TRIM(m.TIPO_MOV)) IN ('E', 'S')
-          AND TRIM(m.CVE_PROD) = ?
-    ";
-}
-
-$paramsDetalle = [$fechaDesde, $productoSeleccionado];
-
-if (!empty($cveMovReporte)) {
-  $placeholdersMov = createPlaceholders($cveMovReporte);
-  $sqlDetalle .= " AND TRIM(m.CVE_MOV) IN ($placeholdersMov) ";
-  $paramsDetalle = array_merge($paramsDetalle, $cveMovReporte);
-}
-
-$sqlDetalle .= "
-    GROUP BY" . buildWeekGroupBy($campoFechaMovsSql) . ",
-        TRIM(m.CVE_PROD)
-    ORDER BY periodo
-";
-
-$stmtDetalle = $pdoMovs->prepare($sqlDetalle);
-$stmtDetalle->execute($paramsDetalle);
-
 $detallePorPeriodo = [];
-while ($row = $stmtDetalle->fetch()) {
+foreach (aggregateChemicalMovementsWeekly($chemicalMovements, [(string)$productoSeleccionado]) as $row) {
   $periodo = (int)$row['periodo'];
+  if ($modo === 'consumo') {
+    unset($row['costo_promedio'], $row['costo_ponderado']);
+  } elseif ($modo === 'costo') {
+    unset($row['consumo_kg']);
+  }
   $detallePorPeriodo[$periodo] = $row;
 }
 
@@ -220,7 +148,9 @@ while ($row = $stmtDetalle->fetch()) {
 | 2) PRODUCCIÓN POR SEMANA
 |--------------------------------------------------------------------------
 */
-$produccionPorPeriodo = ReportEngine::fetchProductionSeries($pdoProd, $fechaDesde);
+$produccionPorPeriodo = $pdoProd instanceof PDO
+  ? ReportEngine::fetchProductionSeries($pdoProd, $fechaDesde)
+  : [];
 
 /*
 |--------------------------------------------------------------------------
@@ -231,34 +161,19 @@ $costoBase = null;
 $costoPromedioActual = null;
 
 if ($modo === 'costo' || $modo === 'impacto') {
-  $sqlCostoBase = "
-        SELECT
-            AVG(CASE WHEN CAST(DATE_FORMAT($campoFechaMovsSql, '%x') AS UNSIGNED) = ? THEN $campoCostoSql END) AS promedio_anio_anterior,
-            AVG(CASE WHEN CAST(DATE_FORMAT($campoFechaMovsSql, '%x') AS UNSIGNED) = ? THEN $campoCostoSql END) AS promedio_anio_actual
-        FROM movs m
-        WHERE $campoFechaMovsSql >= ?
-          AND UPPER(TRIM(m.TIPO_MOV)) IN ('E', 'S')
-          AND TRIM(m.CVE_PROD) = ?
-    ";
-
-  $paramsCostoBase = [$anioAnterior, $anioActual, $fechaDesde, $productoSeleccionado];
-
-  if (!empty($cveMovReporte)) {
-    $placeholdersMov = createPlaceholders($cveMovReporte);
-    $sqlCostoBase .= " AND TRIM(m.CVE_MOV) IN ($placeholdersMov) ";
-    $paramsCostoBase = array_merge($paramsCostoBase, $cveMovReporte);
+  $costsByYear = [$anioAnterior => [], $anioActual => []];
+  foreach ($chemicalMovements as $movement) {
+    if ((string)($movement['cve_prod'] ?? '') !== (string)$productoSeleccionado) continue;
+    $year = (int)($movement['anio_iso'] ?? 0);
+    if (isset($costsByYear[$year]) && is_numeric($movement['costo_entrada'] ?? null)) {
+      $costsByYear[$year][] = (float)$movement['costo_entrada'];
+    }
   }
-
-  $stmtCostoBase = $pdoMovs->prepare($sqlCostoBase);
-  $stmtCostoBase->execute($paramsCostoBase);
-  $rowCostoBase = $stmtCostoBase->fetch();
-
-  $costoBase = isset($rowCostoBase['promedio_anio_anterior']) && $rowCostoBase['promedio_anio_anterior'] !== null
-    ? (float)$rowCostoBase['promedio_anio_anterior']
+  $costoBase = $costsByYear[$anioAnterior] !== []
+    ? array_sum($costsByYear[$anioAnterior]) / count($costsByYear[$anioAnterior])
     : null;
-
-  $costoPromedioActual = isset($rowCostoBase['promedio_anio_actual']) && $rowCostoBase['promedio_anio_actual'] !== null
-    ? (float)$rowCostoBase['promedio_anio_actual']
+  $costoPromedioActual = $costsByYear[$anioActual] !== []
+    ? array_sum($costsByYear[$anioActual]) / count($costsByYear[$anioActual])
     : null;
 }
 
@@ -502,6 +417,8 @@ $result = [
     'cveMovConsumo' => $cveMovConsumo,
     'cveMovAjuste' => $cveMovAjuste,
     'cveMovReporte' => $cveMovReporte,
+    'fuenteMovimientos' => 'API movimientos-salida',
+    'sourceWarning' => $sourceWarning,
     'modo' => $modo,
     'campoCosto' => $campoCosto,
     'metricaTitulo' => $metricaTitulo,
@@ -510,5 +427,5 @@ $result = [
   ],
 ];
 
-setCache($cacheKey, $result, 3600);
+if ((array)($apiResult['warnings'] ?? []) === []) setCache($cacheKey, $result, 3600);
 return $result;

@@ -43,6 +43,7 @@ return [
   'sensor_database' => (array)($secadoresSensorConfig['sqlserver'] ?? []),
   'sensor_table' => (string)($secadoresSensorConfig['tabla'] ?? 'TREND001'),
   'sensor_timestamp' => (string)($secadoresSensorConfig['campo_fecha'] ?? 'Time_Stamp'),
+  'solidos_concentradores_sensor' => 'SOLIDOS_DE_VOTATORS',
   'flujo_sensores' => [
     'flujo_s1' => ['FLUJO_VOTATOR_1_SA', 'FLUJO_VOTATOR_2_SA'],
     'flujo_s2' => ['FLUJO_VOTATOR_1', 'FLUJO_VOTATOR_2'],
@@ -73,8 +74,9 @@ return [
     'solidos_concentradores' => [
       'label' => 'Concentradores',
       'unit' => '%',
-      'source' => 'mysql_105',
+      'source' => 'sqlserver',
       'value' => null,
+      'decimals' => 2,
       'semaforo' => $concentratorRules,
     ],
     'flujo_s1' => [

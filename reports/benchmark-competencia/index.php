@@ -82,9 +82,22 @@ if (empty($gruposBloom) && !empty($marcas)) {
   }
   $gruposBloom = array_values($gruposPorBloom);
 }
-$filas = (array)($filas ?? []);
+$defaultBloomKey = '';
+$defaultBloomBrands = -1;
+foreach ($gruposBloom as $grupoBloomCandidate) {
+  $candidateBrands = count((array)($grupoBloomCandidate['marcas'] ?? []));
+  if ($candidateBrands > $defaultBloomBrands) {
+    $defaultBloomBrands = $candidateBrands;
+    $defaultBloomKey = (string)($grupoBloomCandidate['key'] ?? 'sin-bloom');
+  }
+}
+$filas = (array)($report['filas'] ?? []);
+$rankingsNatural = (array)($rankingsNatural ?? []);
 $kpis = (array)($kpis ?? []);
 $tendencias = (array)($tendencias ?? ['labels' => [], 'series' => []]);
+$mesActualResumen = !empty($mesesResumen) ? (array)$mesesResumen[count($mesesResumen) - 1] : [];
+$mesActualKey = (string)($mesActualResumen['key'] ?? '');
+$e = static fn($value): string => htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
 
 $formatValue = static function (?float $value, int $decimals): string {
   return $value === null ? '-' : n($value, $decimals);
@@ -690,6 +703,574 @@ foreach ($brandColors as $index => $colorSet) {
 
     <?= $dynamicCSS ?>
 
+    .bloom-stack {
+      display: grid;
+      gap: 10px;
+    }
+
+    .bloom-tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 10px;
+      overflow-x: auto;
+      padding-bottom: 2px;
+    }
+
+    .bloom-tab {
+      flex: 0 0 auto;
+      padding: 7px 14px;
+      border: 1px solid #d9dee5;
+      border-radius: 999px;
+      color: #475467;
+      background: #ffffff;
+      font-size: .72rem;
+      font-weight: 900;
+      cursor: pointer;
+    }
+
+    .bloom-tab.is-active {
+      color: #ffffff;
+      border-color: #1e5b78;
+      background: #1e5b78;
+    }
+
+    .bloom-panel[hidden] { display: none; }
+
+    h1 i { color: #1e5b78; }
+
+    .badge {
+      color: #1e5b78;
+      border-color: #bdd7e3;
+      background: #edf6f9;
+    }
+
+    .kpi-card:nth-child(1) .kpi-icon { color: #1e5b78; background: #e8f2f6; }
+    .kpi-card:nth-child(2) .kpi-icon { color: #25677f; background: #eaf4f7; }
+    .kpi-card:nth-child(3) .kpi-icon { color: #475467; background: #eef0f2; }
+    .kpi-card:nth-child(4) .kpi-icon { color: #a65f00; background: #fff4df; }
+
+    .trend-btn {
+      color: #1e5b78;
+      border-color: #bdd7e3;
+    }
+
+    .trend-btn.active {
+      color: #ffffff;
+      border-color: #1e5b78;
+      background: #1e5b78;
+    }
+
+    .bloom-panel {
+      overflow: hidden;
+      border: 1px solid #d9dee5;
+      border-radius: 20px;
+      background: #ffffff;
+      box-shadow: 0 8px 24px rgba(36, 52, 71, .06);
+    }
+
+    .bloom-panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 16px 18px;
+      border-bottom: 1px solid #e5e7eb;
+      background: #f5f3f0;
+    }
+
+    .bloom-panel-title {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .bloom-panel-title h3 {
+      color: #243447;
+      font-size: 1.25rem;
+      font-weight: 900;
+    }
+
+    .bloom-number {
+      min-width: 88px;
+      padding: 7px 12px;
+      border-radius: 10px;
+      color: #ffffff;
+      background: #1e5b78;
+      font-size: .78rem;
+      font-weight: 900;
+      text-align: center;
+    }
+
+    .bloom-period {
+      color: #667085;
+      font-size: .76rem;
+      font-weight: 800;
+    }
+
+    .bloom-content {
+      display: grid;
+      gap: 10px;
+      padding: 10px;
+    }
+
+    .bloom-summary-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+      align-items: stretch;
+    }
+
+    .top3-block {
+      display: grid;
+      gap: 6px;
+    }
+
+    .top3-heading {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      color: #243447;
+      font-size: .83rem;
+      font-weight: 950;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+
+    .top3-heading i { color: #c99a2e; }
+
+    .top3-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .ranking-card {
+      border: 2px solid var(--ranking-border);
+      border-left: 7px solid var(--ranking-color);
+      border-radius: 15px;
+      background: var(--ranking-bg);
+      padding: 11px;
+    }
+
+    .ranking-card.is-outside { --ranking-color: #c65d3b; --ranking-bg: #fff8f5; --ranking-border: #edc1b2; }
+    .ranking-card.is-inside { --ranking-color: #6d5bd0; --ranking-bg: #f8f6ff; --ranking-border: #d5cef4; }
+
+    .ranking-card h4 {
+      color: #243447;
+      font-size: 1rem;
+      font-weight: 900;
+    }
+
+    .ranking-card > p {
+      margin: 2px 0 7px;
+      color: #667085;
+      font-size: .7rem;
+      font-weight: 700;
+    }
+
+    .ranking-list {
+      display: grid;
+      gap: 5px;
+    }
+
+    .ranking-item {
+      display: grid;
+      grid-template-columns: 31px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 9px;
+      min-height: 43px;
+      padding: 5px 8px;
+      border-radius: 10px;
+      border: 1px solid rgba(148, 163, 184, .2);
+      background: #ffffff;
+    }
+
+    .ranking-position {
+      display: grid;
+      place-items: center;
+      width: 31px;
+      height: 31px;
+      border-radius: 9px;
+      color: #ffffff;
+      background: #8d99a6;
+      font-size: .86rem;
+      font-weight: 900;
+    }
+
+    .ranking-item:nth-child(1) .ranking-position { background: #c99a2e; }
+    .ranking-item:nth-child(2) .ranking-position { background: #8d99a6; }
+    .ranking-item:nth-child(3) .ranking-position { background: #b56f45; }
+
+    .ranking-brand {
+      min-width: 0;
+      color: #344054;
+      font-size: .84rem;
+      font-weight: 850;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .ranking-brand small {
+      display: block;
+      margin-top: 2px;
+      color: #98a2b3;
+      font-size: .58rem;
+      font-weight: 750;
+    }
+
+    .ranking-value {
+      color: var(--ranking-color);
+      min-width: 58px;
+      font-size: 1.3rem;
+      font-weight: 900;
+      text-align: right;
+    }
+
+    .natural-comparison {
+      border: 1px solid #e4e7ec;
+      border-radius: 15px;
+      background: #faf9f7;
+      padding: 10px;
+    }
+
+    .natural-comparison h4 {
+      margin-bottom: 3px;
+      color: #243447;
+      font-size: .9rem;
+      font-weight: 900;
+    }
+
+    .natural-comparison > p {
+      margin-bottom: 7px;
+      color: #667085;
+      font-size: .68rem;
+      font-weight: 700;
+    }
+
+    .natural-comparison-grid {
+      display: grid;
+      gap: 5px;
+    }
+
+    .natural-brand-row {
+      display: grid;
+      grid-template-columns: minmax(105px, 150px) repeat(2, minmax(130px, 1fr));
+      align-items: center;
+      gap: 7px;
+    }
+
+    .natural-brand-name {
+      color: #344054;
+      font-size: .7rem;
+      font-weight: 850;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .natural-metric {
+      display: grid;
+      grid-template-columns: 46px minmax(55px, 1fr) 39px;
+      align-items: center;
+      gap: 7px;
+    }
+
+    .natural-metric-label {
+      color: #667085;
+      font-size: .58rem;
+      font-weight: 850;
+      text-transform: uppercase;
+    }
+
+    .natural-track {
+      height: 9px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: #e7e5e4;
+    }
+
+    .natural-fill {
+      display: block;
+      height: 100%;
+      border-radius: inherit;
+      background: var(--metric-color);
+    }
+
+    .natural-metric.is-outside { --metric-color: #c65d3b; }
+    .natural-metric.is-inside { --metric-color: #6d5bd0; }
+
+    .natural-metric-value {
+      color: #344054;
+      font-size: .7rem;
+      font-weight: 900;
+      text-align: right;
+    }
+
+    .parameter-matrix-wrap {
+      overflow-x: auto;
+      border: 1px solid #e4e7ec;
+      border-radius: 15px;
+    }
+
+    .parameter-matrix {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      table-layout: fixed;
+    }
+
+    .parameter-matrix th,
+    .parameter-matrix td {
+      padding: 4px 6px;
+      border-right: 1px solid #edf0f3;
+      border-bottom: 1px solid #edf0f3;
+      text-align: center;
+      vertical-align: middle;
+    }
+
+    .parameter-matrix thead th {
+      color: #ffffff;
+      background: #243447;
+      font-size: .66rem;
+      font-weight: 900;
+    }
+
+    .parameter-matrix .matrix-brand-name-head,
+    .parameter-matrix .matrix-brand-cell {
+      position: sticky;
+      left: 0;
+      z-index: 3;
+      width: 165px;
+      min-width: 165px;
+      text-align: left;
+    }
+
+    .parameter-matrix .matrix-brand-cell {
+      border-left: 5px solid #94a3b8;
+      color: #243447;
+      background: #ffffff;
+      font-size: .68rem;
+      font-weight: 900;
+    }
+
+    .matrix-param-head {
+      width: 105px;
+      min-width: 105px;
+      line-height: 1.15;
+    }
+
+    .matrix-param-head small {
+      display: block;
+      margin-top: 3px;
+      color: #cbd5e1;
+      font-size: .48rem;
+      font-weight: 750;
+      line-height: 1.1;
+    }
+
+    .parameter-matrix .parameter-name-head,
+    .parameter-matrix .parameter-name {
+      position: sticky;
+      left: 0;
+      z-index: 2;
+      width: 190px;
+      text-align: left;
+    }
+
+    .parameter-matrix .parameter-limit-head,
+    .parameter-matrix .parameter-limit {
+      width: 135px;
+    }
+
+    .parameter-matrix .parameter-name {
+      color: #344054;
+      background: #ffffff;
+      font-size: .7rem;
+      font-weight: 850;
+    }
+
+    .parameter-matrix .parameter-limit {
+      color: #667085;
+      background: #fafafa;
+      font-size: .62rem;
+      font-weight: 750;
+    }
+
+    .parameter-matrix tbody tr:nth-child(even) .parameter-name { background: #fafafa; }
+    .parameter-matrix tbody tr.is-natural-outside .parameter-name { border-left: 5px solid #c65d3b; }
+    .parameter-matrix tbody tr.is-natural-inside .parameter-name { border-left: 5px solid #6d5bd0; }
+
+    .matrix-brand {
+      min-width: 115px;
+      border-top: 4px solid var(--brand-color);
+    }
+
+    .matrix-value {
+      display: grid;
+      gap: 2px;
+      min-height: 27px;
+      align-content: center;
+      border: 1px solid #e4e7ec;
+      border-radius: 8px;
+      background: #ffffff;
+    }
+
+    .matrix-value strong {
+      color: #243447;
+      font-size: .72rem;
+      font-weight: 900;
+    }
+
+    .matrix-value small {
+      color: #98a2b3;
+      font-size: .46rem;
+      font-weight: 750;
+      text-transform: uppercase;
+    }
+
+    .matrix-value.dentro { background: #eaf8ef; border-color: #b8dfc7; }
+    .matrix-value.fuera { background: #fee9e7; border-color: #f5b7ad; }
+    .matrix-value.fuera strong { color: #b93227; }
+    .matrix-value.natural-outside { background: #fff7e8; border-color: #f1c780; }
+    .matrix-value.natural-outside strong { color: #a65f00; }
+    .matrix-value.natural-inside { background: #eaf7fd; border-color: #8ed0ed; }
+    .matrix-value.natural-inside strong { color: #036b9f; }
+
+    .ranking-empty {
+      padding: 14px;
+      border-radius: 10px;
+      color: #98a2b3;
+      background: #f8fafc;
+      font-size: .7rem;
+      font-weight: 750;
+      text-align: center;
+    }
+
+    .podium-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .podium-card {
+      overflow: hidden;
+      border: 1px solid var(--podium-border);
+      border-radius: 16px;
+      background: #ffffff;
+    }
+
+    .podium-card.is-outside { --podium-color: #d97706; --podium-soft: #fff7e8; --podium-border: #f1c780; }
+    .podium-card.is-inside { --podium-color: #0284c7; --podium-soft: #eaf7fd; --podium-border: #8ed0ed; }
+
+    .podium-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 9px 12px;
+      color: #ffffff;
+      background: var(--podium-color);
+    }
+
+    .podium-header strong {
+      font-size: .84rem;
+      font-weight: 950;
+    }
+
+    .podium-header span {
+      font-size: .62rem;
+      font-weight: 800;
+      opacity: .9;
+    }
+
+    .podium-results {
+      display: grid;
+      grid-template-columns: 1.18fr .82fr;
+      grid-template-rows: repeat(2, minmax(46px, auto));
+      gap: 7px;
+      padding: 8px;
+    }
+
+    .podium-place {
+      display: grid;
+      grid-template-columns: 29px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 7px;
+      min-width: 0;
+      border: 1px solid #e4e7ec;
+      border-radius: 11px;
+      background: #ffffff;
+      padding: 6px 8px;
+    }
+
+    .podium-place.is-first {
+      grid-row: 1 / 3;
+      grid-template-columns: 38px minmax(0, 1fr);
+      align-content: center;
+      background: var(--podium-soft);
+    }
+
+    .podium-results.count-1 .podium-place.is-first {
+      grid-column: 1 / -1;
+    }
+
+    .podium-results.count-2 .podium-place.is-first {
+      grid-row: 1 / 2;
+    }
+
+    .podium-rank {
+      display: grid;
+      place-items: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 9px;
+      color: #ffffff;
+      background: #8d99a6;
+      font-size: .76rem;
+      font-weight: 950;
+    }
+
+    .podium-place.is-first .podium-rank {
+      width: 36px;
+      height: 36px;
+      background: #c99a2e;
+      font-size: 1rem;
+    }
+
+    .podium-place.is-third .podium-rank { background: #b56f45; }
+
+    .podium-name {
+      min-width: 0;
+      color: #344054;
+      font-size: .72rem;
+      font-weight: 900;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .podium-name small {
+      display: block;
+      margin-top: 2px;
+      color: #98a2b3;
+      font-size: .5rem;
+      font-weight: 750;
+    }
+
+    .podium-score {
+      color: var(--podium-color);
+      font-size: 1rem;
+      font-weight: 950;
+    }
+
+    .podium-place.is-first .podium-score {
+      grid-column: 1 / -1;
+      margin-top: 4px;
+      font-size: 1.8rem;
+      text-align: center;
+    }
+
     .empty-state {
       background: #ffffff;
       border: 1px dashed #cbd5e1;
@@ -711,10 +1292,26 @@ foreach ($brandColors as $index => $colorSet) {
       .trend-grid {
         grid-template-columns: 1fr;
       }
+
+      .natural-brand-row {
+        grid-template-columns: 130px repeat(2, minmax(150px, 1fr));
+      }
+
+      .bloom-summary-grid {
+        grid-template-columns: 1fr;
+      }
     }
 
     @media (max-width: 600px) {
       .kpi-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .top3-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .podium-grid {
         grid-template-columns: 1fr;
       }
     }
@@ -764,25 +1361,6 @@ foreach ($brandColors as $index => $colorSet) {
           <span class="badge"><i class="fas fa-flask"></i> <?= n((float)count($filas), 0) ?> parámetros</span>
         </div>
         
-        <div class="brand-legend">
-          <?php 
-          foreach ($gruposBloom as $grupoBloom):
-          ?>
-            <div class="brand-legend-group">
-              <span class="bloom-legend-title"><?= htmlspecialchars((string)$grupoBloom['label']) ?></span>
-              <?php foreach ((array)$grupoBloom['marcas'] as $marca): ?>
-                <?php
-                  $marcaIndex = $brandIndexById[(int)$marca['id']] ?? 0;
-                  $colorSet = $brandColors[$marcaIndex] ?? ['main' => '#64748b'];
-                ?>
-                <span class="brand-legend-item">
-                  <span class="brand-legend-color" style="background-color: <?= htmlspecialchars((string)$colorSet['main']) ?>;"></span>
-                  <?= htmlspecialchars((string)$marca['nombre']) ?>
-                </span>
-              <?php endforeach; ?>
-            </div>
-          <?php endforeach; ?>
-        </div>
       </div>
     </div>
 
@@ -812,7 +1390,8 @@ foreach ($brandColors as $index => $colorSet) {
     <section class="comparison-section">
       <div class="section-header">
         <div class="section-title">
-          <h2>Comparativo por bloom</h2>
+          <h2>Desempeño por Bloom</h2>
+          <p>Top 3 de comportamiento Natural y comparativo completo de parámetros.</p>
         </div>
         <div class="section-actions">
           <button type="button" class="trend-btn" id="trendToggle">
@@ -825,98 +1404,113 @@ foreach ($brandColors as $index => $colorSet) {
       <?php if (empty($mesesResumen) || empty($gruposBloom) || empty($filas)): ?>
         <div class="empty-state">No hay información suficiente para generar el comparativo.</div>
       <?php else: ?>
-        <div class="comparison-list">
-          <table class="comparison-table">
-            <thead>
-              <tr>
-                <th class="sticky-bloom bloom-head" rowspan="2">Bloom</th>
-                <th class="sticky-brand-col bloom-head" rowspan="2">Marca</th>
-                <th class="sticky-month-col bloom-head" rowspan="2">Mes</th>
-                <?php foreach ($filas as $fila): ?>
-                  <th class="param-head">
-                    <?= htmlspecialchars((string)$fila['nombre']) ?>
-                  </th>
-                <?php endforeach; ?>
-              </tr>
-              <tr>
-                <?php foreach ($filas as $fila): ?>
-                  <th class="limit-head">
-                    <span class="limit-pill"><?= htmlspecialchars((string)($fila['limite'] ?? '')) ?></span>
-                  </th>
-                <?php endforeach; ?>
-              </tr>
-            </thead>
-            <tbody>
-              <?php foreach ($gruposBloom as $grupoBloom): ?>
-                <?php
-                  $marcasGrupo = (array)$grupoBloom['marcas'];
-                  $rowspanBloom = max(1, count($marcasGrupo) * count($mesesResumen));
-                  $isFirstBloomRow = true;
-                ?>
-                <?php foreach ($marcasGrupo as $marca): ?>
-                  <?php
-                    $marcaId = (int)$marca['id'];
-                    $marcaIndex = $brandIndexById[$marcaId] ?? 0;
-                    $colorMarca = (string)($brandColors[$marcaIndex]['main'] ?? '#64748b');
-                    $bgMarcaClass = 'brand-bg-' . $marcaIndex;
-                    $rowspanMarca = max(1, count($mesesResumen));
-                    $isFirstMarcaRow = true;
-                  ?>
-                  <?php foreach ($mesesResumen as $mes): ?>
-                    <?php
-                      $rowClasses = [];
-                      if ($isFirstBloomRow) {
-                        $rowClasses[] = 'bloom-start';
-                      }
-                      if ($isFirstMarcaRow) {
-                        $rowClasses[] = 'brand-start';
-                      }
-                      $rowClasses[] = 'brand-row-' . $marcaIndex;
-                    ?>
-                    <tr class="<?= htmlspecialchars(implode(' ', $rowClasses)) ?>" style="--brand-color: <?= htmlspecialchars($colorMarca) ?>;">
-                      <?php if ($isFirstBloomRow): ?>
-                        <td class="sticky-bloom bloom-cell" rowspan="<?= $rowspanBloom ?>">
-                          <strong><?= htmlspecialchars((string)$grupoBloom['label']) ?></strong>
-                          <span><?= n((float)count($marcasGrupo), 0) ?> marcas</span>
-                        </td>
-                      <?php endif; ?>
-                      <?php if ($isFirstMarcaRow): ?>
-                        <td class="sticky-brand-col brand-cell <?= htmlspecialchars($bgMarcaClass) ?>" rowspan="<?= $rowspanMarca ?>" style="border-left-color: <?= htmlspecialchars($colorMarca) ?>;">
-                          <span class="brand-name">
-                            <span class="brand-dot" style="background-color: <?= htmlspecialchars($colorMarca) ?>;"></span>
-                            <?= htmlspecialchars((string)$marca['nombre']) ?>
-                          </span>
-                          <span><?= htmlspecialchars((string)$grupoBloom['label']) ?></span>
-                        </td>
-                      <?php endif; ?>
-                      <td class="sticky-month-col month-cell">
-                        <strong><?= htmlspecialchars((string)$mes['label']) ?></strong>
-                      </td>
-                      <?php foreach ($filas as $fila): ?>
-                      <?php
-                        $mesKey = (string)$mes['key'];
-                        $cell = (array)($fila['valores'][$marcaId][$mesKey] ?? []);
-                        $estadoKey = (string)($cell['estado_key'] ?? 'sin-dato');
-                        $valor = array_key_exists('valor', $cell) ? (float)$cell['valor'] : null;
-                        $cellClass = 'value-cell ' . htmlspecialchars($estadoKey);
-                      ?>
-                      <td class="<?= $cellClass ?>">
-                        <div class="value-box">
-                          <strong><?= $formatValue($valor, (int)($fila['decimales'] ?? 2)) ?></strong>
-                          <span><?= htmlspecialchars((string)($cell['estado'] ?? 'Sin dato')) ?></span>
+        <nav class="bloom-tabs" aria-label="Seleccionar Bloom">
+          <?php foreach ($gruposBloom as $grupoIndex => $grupoBloom): ?>
+            <?php $isDefaultBloom = (string)($grupoBloom['key'] ?? 'sin-bloom') === $defaultBloomKey; ?>
+            <button
+              type="button"
+              class="bloom-tab <?= $isDefaultBloom ? 'is-active' : '' ?>"
+              data-bloom-target="<?= $e($grupoBloom['key'] ?? 'sin-bloom') ?>"
+              aria-pressed="<?= $isDefaultBloom ? 'true' : 'false' ?>">
+              <?= $e($grupoBloom['label'] ?? 'Sin Bloom') ?>
+            </button>
+          <?php endforeach; ?>
+        </nav>
+        <div class="bloom-stack">
+          <?php foreach ($gruposBloom as $grupoIndex => $grupoBloom): ?>
+            <?php
+              $bloomKey = (string)($grupoBloom['key'] ?? 'sin-bloom');
+              $marcasGrupo = (array)($grupoBloom['marcas'] ?? []);
+              $rankingBloom = (array)($rankingsNatural[$bloomKey] ?? []);
+            ?>
+            <article class="bloom-panel" data-bloom-panel="<?= $e($bloomKey) ?>" <?= $bloomKey === $defaultBloomKey ? '' : 'hidden' ?>>
+              <header class="bloom-panel-header">
+                <div class="bloom-panel-title">
+                  <span class="bloom-number"><?= $e($grupoBloom['label'] ?? 'Sin Bloom') ?></span>
+                  <h3>Comparativo de competencia</h3>
+                </div>
+                <span class="bloom-period"><?= $e($mesActualResumen['label'] ?? '') ?> · <?= n((float)count($marcasGrupo), 0) ?> marca<?= count($marcasGrupo) === 1 ? '' : 's' ?></span>
+              </header>
+
+              <div class="bloom-content">
+                <div class="podium-grid">
+                  <?php foreach ([
+                    ['key' => 'fuera', 'class' => 'is-outside', 'title' => 'Natural · Fuera de refrigeración'],
+                    ['key' => 'dentro', 'class' => 'is-inside', 'title' => 'Natural · En refrigeración'],
+                  ] as $rankingDefinition): ?>
+                    <?php $rankingItems = (array)($rankingBloom[$rankingDefinition['key']] ?? []); ?>
+                    <section class="podium-card <?= $e($rankingDefinition['class']) ?>">
+                      <header class="podium-header">
+                        <strong><?= $e($rankingDefinition['title']) ?></strong>
+                        <span>Top 3 del Bloom</span>
+                      </header>
+                      <?php if ($rankingItems === []): ?>
+                        <div class="ranking-empty">Sin datos Natural para esta condición.</div>
+                      <?php else: ?>
+                        <div class="podium-results count-<?= count($rankingItems) ?>">
+                          <?php foreach ($rankingItems as $position => $rankingItem): ?>
+                            <div class="podium-place <?= $position === 0 ? 'is-first' : ($position === 2 ? 'is-third' : '') ?>">
+                              <span class="podium-rank"><?= $position + 1 ?></span>
+                              <span class="podium-name" title="<?= $e($rankingItem['nombre'] ?? '') ?>">
+                                <?= $e($rankingItem['nombre'] ?? 'Marca') ?>
+                                <small><?= n((float)($rankingItem['muestras'] ?? 0), 0) ?> muestra<?= (int)($rankingItem['muestras'] ?? 0) === 1 ? '' : 's' ?></small>
+                              </span>
+                              <strong class="podium-score"><?= $formatValue(isset($rankingItem['valor']) ? (float)$rankingItem['valor'] : null, 1) ?></strong>
+                            </div>
+                          <?php endforeach; ?>
                         </div>
-                      </td>
-                    <?php endforeach; ?>
-                    </tr>
-                    <?php
-                      $isFirstBloomRow = false;
-                      $isFirstMarcaRow = false;
-                    ?>
+                      <?php endif; ?>
+                    </section>
                   <?php endforeach; ?>
-                <?php endforeach; ?>
-              <?php endforeach; ?>
-            </tbody>
-          </table>
+                </div>
+
+                <div class="parameter-matrix-wrap" aria-label="Todos los parámetros por marca">
+                  <table class="parameter-matrix" style="min-width:<?= max(900, 165 + (count($filas) * 105)) ?>px">
+                    <thead>
+                      <tr>
+                        <th class="matrix-brand-name-head">Marca</th>
+                        <?php foreach ($filas as $fila): ?>
+                          <th class="matrix-param-head" title="<?= $e($fila['nombre'] ?? 'Parámetro') ?>">
+                            <?= $e($fila['nombre'] ?? 'Parámetro') ?>
+                            <small><?= $e($fila['limite'] ?? '—') ?></small>
+                          </th>
+                        <?php endforeach; ?>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <?php foreach ($marcasGrupo as $marca): ?>
+                        <?php
+                          $marcaId = (int)($marca['id'] ?? 0);
+                          $marcaIndex = $brandIndexById[$marcaId] ?? 0;
+                          $colorMarca = (string)($brandColors[$marcaIndex]['main'] ?? '#64748b');
+                        ?>
+                        <tr>
+                          <td class="matrix-brand-cell" style="--brand-color:<?= $e($colorMarca) ?>" title="<?= $e($marca['nombre'] ?? '') ?>"><?= $e($marca['nombre'] ?? 'Marca') ?></td>
+                          <?php foreach ($filas as $fila): ?>
+                            <?php
+                              $filaKey = (string)($fila['key'] ?? '');
+                              $cell = (array)($fila['valores'][$marcaId][$mesActualKey] ?? []);
+                              $value = is_numeric($cell['valor'] ?? null) ? (float)$cell['valor'] : null;
+                              $status = (string)($cell['estado_key'] ?? 'sin-dato');
+                              $valueClass = $filaKey === 'comp:FUERA:NATURAL'
+                                ? 'natural-outside'
+                                : ($filaKey === 'comp:DENTRO:NATURAL' ? 'natural-inside' : $status);
+                            ?>
+                            <td title="<?= $e($fila['nombre'] ?? 'Parámetro') ?> · <?= $e($marca['nombre'] ?? 'Marca') ?>">
+                              <div class="matrix-value <?= $e($valueClass) ?>">
+                                <strong><?= $formatValue($value, (int)($fila['decimales'] ?? 2)) ?></strong>
+                                <small><?= $value === null ? 'Sin dato' : n((float)($cell['muestras'] ?? 0), 0) . ' muestra' . ((int)($cell['muestras'] ?? 0) === 1 ? '' : 's') ?></small>
+                              </div>
+                            </td>
+                          <?php endforeach; ?>
+                        </tr>
+                      <?php endforeach; ?>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </article>
+          <?php endforeach; ?>
         </div>
       <?php endif; ?>
     </section>
@@ -946,10 +1540,26 @@ foreach ($brandColors as $index => $colorSet) {
     (function () {
       const trendToggle = document.getElementById('trendToggle');
       const trendSection = document.getElementById('trendSection');
+      const bloomTabs = Array.from(document.querySelectorAll('[data-bloom-target]'));
+      const bloomPanels = Array.from(document.querySelectorAll('[data-bloom-panel]'));
       const trendData = <?= json_encode($tendencias, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
       const brandColors = <?= json_encode($brandColors, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
       const brandIndexById = <?= json_encode($brandIndexById, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
       let trendChartsReady = false;
+
+      bloomTabs.forEach(function (tab) {
+        tab.addEventListener('click', function () {
+          const target = String(tab.dataset.bloomTarget || '');
+          bloomTabs.forEach(function (item) {
+            const active = item === tab;
+            item.classList.toggle('is-active', active);
+            item.setAttribute('aria-pressed', active ? 'true' : 'false');
+          });
+          bloomPanels.forEach(function (panel) {
+            panel.hidden = String(panel.dataset.bloomPanel || '') !== target;
+          });
+        });
+      });
 
       function buildTrendDatasets(metric) {
         const series = Array.isArray(trendData.series) ? trendData.series : [];

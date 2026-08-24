@@ -19,11 +19,16 @@ services:
       PROD_DB_USER: root
       PROD_DB_PASS: root
       ENERGIA_AGUA_CLAVE_HASH: ${ENERGIA_AGUA_CLAVE_HASH:-}
+      ENERGIA_GAS_XML_ROOT: /mnt/empresas
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
       - ./:/var/www/html
       - hikvision_cache:/var/www/html/reports/hikvision-administrativos/cache
+      - type: bind
+        source: ${ENERGIA_GAS_XML_HOST_ROOT:-/mnt/empresas}
+        target: /mnt/empresas
+        read_only: true
     networks:
       - default
       - sis_preparacion

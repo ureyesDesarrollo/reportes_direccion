@@ -7,7 +7,13 @@ return [
   'productos' => [],
   'tolerancia_pct' => 10,
   'cve_mov_consumo' => ['17'],
-  'cve_mov_ajuste' => ['15'],
+  'cve_mov_ajuste' => [],
+  'movimientos_api' => [
+    'url' => 'http://192.168.1.104:5000/api/movimientos-salida',
+    'timeout' => 30,
+    'cache_ttl' => 3600,
+    'cache_version' => 1,
+  ],
   'conversiones_unidad_producto' => [
     'TOROHY1' => [
       'SACO' => 25,

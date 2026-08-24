@@ -475,6 +475,14 @@ foreach ($votatorConfigByTunnel as $votatorGroup) {
   }
 }
 
+foreach ((array)($config['indicadores_superiores'] ?? []) as $indicatorConfig) {
+  $field = trim((string)($indicatorConfig['field'] ?? ''));
+  $source = (string)($indicatorConfig['source'] ?? '');
+  if ($field !== '' && $source === 'sqlserver') {
+    $metricFields[$field] = $field;
+  }
+}
+
 if (!empty($metricFields)) {
   try {
     $pdo = $connectSqlServer((array)($detailConfig['sqlserver'] ?? []));
@@ -825,7 +833,7 @@ if (!empty($mysqlMetricLookups)) {
   }
 }
 
-$buildTopIndicators = static function (array $indicatorConfig, array $config) use ($connectMysql, $evaluateMetricStatus, $formatHistoryTimestamp, $buildSemaphoreRangeLabel): array {
+$buildTopIndicators = static function (array $indicatorConfig, array $config, array $sqlServerRow = [], array $sqlServerHistoryRows = []) use ($connectMysql, $evaluateMetricStatus, $formatHistoryTimestamp, $buildSemaphoreRangeLabel): array {
   $indicators = [];
   $mysqlProductConfig = (array)($config['mysql_producto'] ?? []);
   $mysqlProductRow = [];
@@ -865,10 +873,14 @@ $buildTopIndicators = static function (array $indicatorConfig, array $config) us
     $source = (string)($indicator['source'] ?? '');
     $field = (string)($indicator['field'] ?? '');
     $rawValue = null;
-    $indicatorTimestamp = $mysqlProductTimestamp;
+    $indicatorTimestamp = $source === 'sqlserver'
+      ? ($sqlServerRow['__timestamp'] ?? null)
+      : $mysqlProductTimestamp;
 
     if ($source === 'mysql_producto' && $field !== '') {
       $rawValue = $mysqlProductRow[$field] ?? null;
+    } elseif ($source === 'sqlserver' && $field !== '') {
+      $rawValue = $sqlServerRow[$field] ?? null;
     }
 
     if (
@@ -888,6 +900,21 @@ $buildTopIndicators = static function (array $indicatorConfig, array $config) us
         }
       } catch (Throwable $e) {
         // Si no se puede consultar el anterior, se conserva el valor original.
+      }
+    }
+
+    if (
+      !empty($indicator['usar_anterior_si_cero_o_null'])
+      && $source === 'sqlserver'
+      && $field !== ''
+      && ($rawValue === null || (is_numeric($rawValue) && (float)$rawValue === 0.0))
+    ) {
+      foreach ($sqlServerHistoryRows as $historyRow) {
+        $historyValue = $historyRow[$field] ?? null;
+        if ($historyValue === null || (is_numeric($historyValue) && (float)$historyValue === 0.0)) continue;
+        $rawValue = $historyValue;
+        $indicatorTimestamp = $historyRow['__timestamp'] ?? $indicatorTimestamp;
+        break;
       }
     }
 
@@ -911,14 +938,20 @@ $buildTopIndicators = static function (array $indicatorConfig, array $config) us
       'rangeLabel' => $buildSemaphoreRangeLabel($rule, $unit, (string)($indicator['leyenda'] ?? '')),
       'rule' => $rule,
       'unit' => $unit,
-      'timestampLabel' => $indicatorTimestamp !== null ? (string)$indicatorTimestamp : '',
+      'source' => $source,
+      'timestampLabel' => $indicatorTimestamp !== null ? $formatHistoryTimestamp($indicatorTimestamp) : '',
     ];
   }
 
   return $indicators;
 };
 
-$topIndicators = $buildTopIndicators((array)($config['indicadores_superiores'] ?? []), $config);
+$topIndicators = $buildTopIndicators(
+  (array)($config['indicadores_superiores'] ?? []),
+  $config,
+  $metricRow,
+  $metricHistoryRows
+);
 
 $summarizeTunnel = static function (array $tunnel, array $summary, array $rows): array {
   $latestRow = $rows[0] ?? null;

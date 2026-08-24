@@ -25,9 +25,25 @@ $titulo = (string)($report['titulo'] ?? 'Ventas');
 $filtros = (array)($report['filtros'] ?? []);
 $kpis = (array)($report['kpis'] ?? []);
 $pedidos = (array)($kpis['pedidos'] ?? []);
+$pedidosPorTipo = (array)($pedidos['por_tipo'] ?? []);
+$pedidosComercial = (array)($pedidosPorTipo['comercial'] ?? []);
+$pedidosIndustrial = (array)($pedidosPorTipo['industrial'] ?? []);
+$pedidosSinClasificar = (array)($pedidosPorTipo['sin_clasificar'] ?? []);
+$pedidosTotalSemaforo = (array)($pedidos['semaforo'] ?? []);
+$pedidosComercialSemaforo = (array)($pedidosComercial['semaforo'] ?? []);
+$pedidosIndustrialSemaforo = (array)($pedidosIndustrial['semaforo'] ?? []);
 $backorderPartidas = (array)($pedidos['partidas'] ?? []);
 $backorderVenta = (array)($kpis['backorder_venta'] ?? []);
 $ventas = (array)($kpis['ventas'] ?? []);
+$ventasPorTipo = (array)($ventas['por_tipo'] ?? []);
+$ventasComercial = (array)($ventasPorTipo['comercial'] ?? []);
+$ventasIndustrial = (array)($ventasPorTipo['industrial'] ?? []);
+$ventasTotalSemaforo = (array)($ventas['semaforo'] ?? []);
+$precioPromedioSemaforo = (array)($ventas['precio_promedio_semaforo'] ?? []);
+$ventasComercialSemaforo = (array)($ventasComercial['semaforo'] ?? []);
+$ventasIndustrialSemaforo = (array)($ventasIndustrial['semaforo'] ?? []);
+$precioPromedioComercialSemaforo = (array)($ventasComercial['precio_promedio_semaforo'] ?? []);
+$precioPromedioIndustrialSemaforo = (array)($ventasIndustrial['precio_promedio_semaforo'] ?? []);
 $calidadPorProducir = (array)($kpis['calidad_por_producir'] ?? []);
 $objetivos = (array)($report['objetivos'] ?? []);
 $series = (array)($report['series'] ?? []);
@@ -36,28 +52,11 @@ $meta = (array)($report['meta'] ?? []);
 $version = (int)($report['version'] ?? time());
 $e = static fn($value): string => htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
 $fmt = static fn($value, int $decimals = 1): string => is_numeric($value) ? n((float)$value, $decimals) : '-';
-$pedidosToneladas = is_numeric($pedidos['toneladas'] ?? null) ? (float)$pedidos['toneladas'] : null;
-$pedidosStatusClass = '';
-if ($pedidosToneladas !== null) {
-  if ($pedidosToneladas < 400) {
-    $pedidosStatusClass = 'avance-semaforo-rojo';
-  } elseif ($pedidosToneladas <= 450) {
-    $pedidosStatusClass = 'avance-semaforo-amarillo';
-  } else {
-    $pedidosStatusClass = 'avance-semaforo-verde';
-  }
-}
-$ventasToneladas = is_numeric($ventas['toneladas'] ?? null) ? (float)$ventas['toneladas'] : null;
-$ventasStatusClass = '';
-if ($ventasToneladas !== null) {
-  if ($ventasToneladas < 600) {
-    $ventasStatusClass = 'avance-semaforo-rojo';
-  } elseif ($ventasToneladas <= 650) {
-    $ventasStatusClass = 'avance-semaforo-amarillo';
-  } else {
-    $ventasStatusClass = 'avance-semaforo-verde';
-  }
-}
+$money = static fn($value, int $decimals = 2): string => is_numeric($value) ? '$' . n((float)$value, $decimals) : '—';
+$salesTrafficLightClass = static function (array $trafficLight): string {
+  $class = trim((string)($trafficLight['clase'] ?? ''));
+  return in_array($class, ['avance-semaforo-verde', 'avance-semaforo-amarillo', 'avance-semaforo-rojo'], true) ? $class : '';
+};
 $meses = [
   1 => 'Enero',
   2 => 'Febrero',
@@ -75,6 +74,8 @@ $meses = [
 $anioActual = (int)date('Y');
 $chartLabels = array_map(static fn(array $row): string => (string)($row['day'] ?? ''), $dailyRows);
 $chartTons = array_map(static fn(array $row): float => round((float)($row['toneladas'] ?? 0), 2), $dailyRows);
+$chartComercial = array_map(static fn(array $row): float => round((float)($row['comercial_toneladas'] ?? 0), 2), $dailyRows);
+$chartIndustrial = array_map(static fn(array $row): float => round((float)($row['industrial_toneladas'] ?? 0), 2), $dailyRows);
 $objetivoDiario = (float)($objetivos['diario_toneladas'] ?? 0.0);
 $chartTarget = array_fill(0, count($chartLabels), round($objetivoDiario, 2));
 ?>
@@ -101,19 +102,24 @@ $chartTarget = array_fill(0, count($chartLabels), round($objetivoDiario, 2));
     }
 
     .ventas-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 18px;
       margin-bottom: 12px;
     }
 
-    .ventas-header-actions {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      flex-wrap: wrap;
-      margin-bottom: 10px;
+    .ventas-header-copy {
+      min-width: 0;
     }
 
     .ventas-header h1 {
       font-size: clamp(1.85rem, 2.7vw, 2.45rem);
+    }
+
+    .ventas-header .back-btn {
+      flex: 0 0 auto;
+      margin-top: 2px;
     }
 
     .ventas-filter-form {
@@ -145,39 +151,168 @@ $chartTarget = array_fill(0, count($chartLabels), round($objetivoDiario, 2));
 
     .ventas-summary-grid {
       display: grid;
-      grid-template-columns: repeat(3, minmax(250px, 1fr));
-      gap: 12px;
-      margin-bottom: 14px;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      width: 100%;
+      gap: 6px;
+      margin: 0 0 7px;
     }
+
+    .ventas-summary-grid > .ventas-kpi-card { grid-column: span 1; }
+    #ventasBackorderSinClasificar { grid-column: 1 / -1; }
 
     .ventas-kpi-card {
-      min-height: 112px;
-      padding: 14px 16px;
+      position: relative;
+      display: grid;
+      grid-template-columns: minmax(0, .78fr) minmax(0, 1.22fr);
+      grid-template-rows: auto 1fr auto;
+      column-gap: 12px;
+      align-items: center;
+      box-sizing: border-box;
+      min-height: 92px;
+      padding: 7px 10px 6px;
+      overflow: hidden;
     }
 
-    #ventasKpiPedidosCard {
+    .ventas-backorder-card {
       cursor: pointer;
     }
 
-    #ventasKpiPedidosCard:focus-visible {
+    .ventas-backorder-card:focus-visible {
       outline: 3px solid #2563eb;
       outline-offset: 3px;
     }
 
     .ventas-kpi-card .kpi-icon {
-      margin-bottom: 7px;
-      font-size: 1.18rem;
+      position: absolute;
+      top: 7px;
+      left: 10px;
+      margin: 0;
+      font-size: .88rem;
     }
 
     .ventas-kpi-card .kpi-value {
+      grid-column: 1;
+      grid-row: 2 / 4;
+      align-self: center;
       margin-bottom: 0;
-      font-size: clamp(1.7rem, 2.4vw, 2.25rem);
-      line-height: 1.05;
+      font-size: clamp(1.5rem, 2vw, 1.95rem);
+      line-height: 1;
       white-space: nowrap;
     }
 
     .ventas-kpi-card .kpi-label {
-      margin-bottom: 4px;
+      grid-column: 1 / -1;
+      grid-row: 1;
+      max-width: calc(100% - 92px);
+      margin-bottom: 1px;
+      padding-left: 20px;
+      font-size: .7rem;
+      line-height: 1.05;
+    }
+
+    .ventas-kpi-card.is-sales-status {
+      min-height: 92px;
+      padding: 7px 10px 6px;
+    }
+
+    .ventas-kpi-card.is-sales-status .kpi-label,
+    .ventas-kpi-card.is-backorder-status .kpi-label,
+    .ventas-kpi-card.is-average-price .kpi-label {
+      max-width: calc(100% - 92px);
+      font-size: .7rem;
+      letter-spacing: .055em;
+      text-transform: uppercase;
+    }
+
+    .ventas-kpi-card.is-sales-status .kpi-value {
+      margin-top: 2px;
+      font-size: clamp(1.6rem, 2.05vw, 2rem);
+    }
+
+    .ventas-kpi-card .kpi-trend {
+      grid-column: 2;
+      grid-row: 2;
+      align-self: end;
+      margin-top: 1px;
+      padding-left: 10px;
+      border-left: 1px solid rgba(255, 255, 255, .28);
+      font-size: .66rem;
+      line-height: 1.1;
+    }
+
+    .ventas-kpi-card .ventas-kpi-target {
+      grid-column: 2;
+      grid-row: 3;
+      align-self: start;
+      margin-top: 2px;
+      padding: 3px 0 0 10px;
+      border-left: 1px solid rgba(255, 255, 255, .28);
+      font-size: .6rem;
+      line-height: 1.05;
+    }
+
+    .ventas-kpi-status {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      padding: 3px 6px;
+      border: 1px solid rgba(255,255,255,.42);
+      border-radius: 999px;
+      color: inherit;
+      background: rgba(255,255,255,.17);
+      font-size: .56rem;
+      font-weight: 900;
+      letter-spacing: .035em;
+      line-height: 1;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .ventas-total-card {
+      box-shadow: 0 8px 22px rgba(15, 23, 42, .12);
+    }
+
+    .ventas-kpi-card.is-backorder {
+      background: #f8fafc;
+    }
+
+    .ventas-kpi-card.is-average-price {
+      background: linear-gradient(145deg, #ffffff 0%, #ecfdf5 100%);
+    }
+
+    .ventas-kpi-card.is-average-price:not(.avance-semaforo-verde):not(.avance-semaforo-amarillo):not(.avance-semaforo-rojo) .kpi-value {
+      color: #0f766e;
+      font-size: clamp(1.65rem, 2.2vw, 2.15rem);
+    }
+
+    .ventas-kpi-card.is-average-price.avance-semaforo-verde,
+    .ventas-kpi-card.is-average-price.avance-semaforo-amarillo,
+    .ventas-kpi-card.is-average-price.avance-semaforo-rojo {
+      background-image: none;
+    }
+
+    .ventas-kpi-card.is-average-price .ventas-kpi-status {
+      top: 6px;
+      right: 6px;
+    }
+
+    .ventas-kpi-card.is-average-price .ventas-kpi-target {
+      margin-top: 2px;
+    }
+
+    .ventas-price-unit {
+      font-size: .48em;
+      font-weight: 800;
+      letter-spacing: .04em;
+      white-space: nowrap;
+    }
+
+    .ventas-unclassified-note {
+      grid-column: 1 / -1;
+      margin: -2px 4px 0;
+      color: #64748b;
+      font-size: .78rem;
+      font-weight: 700;
     }
 
     .ventas-kpi-card.avance-semaforo-verde,
@@ -218,21 +353,60 @@ $chartTarget = array_fill(0, count($chartLabels), round($objetivoDiario, 2));
       border-color: #eab308;
     }
 
+    .ventas-kpi-card.avance-semaforo-amarillo .kpi-icon,
+    .ventas-kpi-card.avance-semaforo-amarillo .kpi-label,
+    .ventas-kpi-card.avance-semaforo-amarillo .kpi-value,
+    .ventas-kpi-card.avance-semaforo-amarillo .kpi-trend,
+    .ventas-kpi-card.avance-semaforo-amarillo .ventas-kpi-target {
+      color: #111827 !important;
+    }
+
+    .ventas-kpi-card.avance-semaforo-amarillo .ventas-kpi-status {
+      border-color: rgba(17,24,39,.24);
+      color: #111827;
+      background: rgba(255,255,255,.32);
+    }
+
     .ventas-kpi-card.avance-semaforo-rojo {
       background: #c94436;
       border-color: #a9362c;
     }
 
+    .ventas-kpi-target {
+      margin-top: 4px;
+      padding-top: 4px;
+      border-top: 1px solid rgba(148,163,184,.3);
+      color: #64748b;
+      font-size: .66rem;
+      font-weight: 800;
+      line-height: 1.15;
+    }
+
+    .ventas-kpi-card.avance-semaforo-verde .ventas-kpi-target,
+    .ventas-kpi-card.avance-semaforo-rojo .ventas-kpi-target {
+      color: #ffffff;
+      border-top-color: rgba(255,255,255,.28);
+    }
+
     .ventas-chart-container {
-      margin-bottom: 14px;
+      min-width: 0;
+      margin-bottom: 0;
       border-radius: 20px;
-      padding: 16px;
+      padding: 12px;
     }
 
     .ventas-quality-section {
-      margin-bottom: 14px;
+      min-width: 0;
+      margin-bottom: 0;
       border-radius: 20px;
-      padding: 16px;
+      padding: 12px;
+    }
+
+    .ventas-detail-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 8px;
+      align-items: stretch;
     }
 
     .ventas-quality-header {
@@ -240,7 +414,7 @@ $chartTarget = array_fill(0, count($chartLabels), round($objetivoDiario, 2));
       align-items: center;
       justify-content: space-between;
       gap: 12px;
-      margin-bottom: 12px;
+      margin-bottom: 8px;
     }
 
     .ventas-quality-header h3 {
@@ -260,17 +434,18 @@ $chartTarget = array_fill(0, count($chartLabels), round($objetivoDiario, 2));
 
     .ventas-quality-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(205px, 1fr));
-      gap: 10px;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 6px;
       justify-content: start;
     }
 
     .ventas-quality-card {
       display: grid;
-      gap: 16px;
-      min-height: 90px;
-      padding-right: 10px;
-      padding-left: 10px;
+      align-content: center;
+      gap: 2px;
+      box-sizing: border-box;
+      min-height: 63px;
+      padding: 7px 8px;
       border: 1px solid #dbe7f5;
       border-radius: 14px;
       background: #ffffff;
@@ -343,7 +518,7 @@ $chartTarget = array_fill(0, count($chartLabels), round($objetivoDiario, 2));
 
     .ventas-quality-key {
       color: #0f172a;
-      font-size: 0.92rem;
+      font-size: 0.78rem;
       font-weight: 900;
       line-height: 1;
     }
@@ -357,16 +532,16 @@ $chartTarget = array_fill(0, count($chartLabels), round($objetivoDiario, 2));
 
     .ventas-quality-value {
       color: #0f172a;
-      font-size: clamp(1.35rem, 2vw, 1.9rem);
+      font-size: clamp(1.12rem, 1.5vw, 1.5rem);
       font-weight: 900;
       line-height: 1;
       white-space: nowrap;
     }
 
     .ventas-quality-detail {
-      margin-top: 7px;
+      margin-top: 2px;
       color: #475569;
-      font-size: .68rem;
+      font-size: .59rem;
       font-weight: 800;
       line-height: 1.25;
       opacity: .9;
@@ -384,7 +559,7 @@ $chartTarget = array_fill(0, count($chartLabels), round($objetivoDiario, 2));
     }
 
     .ventas-chart-box {
-      height: 360px;
+      height: 250px;
       min-height: 0;
     }
 
@@ -571,6 +746,30 @@ $chartTarget = array_fill(0, count($chartLabels), round($objetivoDiario, 2));
     }
 
     @media (max-width: 700px) {
+      .ventas-header {
+        align-items: center;
+      }
+
+      .ventas-header .back-btn {
+        padding-inline: 11px;
+      }
+
+      .ventas-summary-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .ventas-summary-grid > * {
+        grid-column: auto !important;
+      }
+
+      .ventas-detail-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .ventas-quality-grid {
+        grid-template-columns: 1fr;
+      }
+
       .ventas-backorder-modal {
         padding: 10px;
       }
@@ -580,20 +779,34 @@ $chartTarget = array_fill(0, count($chartLabels), round($objetivoDiario, 2));
         border-radius: 14px;
       }
     }
+
+    @media (min-width: 701px) and (max-width: 1050px) {
+      .ventas-summary-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .ventas-summary-grid > * {
+        grid-column: auto !important;
+      }
+
+      .ventas-detail-grid {
+        grid-template-columns: 1fr;
+      }
+    }
   </style>
 </head>
 
 <body>
   <main class="dashboard ventas-dashboard">
     <header class="ventas-header">
-      <div class="ventas-header-actions">
-        <a class="back-btn" href="../index.php" data-smart-back="reports-index">
-          <i class="fas fa-arrow-left"></i>
-          Regresar al inicio
-        </a>
+      <div class="ventas-header-copy">
+        <h1><?= $e($titulo) ?></h1>
+        <p><?= $e((string)($filtros['desde'] ?? '')) ?> al <?= $e((string)($filtros['hasta'] ?? '')) ?></p>
       </div>
-      <h1><?= $e($titulo) ?></h1>
-      <p><?= $e((string)($filtros['desde'] ?? '')) ?> al <?= $e((string)($filtros['hasta'] ?? '')) ?>
+      <a class="back-btn" href="../index.php" data-smart-back="reports-index">
+        <i class="fas fa-arrow-left"></i>
+        Regresar al inicio
+      </a>
     </header>
 
     <form class="filters ventas-filter-form" method="get" id="ventasFilters">
@@ -620,43 +833,46 @@ $chartTarget = array_fill(0, count($chartLabels), round($objetivoDiario, 2));
     <?php endforeach; ?>
 
     <section class="kpi-grid ventas-summary-grid" aria-label="Indicadores de ventas">
-      <article
-        class="kpi-card ventas-kpi-card <?= $e($pedidosStatusClass) ?>"
-        id="ventasKpiPedidosCard"
-        role="button"
-        tabindex="0"
-        aria-haspopup="dialog"
-        aria-controls="ventasBackorderModal">
-        <div class="kpi-icon" style="color:#0ea5e9;"><i class="fa-solid fa-truck-ramp-box"></i></div>
-        <div class="kpi-label">Back Order</div>
-        <div class="kpi-value" id="ventasKpiPedidos"><?= $e($fmt($pedidos['toneladas'] ?? null, 1)) ?> TON</div>
-        <div class="kpi-trend" id="ventasKpiPedidosDetalle">
-          <?= $e($fmt($pedidos['cantidad'] ?? null, 0)) ?> pedidos · Ver partidas
-        </div>
+      <article class="kpi-card ventas-kpi-card is-sales-status is-industrial <?= $e($salesTrafficLightClass($ventasIndustrialSemaforo)) ?>" id="ventasKpiIndustrialCard">
+        <span class="ventas-kpi-status" id="ventasKpiIndustrialEstado"><?= $e($ventasIndustrialSemaforo['estado_label'] ?? 'Pendiente') ?></span><div class="kpi-icon"><i class="fa-solid fa-industry"></i></div><div class="kpi-label">Venta industrial</div><div class="kpi-value" id="ventasKpiIndustrialToneladas"><?= $e($fmt($ventasIndustrial['toneladas'] ?? null, 1)) ?> TON</div><div class="kpi-trend" id="ventasKpiIndustrialDetalle">Facturas: <?= $e($fmt($ventasIndustrial['facturas_toneladas'] ?? null, 1)) ?> TON · Remisiones: <?= $e($fmt($ventasIndustrial['remisiones_toneladas'] ?? null, 1)) ?> TON</div><div class="ventas-kpi-target" id="ventasKpiIndustrialMeta"><?= $e($ventasIndustrialSemaforo['detalle'] ?? '') ?></div>
+      </article>
+      <article class="kpi-card ventas-kpi-card ventas-backorder-card is-industrial is-backorder is-backorder-status <?= $e($salesTrafficLightClass($pedidosIndustrialSemaforo)) ?>" id="ventasKpiBackorderIndustrialCard" data-backorder-type="industrial" role="button" tabindex="0" aria-haspopup="dialog" aria-controls="ventasBackorderModal">
+        <span class="ventas-kpi-status" id="ventasKpiBackorderIndustrialEstado"><?= $e($pedidosIndustrialSemaforo['estado_label'] ?? 'Sin dato') ?></span><div class="kpi-icon"><i class="fa-solid fa-truck-ramp-box"></i></div><div class="kpi-label">Back Order industrial</div><div class="kpi-value" id="ventasKpiBackorderIndustrial"><?= $e($fmt($pedidosIndustrial['toneladas'] ?? null, 1)) ?> TON</div><div class="kpi-trend" id="ventasKpiBackorderIndustrialDetalle"><?= $e($fmt($pedidosIndustrial['cantidad'] ?? null, 0)) ?> pedidos · Ver partidas</div><div class="ventas-kpi-target" id="ventasKpiBackorderIndustrialMeta"><?= $e($pedidosIndustrialSemaforo['detalle'] ?? '') ?></div>
+      </article>
+      <article class="kpi-card ventas-kpi-card is-average-price <?= $e($salesTrafficLightClass($precioPromedioIndustrialSemaforo)) ?>" id="ventasKpiPrecioPromedioIndustrialCard">
+        <span class="ventas-kpi-status" id="ventasKpiPrecioPromedioIndustrialEstado"><?= $e($precioPromedioIndustrialSemaforo['estado_label'] ?? 'Sin dato') ?></span><div class="kpi-icon"><i class="fa-solid fa-tags"></i></div><div class="kpi-label">Precio promedio industrial</div><div class="kpi-value" id="ventasKpiPrecioPromedioIndustrial"><?= $e($money($ventasIndustrial['precio_promedio'] ?? null, 2)) ?> <span class="ventas-price-unit">/ KG</span></div><div class="kpi-trend" id="ventasKpiPrecioPromedioIndustrialDetalle">Venta neta: <?= $e($money($ventasIndustrial['monto'] ?? null, 0)) ?> · <?= $e($fmt($ventasIndustrial['kilos'] ?? null, 0)) ?> kg</div><div class="ventas-kpi-target" id="ventasKpiPrecioPromedioIndustrialMeta"><?= $e($precioPromedioIndustrialSemaforo['detalle'] ?? '') ?></div>
       </article>
 
-      <article class="kpi-card ventas-kpi-card <?= $e($ventasStatusClass) ?>" id="ventasKpiCard">
-        <div class="kpi-icon"><i class="fa-solid fa-scale-balanced"></i></div>
-        <div class="kpi-label">Ventas</div>
-        <div class="kpi-value" id="ventasKpiToneladas"><?= $e($fmt($ventas['toneladas'] ?? null, 1)) ?> TON</div>
-        <div class="kpi-trend" id="ventasKpiDetalle">
-          Facturas: <?= $e($fmt($ventas['facturas_toneladas'] ?? null, 1)) ?> TON · Remisiones: <?= $e($fmt($ventas['remisiones_toneladas'] ?? null, 1)) ?> TON
-        </div>
+      <article class="kpi-card ventas-kpi-card is-sales-status is-comercial <?= $e($salesTrafficLightClass($ventasComercialSemaforo)) ?>" id="ventasKpiComercialCard">
+        <span class="ventas-kpi-status" id="ventasKpiComercialEstado"><?= $e($ventasComercialSemaforo['estado_label'] ?? 'Pendiente') ?></span><div class="kpi-icon"><i class="fa-solid fa-store"></i></div><div class="kpi-label">Venta comercial</div><div class="kpi-value" id="ventasKpiComercialToneladas"><?= $e($fmt($ventasComercial['toneladas'] ?? null, 1)) ?> TON</div><div class="kpi-trend" id="ventasKpiComercialDetalle">Facturas: <?= $e($fmt($ventasComercial['facturas_toneladas'] ?? null, 1)) ?> TON · Remisiones: <?= $e($fmt($ventasComercial['remisiones_toneladas'] ?? null, 1)) ?> TON</div><div class="ventas-kpi-target" id="ventasKpiComercialMeta"><?= $e($ventasComercialSemaforo['detalle'] ?? '') ?></div>
+      </article>
+      <article class="kpi-card ventas-kpi-card ventas-backorder-card is-comercial is-backorder is-backorder-status <?= $e($salesTrafficLightClass($pedidosComercialSemaforo)) ?>" id="ventasKpiBackorderComercialCard" data-backorder-type="comercial" role="button" tabindex="0" aria-haspopup="dialog" aria-controls="ventasBackorderModal">
+        <span class="ventas-kpi-status" id="ventasKpiBackorderComercialEstado"><?= $e($pedidosComercialSemaforo['estado_label'] ?? 'Sin dato') ?></span><div class="kpi-icon"><i class="fa-solid fa-truck-ramp-box"></i></div><div class="kpi-label">Back Order comercial</div><div class="kpi-value" id="ventasKpiBackorderComercial"><?= $e($fmt($pedidosComercial['toneladas'] ?? null, 1)) ?> TON</div><div class="kpi-trend" id="ventasKpiBackorderComercialDetalle"><?= $e($fmt($pedidosComercial['cantidad'] ?? null, 0)) ?> pedidos · Ver partidas</div><div class="ventas-kpi-target" id="ventasKpiBackorderComercialMeta"><?= $e($pedidosComercialSemaforo['detalle'] ?? '') ?></div>
+      </article>
+      <article class="kpi-card ventas-kpi-card is-average-price <?= $e($salesTrafficLightClass($precioPromedioComercialSemaforo)) ?>" id="ventasKpiPrecioPromedioComercialCard">
+        <span class="ventas-kpi-status" id="ventasKpiPrecioPromedioComercialEstado"><?= $e($precioPromedioComercialSemaforo['estado_label'] ?? 'Sin dato') ?></span><div class="kpi-icon"><i class="fa-solid fa-tags"></i></div><div class="kpi-label">Precio promedio comercial</div><div class="kpi-value" id="ventasKpiPrecioPromedioComercial"><?= $e($money($ventasComercial['precio_promedio'] ?? null, 2)) ?> <span class="ventas-price-unit">/ KG</span></div><div class="kpi-trend" id="ventasKpiPrecioPromedioComercialDetalle">Venta neta: <?= $e($money($ventasComercial['monto'] ?? null, 0)) ?> · <?= $e($fmt($ventasComercial['kilos'] ?? null, 0)) ?> kg</div><div class="ventas-kpi-target" id="ventasKpiPrecioPromedioComercialMeta"><?= $e($precioPromedioComercialSemaforo['detalle'] ?? '') ?></div>
       </article>
 
-      <article class="kpi-card ventas-kpi-card" id="ventasKpiBackorderVentaCard">
-        <div class="kpi-icon" style="color:#6366f1;"><i class="fa-solid fa-layer-group"></i></div>
-        <div class="kpi-label">Back order + venta</div>
-        <div class="kpi-value" id="ventasKpiBackorderVenta"><?= $e($fmt($backorderVenta['toneladas'] ?? null, 1)) ?> TON</div>
-        <div class="kpi-trend">Pedidos pendientes más venta del periodo</div>
+      <article class="kpi-card ventas-kpi-card is-sales-status ventas-total-card <?= $e($salesTrafficLightClass($ventasTotalSemaforo)) ?>" id="ventasKpiTotalCard">
+        <span class="ventas-kpi-status" id="ventasKpiTotalEstado"><?= $e($ventasTotalSemaforo['estado_label'] ?? 'Pendiente') ?></span><div class="kpi-icon"><i class="fa-solid fa-chart-line"></i></div><div class="kpi-label">Venta total</div><div class="kpi-value" id="ventasKpiTotalToneladas"><?= $e($fmt($ventas['toneladas'] ?? null, 1)) ?> TON</div><div class="kpi-trend" id="ventasKpiTotalDetalle">Facturas: <?= $e($fmt($ventas['facturas_toneladas'] ?? null, 1)) ?> TON · Remisiones: <?= $e($fmt($ventas['remisiones_toneladas'] ?? null, 1)) ?> TON</div><div class="ventas-kpi-target" id="ventasKpiTotalMeta"><?= $e($ventasTotalSemaforo['detalle'] ?? '') ?></div>
       </article>
+      <article class="kpi-card ventas-kpi-card ventas-backorder-card is-backorder is-backorder-status <?= $e($salesTrafficLightClass($pedidosTotalSemaforo)) ?>" id="ventasKpiBackorderTotalCard" data-backorder-type="total" role="button" tabindex="0" aria-haspopup="dialog" aria-controls="ventasBackorderModal">
+        <span class="ventas-kpi-status" id="ventasKpiBackorderTotalEstado"><?= $e($pedidosTotalSemaforo['estado_label'] ?? 'Sin dato') ?></span><div class="kpi-icon"><i class="fa-solid fa-layer-group"></i></div><div class="kpi-label">Back Order total</div><div class="kpi-value" id="ventasKpiBackorderTotal"><?= $e($fmt($pedidos['toneladas'] ?? null, 1)) ?> TON</div><div class="kpi-trend" id="ventasKpiBackorderTotalDetalle"><?= $e($fmt($pedidos['cantidad'] ?? null, 0)) ?> pedidos · Ver partidas</div><div class="ventas-kpi-target" id="ventasKpiBackorderTotalMeta"><?= $e($pedidosTotalSemaforo['detalle'] ?? '') ?></div>
+      </article>
+      <article class="kpi-card ventas-kpi-card is-average-price <?= $e($salesTrafficLightClass($precioPromedioSemaforo)) ?>" id="ventasKpiPrecioPromedioCard">
+        <span class="ventas-kpi-status" id="ventasKpiPrecioPromedioEstado"><?= $e($precioPromedioSemaforo['estado_label'] ?? 'Sin dato') ?></span><div class="kpi-icon"><i class="fa-solid fa-tags"></i></div><div class="kpi-label">Precio promedio total</div><div class="kpi-value" id="ventasKpiPrecioPromedio"><?= $e($money($ventas['precio_promedio'] ?? null, 2)) ?> <span class="ventas-price-unit">/ KG</span></div><div class="kpi-trend" id="ventasKpiPrecioPromedioDetalle">Venta neta: <?= $e($money($ventas['monto_total'] ?? null, 0)) ?> · <?= $e($fmt($ventas['kilos'] ?? null, 0)) ?> kg</div><div class="ventas-kpi-target" id="ventasKpiPrecioPromedioMeta"><?= $e($precioPromedioSemaforo['detalle'] ?? '') ?></div>
+      </article>
+
+      <div class="ventas-unclassified-note" id="ventasBackorderSinClasificar" <?= (float)($pedidosSinClasificar['toneladas'] ?? 0) > 0 ? '' : 'hidden' ?>>Back Order sin clasificar: <?= $e($fmt($pedidosSinClasificar['toneladas'] ?? null, 1)) ?> TON</div>
     </section>
 
+    <div class="ventas-detail-grid">
     <section class="chart-container ventas-chart-container">
       <div class="chart-header">
         <h3>Toneladas vendidas por día</h3>
         <div class="legend">
-          <span class="legend-item"><i class="legend-color" style="background:#2563eb;"></i> Ventas</span>
+          <span class="legend-item"><i class="legend-color" style="background:#0f766e;"></i> Comercial</span>
+          <span class="legend-item"><i class="legend-color" style="background:#2563eb;"></i> Industrial</span>
           <span class="legend-item"><i class="legend-color" style="background:#0f172a;"></i> Meta diaria</span>
         </div>
       </div>
@@ -682,6 +898,7 @@ $chartTarget = array_fill(0, count($chartLabels), round($objetivoDiario, 2));
         <?php endforeach; ?>
       </div>
     </section>
+    </div>
   </main>
 
   <div class="ventas-backorder-modal" id="ventasBackorderModal" aria-hidden="true">
@@ -749,8 +966,8 @@ $chartTarget = array_fill(0, count($chartLabels), round($objetivoDiario, 2));
 
   <script>
     const ventasRefreshMs = <?= (int)($meta['intervaloActualizacion'] ?? 600000) ?>;
-    const ventasSemaforoClasses = ['avance-semaforo-verde', 'avance-semaforo-amarillo', 'avance-semaforo-rojo'];
     let ventasBackorderPartidas = <?= json_encode($backorderPartidas, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+    let ventasBackorderTipoActivo = 'comercial';
     let ventasCalidadPorProducir = <?= json_encode($calidadPorProducir, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
     Chart.defaults.font.family = 'Inter, sans-serif';
     Chart.defaults.font.size = document.documentElement.classList.contains('executive-display') ? 12 : 11;
@@ -763,6 +980,15 @@ $chartTarget = array_fill(0, count($chartLabels), round($objetivoDiario, 2));
         minimumFractionDigits: decimals,
         maximumFractionDigits: decimals,
       });
+    }
+
+    function ventasFormatCurrency(value, decimals = 2) {
+      const number = Number(value);
+      if (!Number.isFinite(number)) return '—';
+      return `$${number.toLocaleString('en-US', {
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals,
+      })}`;
     }
 
     function escapeHtml(value) {
@@ -790,7 +1016,10 @@ $chartTarget = array_fill(0, count($chartLabels), round($objetivoDiario, 2));
       const summary = document.getElementById('ventasBackorderSummary');
       if (!tbody || !summary) return;
 
-      const rows = Array.isArray(ventasBackorderPartidas) ? ventasBackorderPartidas : [];
+      const allRows = Array.isArray(ventasBackorderPartidas) ? ventasBackorderPartidas : [];
+      const rows = ventasBackorderTipoActivo === 'total'
+        ? allRows
+        : allRows.filter((row) => String(row.tipo_venta || 'sin_clasificar') === ventasBackorderTipoActivo);
       const toneladasSolicitadas = rows.reduce((total, row) => total + Number(row.toneladas_solicitadas || 0), 0);
       const toneladasPendientes = rows.reduce((total, row) => total + Number(row.toneladas_pendientes || 0), 0);
 
@@ -811,9 +1040,15 @@ $chartTarget = array_fill(0, count($chartLabels), round($objetivoDiario, 2));
         : '<tr><td class="ventas-backorder-empty" colspan="8">No hay partidas disponibles para este Back Order.</td></tr>';
     }
 
-    function openBackorderModal() {
+    function openBackorderModal(tipo = 'comercial') {
       const modal = document.getElementById('ventasBackorderModal');
       if (!modal) return;
+      ventasBackorderTipoActivo = tipo;
+      const title = document.getElementById('ventasBackorderTitle');
+      if (title) {
+        const tipoLabel = tipo === 'total' ? 'Total' : (tipo === 'industrial' ? 'Industrial' : 'Comercial');
+        title.textContent = `Partidas de Back Order · ${tipoLabel}`;
+      }
       renderBackorderPartidas();
       modal.classList.add('is-open');
       modal.setAttribute('aria-hidden', 'false');
@@ -827,23 +1062,7 @@ $chartTarget = array_fill(0, count($chartLabels), round($objetivoDiario, 2));
       modal.classList.remove('is-open');
       modal.setAttribute('aria-hidden', 'true');
       document.body.classList.remove('ventas-modal-open');
-      document.getElementById('ventasKpiPedidosCard')?.focus();
-    }
-
-    function ventasSemaforo(value) {
-      const number = Number(value);
-      if (!Number.isFinite(number)) return '';
-      if (number < 600) return 'avance-semaforo-rojo';
-      if (number <= 650) return 'avance-semaforo-amarillo';
-      return 'avance-semaforo-verde';
-    }
-
-    function pedidosSemaforo(value) {
-      const number = Number(value);
-      if (!Number.isFinite(number)) return '';
-      if (number < 400) return 'avance-semaforo-rojo';
-      if (number <= 450) return 'avance-semaforo-amarillo';
-      return 'avance-semaforo-verde';
+      document.querySelector(`[data-backorder-type="${ventasBackorderTipoActivo}"]`)?.focus();
     }
 
     function renderCalidadPorProducir(rows) {
@@ -931,14 +1150,28 @@ $chartTarget = array_fill(0, count($chartLabels), round($objetivoDiario, 2));
           labels: <?= json_encode($chartLabels, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>,
           datasets: [{
             type: 'bar',
-            label: 'Ventas',
-            data: <?= json_encode($chartTons, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>,
+            label: 'Comercial',
+            data: <?= json_encode($chartComercial, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>,
+            backgroundColor: '#0f766e',
+            borderColor: '#0f766e',
+            borderWidth: 0,
+            borderRadius: 5,
+            maxBarThickness: 22,
+            yAxisID: 'y',
+            categoryPercentage: 0.78,
+            barPercentage: 0.9,
+          }, {
+            type: 'bar',
+            label: 'Industrial',
+            data: <?= json_encode($chartIndustrial, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>,
             backgroundColor: '#2563eb',
             borderColor: '#2563eb',
             borderWidth: 0,
-            borderRadius: 8,
-            maxBarThickness: 34,
+            borderRadius: 5,
+            maxBarThickness: 22,
             yAxisID: 'y',
+            categoryPercentage: 0.78,
+            barPercentage: 0.9,
           }, {
             type: 'line',
             label: 'Meta diaria',
@@ -949,6 +1182,7 @@ $chartTarget = array_fill(0, count($chartLabels), round($objetivoDiario, 2));
             borderWidth: 3,
             tension: 0,
             yAxisID: 'y',
+            stack: 'meta',
             showLabels: false,
           }]
         },
@@ -982,34 +1216,143 @@ $chartTarget = array_fill(0, count($chartLabels), round($objetivoDiario, 2));
       const rows = report?.series?.diaria || [];
       const labels = rows.map((row) => String(row.day ?? ''));
       const toneladas = rows.map((row) => Number(row.toneladas || 0));
+      const comercial = rows.map((row) => Number(row.comercial_toneladas || 0));
+      const industrial = rows.map((row) => Number(row.industrial_toneladas || 0));
       const objetivoDiario = Number(report?.objetivos?.diario_toneladas || 0);
 
       ventasDailyChart.data.labels = labels;
-      ventasDailyChart.data.datasets[0].data = toneladas;
-      ventasDailyChart.data.datasets[1].data = labels.map(() => objetivoDiario);
+      ventasDailyChart.data.datasets[0].data = comercial;
+      ventasDailyChart.data.datasets[1].data = industrial;
+      ventasDailyChart.data.datasets[2].data = labels.map(() => objetivoDiario);
       ventasDailyChart.options.scales.y.suggestedMax = Math.max(objetivoDiario + 5, Math.max(0, ...toneladas) + 4);
       ventasDailyChart.update('none');
     }
 
+    function updateSalesTrafficLight(cardId, targetId, statusId, trafficLight) {
+      const card = document.getElementById(cardId);
+      const target = document.getElementById(targetId);
+      const status = document.getElementById(statusId);
+      const allowed = ['avance-semaforo-verde', 'avance-semaforo-amarillo', 'avance-semaforo-rojo'];
+      if (card) {
+        card.classList.remove(...allowed);
+        const className = String(trafficLight?.clase || '');
+        if (allowed.includes(className)) card.classList.add(className);
+      }
+      if (target) target.textContent = String(trafficLight?.detalle || '');
+      if (status) status.textContent = String(trafficLight?.estado_label || 'Pendiente');
+    }
+
     function updateVentasReport(report) {
       const ventas = report?.kpis?.ventas || {};
+      const comercial = ventas?.por_tipo?.comercial || {};
+      const industrial = ventas?.por_tipo?.industrial || {};
       const pedidos = report?.kpis?.pedidos || {};
+      const pedidosComercial = pedidos?.por_tipo?.comercial || {};
+      const pedidosIndustrial = pedidos?.por_tipo?.industrial || {};
+      const pedidosSinClasificar = pedidos?.por_tipo?.sin_clasificar || {};
       const backorderVenta = report?.kpis?.backorder_venta || {};
       const calidadPorProducir = report?.kpis?.calidad_por_producir || [];
-      const card = document.getElementById('ventasKpiCard');
-      const toneladas = document.getElementById('ventasKpiToneladas');
-      const detalle = document.getElementById('ventasKpiDetalle');
-      const pedidosCard = document.getElementById('ventasKpiPedidosCard');
-      const pedidosValue = document.getElementById('ventasKpiPedidos');
-      const pedidosDetalle = document.getElementById('ventasKpiPedidosDetalle');
+      const totalToneladas = document.getElementById('ventasKpiTotalToneladas');
+      const totalDetalle = document.getElementById('ventasKpiTotalDetalle');
+      const precioPromedio = document.getElementById('ventasKpiPrecioPromedio');
+      const precioPromedioDetalle = document.getElementById('ventasKpiPrecioPromedioDetalle');
+      const precioPromedioComercial = document.getElementById('ventasKpiPrecioPromedioComercial');
+      const precioPromedioComercialDetalle = document.getElementById('ventasKpiPrecioPromedioComercialDetalle');
+      const precioPromedioIndustrial = document.getElementById('ventasKpiPrecioPromedioIndustrial');
+      const precioPromedioIndustrialDetalle = document.getElementById('ventasKpiPrecioPromedioIndustrialDetalle');
+      const comercialToneladas = document.getElementById('ventasKpiComercialToneladas');
+      const comercialDetalle = document.getElementById('ventasKpiComercialDetalle');
+      const industrialToneladas = document.getElementById('ventasKpiIndustrialToneladas');
+      const industrialDetalle = document.getElementById('ventasKpiIndustrialDetalle');
+      const backorderComercialValue = document.getElementById('ventasKpiBackorderComercial');
+      const backorderComercialDetalle = document.getElementById('ventasKpiBackorderComercialDetalle');
+      const backorderIndustrialValue = document.getElementById('ventasKpiBackorderIndustrial');
+      const backorderIndustrialDetalle = document.getElementById('ventasKpiBackorderIndustrialDetalle');
+      const backorderTotalValue = document.getElementById('ventasKpiBackorderTotal');
+      const backorderTotalDetalle = document.getElementById('ventasKpiBackorderTotalDetalle');
+      const backorderSinClasificar = document.getElementById('ventasBackorderSinClasificar');
       const backorderVentaValue = document.getElementById('ventasKpiBackorderVenta');
+      const backorderVentaLabel = document.getElementById('ventasKpiBackorderVentaLabel');
+      const backorderVentaDetalle = document.getElementById('ventasKpiBackorderVentaDetalle');
 
-      if (pedidosValue) {
-        pedidosValue.textContent = `${ventasFormatNumber(pedidos.toneladas, 1)} TON`;
+      if (totalToneladas) {
+        totalToneladas.textContent = `${ventasFormatNumber(ventas.toneladas, 1)} TON`;
       }
 
-      if (pedidosDetalle) {
-        pedidosDetalle.textContent = `${ventasFormatNumber(pedidos.cantidad, 0)} pedidos · Ver partidas`;
+      if (totalDetalle) {
+        totalDetalle.textContent = `Facturas: ${ventasFormatNumber(ventas.facturas_toneladas, 1)} TON · Remisiones: ${ventasFormatNumber(ventas.remisiones_toneladas, 1)} TON`;
+      }
+
+      if (precioPromedio) {
+        precioPromedio.innerHTML = `${ventasFormatCurrency(ventas.precio_promedio, 2)} <span class="ventas-price-unit">/ KG</span>`;
+      }
+
+      if (precioPromedioDetalle) {
+        precioPromedioDetalle.textContent = `Venta neta: ${ventasFormatCurrency(ventas.monto_total, 0)} · ${ventasFormatNumber(ventas.kilos, 0)} kg`;
+      }
+
+      if (precioPromedioComercial) {
+        precioPromedioComercial.innerHTML = `${ventasFormatCurrency(comercial.precio_promedio, 2)} <span class="ventas-price-unit">/ KG</span>`;
+      }
+      if (precioPromedioComercialDetalle) {
+        precioPromedioComercialDetalle.textContent = `Venta neta: ${ventasFormatCurrency(comercial.monto, 0)} · ${ventasFormatNumber(comercial.kilos, 0)} kg`;
+      }
+      if (precioPromedioIndustrial) {
+        precioPromedioIndustrial.innerHTML = `${ventasFormatCurrency(industrial.precio_promedio, 2)} <span class="ventas-price-unit">/ KG</span>`;
+      }
+      if (precioPromedioIndustrialDetalle) {
+        precioPromedioIndustrialDetalle.textContent = `Venta neta: ${ventasFormatCurrency(industrial.monto, 0)} · ${ventasFormatNumber(industrial.kilos, 0)} kg`;
+      }
+
+      updateSalesTrafficLight('ventasKpiTotalCard', 'ventasKpiTotalMeta', 'ventasKpiTotalEstado', ventas.semaforo);
+      updateSalesTrafficLight('ventasKpiPrecioPromedioCard', 'ventasKpiPrecioPromedioMeta', 'ventasKpiPrecioPromedioEstado', ventas.precio_promedio_semaforo);
+      updateSalesTrafficLight('ventasKpiPrecioPromedioComercialCard', 'ventasKpiPrecioPromedioComercialMeta', 'ventasKpiPrecioPromedioComercialEstado', comercial.precio_promedio_semaforo);
+      updateSalesTrafficLight('ventasKpiPrecioPromedioIndustrialCard', 'ventasKpiPrecioPromedioIndustrialMeta', 'ventasKpiPrecioPromedioIndustrialEstado', industrial.precio_promedio_semaforo);
+      updateSalesTrafficLight('ventasKpiComercialCard', 'ventasKpiComercialMeta', 'ventasKpiComercialEstado', comercial.semaforo);
+      updateSalesTrafficLight('ventasKpiIndustrialCard', 'ventasKpiIndustrialMeta', 'ventasKpiIndustrialEstado', industrial.semaforo);
+      updateSalesTrafficLight('ventasKpiBackorderComercialCard', 'ventasKpiBackorderComercialMeta', 'ventasKpiBackorderComercialEstado', pedidosComercial.semaforo);
+      updateSalesTrafficLight('ventasKpiBackorderIndustrialCard', 'ventasKpiBackorderIndustrialMeta', 'ventasKpiBackorderIndustrialEstado', pedidosIndustrial.semaforo);
+      updateSalesTrafficLight('ventasKpiBackorderTotalCard', 'ventasKpiBackorderTotalMeta', 'ventasKpiBackorderTotalEstado', pedidos.semaforo);
+
+      if (backorderComercialValue) {
+        backorderComercialValue.textContent = `${ventasFormatNumber(pedidosComercial.toneladas, 1)} TON`;
+      }
+
+      if (backorderComercialDetalle) {
+        backorderComercialDetalle.textContent = `${ventasFormatNumber(pedidosComercial.cantidad, 0)} pedidos · Ver partidas`;
+      }
+
+      if (backorderIndustrialValue) {
+        backorderIndustrialValue.textContent = `${ventasFormatNumber(pedidosIndustrial.toneladas, 1)} TON`;
+      }
+
+      if (backorderIndustrialDetalle) {
+        backorderIndustrialDetalle.textContent = `${ventasFormatNumber(pedidosIndustrial.cantidad, 0)} pedidos · Ver partidas`;
+      }
+
+      if (backorderTotalValue) {
+        backorderTotalValue.textContent = `${ventasFormatNumber(pedidos.toneladas, 1)} TON`;
+      }
+      if (backorderTotalDetalle) {
+        backorderTotalDetalle.textContent = `${ventasFormatNumber(pedidos.cantidad, 0)} pedidos · Ver partidas`;
+      }
+
+      if (backorderSinClasificar) {
+        const sinClasificarToneladas = Number(pedidosSinClasificar.toneladas || 0);
+        backorderSinClasificar.hidden = sinClasificarToneladas <= 0;
+        backorderSinClasificar.textContent = `Back Order sin clasificar: ${ventasFormatNumber(sinClasificarToneladas, 1)} TON`;
+      }
+
+      if (backorderVentaValue) {
+        backorderVentaValue.textContent = `${ventasFormatNumber(backorderVenta.toneladas, 1)} TON`;
+      }
+
+      if (backorderVentaLabel) {
+        backorderVentaLabel.textContent = backorderVenta.label || 'Back Order + venta';
+      }
+
+      if (backorderVentaDetalle) {
+        backorderVentaDetalle.textContent = backorderVenta.detalle || '';
       }
 
       ventasBackorderPartidas = Array.isArray(pedidos.partidas) ? pedidos.partidas : [];
@@ -1017,32 +1360,20 @@ $chartTarget = array_fill(0, count($chartLabels), round($objetivoDiario, 2));
         renderBackorderPartidas();
       }
 
-      if (backorderVentaValue) {
-        backorderVentaValue.textContent = `${ventasFormatNumber(backorderVenta.toneladas, 1)} TON`;
+      if (comercialToneladas) {
+        comercialToneladas.textContent = `${ventasFormatNumber(comercial.toneladas, 1)} TON`;
       }
 
-      if (pedidosCard) {
-        pedidosCard.classList.remove(...ventasSemaforoClasses);
-        const statusClass = pedidosSemaforo(pedidos.toneladas);
-        if (statusClass !== '') {
-          pedidosCard.classList.add(statusClass);
-        }
+      if (comercialDetalle) {
+        comercialDetalle.textContent = `Facturas: ${ventasFormatNumber(comercial.facturas_toneladas, 1)} TON · Remisiones: ${ventasFormatNumber(comercial.remisiones_toneladas, 1)} TON`;
       }
 
-      if (toneladas) {
-        toneladas.textContent = `${ventasFormatNumber(ventas.toneladas, 1)} TON`;
+      if (industrialToneladas) {
+        industrialToneladas.textContent = `${ventasFormatNumber(industrial.toneladas, 1)} TON`;
       }
 
-      if (detalle) {
-        detalle.textContent = `Facturas: ${ventasFormatNumber(ventas.facturas_toneladas, 1)} TON · Remisiones: ${ventasFormatNumber(ventas.remisiones_toneladas, 1)} TON`;
-      }
-
-      if (card) {
-        card.classList.remove(...ventasSemaforoClasses);
-        const statusClass = ventasSemaforo(ventas.toneladas);
-        if (statusClass !== '') {
-          card.classList.add(statusClass);
-        }
+      if (industrialDetalle) {
+        industrialDetalle.textContent = `Facturas: ${ventasFormatNumber(industrial.facturas_toneladas, 1)} TON · Remisiones: ${ventasFormatNumber(industrial.remisiones_toneladas, 1)} TON`;
       }
 
       ventasCalidadPorProducir = Array.isArray(calidadPorProducir) ? calidadPorProducir : [];
@@ -1067,13 +1398,14 @@ $chartTarget = array_fill(0, count($chartLabels), round($objetivoDiario, 2));
       });
     });
 
-    const ventasBackorderCard = document.getElementById('ventasKpiPedidosCard');
-    ventasBackorderCard?.addEventListener('click', openBackorderModal);
-    ventasBackorderCard?.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter' || event.key === ' ') {
-        event.preventDefault();
-        openBackorderModal();
-      }
+    document.querySelectorAll('[data-backorder-type]').forEach((card) => {
+      card.addEventListener('click', () => openBackorderModal(card.dataset.backorderType || 'comercial'));
+      card.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          openBackorderModal(card.dataset.backorderType || 'comercial');
+        }
+      });
     });
 
     document.querySelectorAll('[data-backorder-close]').forEach((element) => {

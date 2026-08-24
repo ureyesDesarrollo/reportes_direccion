@@ -8,41 +8,26 @@ if (!isset($metric, $e, $money)) {
 }
 
 $invoiceDetails = (array)($metric['detalle_facturas'] ?? []);
+$currencyLabels = ['1' => 'MXN', '2' => 'USD', '3' => 'EUR'];
 ?>
 <div class="invoice-panel">
   <div class="invoice-panel-title">Detalle por factura</div>
   <?php foreach ($invoiceDetails as $invoice): ?>
-    <details class="invoice-item">
+    <details class="invoice-item" data-provider="<?= $e($invoice['proveedor_clave'] ?? '') ?>" data-invoice="<?= $e($invoice['numero'] ?? '') ?>">
       <summary>
         <span class="invoice-provider"><?= $e($invoice['proveedor'] ?? 'Proveedor sin nombre') ?></span>
         <span class="invoice-reference">Factura <?= $e($invoice['numero'] ?? 'Sin número') ?> · <?= $e($invoice['fecha'] ?? '') ?></span>
-        <strong><?= $money($invoice['total_convertido'] ?? null) ?></strong>
+        <strong><?= $money($invoice['subtotal_convertido'] ?? null) ?></strong>
       </summary>
       <div class="invoice-detail-grid">
-        <div><span>Proveedor</span><strong><?= $e($invoice['proveedor'] ?? '—') ?></strong></div>
-        <div><span>Clave proveedor</span><strong><?= $e($invoice['proveedor_clave'] ?? '—') ?></strong></div>
-        <div><span>Estatus</span><strong><?= $e($invoice['estatus'] !== '' ? $invoice['estatus'] : '—') ?></strong></div>
-        <div><span>Vencimiento</span><strong><?= $e($invoice['fecha_vencimiento'] !== '' ? $invoice['fecha_vencimiento'] : '—') ?></strong></div>
-        <div><span>Pedido</span><strong><?= $e($invoice['numero_pedido'] ?? '—') ?></strong></div>
-        <div><span>Orden</span><strong><?= $e($invoice['numero_orden'] ?? '—') ?></strong></div>
         <div><span>Subtotal</span><strong><?= $money($invoice['importes']['subtotal'] ?? null) ?></strong></div>
-        <div><span>Descuento</span><strong><?= $money($invoice['importes']['descuento'] ?? null) ?></strong></div>
-        <div><span>IVA</span><strong><?= $money($invoice['importes']['iva'] ?? null) ?></strong></div>
-        <div><span>IEPS</span><strong><?= $money($invoice['importes']['ieps'] ?? null) ?></strong></div>
-        <div><span>Retención</span><strong><?= $money($invoice['importes']['retencion'] ?? null) ?></strong></div>
-        <div><span>Retención IVA</span><strong><?= $money($invoice['importes']['retencion_iva'] ?? null) ?></strong></div>
         <div><span>Total factura</span><strong><?= $money($invoice['importes']['total'] ?? null) ?></strong></div>
-        <div><span>Saldo</span><strong><?= $money($invoice['importes']['saldo'] ?? null) ?></strong></div>
-        <div><span>Moneda</span><strong><?= $e($invoice['moneda'] ?? '—') ?></strong></div>
+        <div><span>Moneda</span><strong><?= $e($currencyLabels[(string)($invoice['moneda'] ?? '')] ?? '—') ?></strong></div>
         <div><span>Tipo de cambio</span><strong><?= number_format((float)($invoice['tipo_cambio'] ?? 1), 4, '.', ',') ?></strong></div>
       </div>
-      <?php if (!empty($invoice['datos_estadisticos'])): ?>
-        <div class="invoice-statistics">
-          <?php foreach ((array)$invoice['datos_estadisticos'] as $statistic): ?>
-            <span><?= $e($statistic['campo'] ?? 'Clasificación') ?>: <?= $e($statistic['clave'] ?? '—') ?><?= ($statistic['nombre'] ?? '') !== '' ? ' · ' . $e($statistic['nombre']) : '' ?></span>
-          <?php endforeach; ?>
-        </div>
-      <?php endif; ?>
+      <div class="line-items" data-lines-state="idle">
+        <div class="line-items-placeholder">Abre la factura para consultar sus partidas.</div>
+      </div>
     </details>
   <?php endforeach; ?>
 </div>

@@ -30,6 +30,7 @@ $usarTodosLosProductos = (bool)($config['usar_todos_los_productos'] ?? true);
 $anioPivot          = (int)($config['anio_pivot'] ?? date('Y'));
 $lugar              = $config['lugar'] ?? 'CRITICOS';
 $productosIgnorar   = $config['productos_a_ignorar'] ?? [];
+$cveMovCompra       = trim((string)($config['cve_mov_compra'] ?? '1'));
 
 $cardsPorPagina          = (int)($appConfig['cards_por_pagina'] ?? 9);
 $filasPorPagina          = (int)($appConfig['filas_por_pagina'] ?? 15);
@@ -433,6 +434,101 @@ while ($row = $stmtAnual->fetch()) {
 
 /*
 |--------------------------------------------------------------------------
+| 8.1) FRECUENCIA DE COMPRA DEL AÑO ACTUAL
+|--------------------------------------------------------------------------
+| Las compras verificadas en movs son entradas (E) con CVE_MOV = 1.
+| NO_PEDC identifica la compra. Varias recepciones del mismo pedido cuentan
+| una sola vez y toman la fecha de su primera entrada. Si falta NO_PEDC, se
+| usa NO_MOV para no descartar el movimiento.
+|--------------------------------------------------------------------------
+*/
+$frecuenciaCompraRefacciones = [];
+$sqlFrecuenciaCompra = "
+    SELECT
+        TRIM(m.CVE_PROD) AS cve_prod,
+        COALESCE(TRIM(p.DESC_PROD), '') AS desc_prod,
+        MIN(m.F_MOV) AS fecha_compra,
+        CASE
+          WHEN TRIM(COALESCE(m.NO_PEDC, '')) <> '' AND TRIM(COALESCE(m.NO_PEDC, '')) <> '0'
+            THEN CONCAT('PEDIDO:', TRIM(m.NO_PEDC))
+          ELSE CONCAT('MOVIMIENTO:', TRIM(m.NO_MOV))
+        END AS compra_id,
+        m.NO_PEDC AS no_pedido,
+        SUM(m.CANT_PROD) AS cantidad
+    FROM movs m
+    LEFT JOIN producto p
+      ON TRIM(p.CVE_PROD) = TRIM(m.CVE_PROD)
+    WHERE CAST(DATE_FORMAT(m.F_MOV, '%x') AS UNSIGNED) = ?
+      AND UPPER(TRIM(m.TIPO_MOV)) = 'E'
+      AND TRIM(m.CVE_MOV) = ?
+      AND TRIM(m.LUGAR) = ?
+";
+$paramsFrecuenciaCompra = [$anioActual, $cveMovCompra, $lugar];
+if (!empty($productosIgnorar)) {
+  $ph = createPlaceholders($productosIgnorar);
+  $sqlFrecuenciaCompra .= " AND TRIM(m.CVE_PROD) NOT IN ($ph) ";
+  $paramsFrecuenciaCompra = array_merge($paramsFrecuenciaCompra, $productosIgnorar);
+}
+$sqlFrecuenciaCompra .= "
+    GROUP BY
+        TRIM(m.CVE_PROD),
+        p.DESC_PROD,
+        CASE
+          WHEN TRIM(COALESCE(m.NO_PEDC, '')) <> '' AND TRIM(COALESCE(m.NO_PEDC, '')) <> '0'
+            THEN CONCAT('PEDIDO:', TRIM(m.NO_PEDC))
+          ELSE CONCAT('MOVIMIENTO:', TRIM(m.NO_MOV))
+        END,
+        m.NO_PEDC
+    ORDER BY TRIM(m.CVE_PROD), fecha_compra, compra_id
+";
+$stmtFrecuenciaCompra = $pdoMovs->prepare($sqlFrecuenciaCompra);
+$stmtFrecuenciaCompra->execute($paramsFrecuenciaCompra);
+$comprasPorRefaccion = [];
+foreach ($stmtFrecuenciaCompra as $row) {
+  $key = trim((string)($row['cve_prod'] ?? ''));
+  $fecha = trim((string)($row['fecha_compra'] ?? ''));
+  if ($key === '' || $fecha === '') continue;
+  if (!isset($comprasPorRefaccion[$key])) {
+    $descripcion = trim((string)($row['desc_prod'] ?? ''));
+    $comprasPorRefaccion[$key] = [
+      'key' => $key,
+      'label' => $descripcion !== '' ? $descripcion : $key,
+      'eventos' => 0,
+      'cantidad' => 0.0,
+      'fechas' => [],
+      'ultima_compra' => $fecha,
+    ];
+  }
+  $comprasPorRefaccion[$key]['eventos']++;
+  $comprasPorRefaccion[$key]['cantidad'] += (float)($row['cantidad'] ?? 0);
+  $comprasPorRefaccion[$key]['fechas'][$fecha] = true;
+  if ($fecha > $comprasPorRefaccion[$key]['ultima_compra']) $comprasPorRefaccion[$key]['ultima_compra'] = $fecha;
+}
+foreach ($comprasPorRefaccion as $item) {
+  $fechas = array_keys((array)$item['fechas']);
+  sort($fechas);
+  $diasCompra = count($fechas);
+  $promedioDias = null;
+  if ($diasCompra > 1) {
+    $primera = new DateTimeImmutable($fechas[0]);
+    $ultima = new DateTimeImmutable($fechas[$diasCompra - 1]);
+    $promedioDias = $ultima->diff($primera)->days / ($diasCompra - 1);
+  }
+  unset($item['fechas']);
+  $item['dias_compra'] = $diasCompra;
+  $item['promedio_dias'] = $promedioDias;
+  $frecuenciaCompraRefacciones[] = $item;
+}
+usort($frecuenciaCompraRefacciones, static function (array $left, array $right): int {
+  $leftDays = is_numeric($left['promedio_dias'] ?? null) ? (float)$left['promedio_dias'] : PHP_FLOAT_MAX;
+  $rightDays = is_numeric($right['promedio_dias'] ?? null) ? (float)$right['promedio_dias'] : PHP_FLOAT_MAX;
+  $daysComparison = $leftDays <=> $rightDays;
+  if ($daysComparison !== 0) return $daysComparison;
+  return ((int)($right['eventos'] ?? 0)) <=> ((int)($left['eventos'] ?? 0));
+});
+
+/*
+|--------------------------------------------------------------------------
 | 9) TOTALES POR REFACCIÓN (VARIACIÓN)
 |--------------------------------------------------------------------------
 */
@@ -551,6 +647,7 @@ $result = [
   'costoPromedioAnioActual'       => $costoPromedioAnioActual,
   'impactoEconomicoAnioAnterior'  => $impactoEconomicoAnioAnterior,
   'impactoEconomicoAnioActual'    => $impactoEconomicoAnioActual,
+  'frecuenciaCompraRefacciones'   => $frecuenciaCompraRefacciones,
 
   'totalesConsumoRefaccion'   => $totalesConsumoRefaccion,
   'totalesCostoRefaccion'     => $totalesCostoRefaccion,

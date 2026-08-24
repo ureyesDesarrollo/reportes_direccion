@@ -24,9 +24,12 @@ $saved = energyLoadData($selectedYear, $selectedWeek);
 $recordExists = $saved !== [];
 $values = energyMergeData($config, $saved);
 $registeredWeeks = array_slice(energyRegisteredWeeks(energyLoadRecords()), 0, 12);
+$receiptId = filter_input(INPUT_GET, 'editar_recibo', FILTER_VALIDATE_INT);
+$editingReceipt = is_int($receiptId) ? energyLoadReceipt($receiptId) : [];
+$recentReceipts = array_slice(energyLoadReceipts(), 0, 15);
 $rangeLabel = energyWeekRangeLabel($selectedYear, $selectedWeek);
 $error = '';
-$success = isset($_GET['guardado']);
+$success = isset($_GET['guardado']) ? 'Registro operativo guardado correctamente.' : (isset($_GET['recibo_guardado']) ? 'Recibo guardado correctamente.' : '');
 $e = static fn($value): string => htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
 $field = static fn(array $source, string $key): string => is_numeric($source[$key] ?? null) ? (string)$source[$key] : '';
 $totalField = static fn(array $source): string => is_numeric($source['total'] ?? null) ? (string)$source['total'] : '';
@@ -42,6 +45,54 @@ $cleanNumber = static function ($value): ?float {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   try {
     if (!hash_equals((string)$_SESSION['energy_csrf'], (string)($_POST['csrf'] ?? ''))) throw new RuntimeException('La sesión expiró. Recarga la página e intenta nuevamente.');
+    $action = (string)($_POST['action'] ?? 'save_weekly');
+    if ($action === 'save_receipt') {
+      $serviceKey = trim((string)($_POST['service_key'] ?? ''));
+      if (!isset($config['consumos'][$serviceKey])) throw new InvalidArgumentException('El servicio seleccionado no es válido.');
+      $company = preg_replace('/\s+/u', ' ', trim((string)($_POST['company'] ?? '')));
+      $companyLength = function_exists('mb_strlen') ? mb_strlen((string)$company, 'UTF-8') : strlen((string)$company);
+      if ($company === '' || $companyLength > 80) throw new InvalidArgumentException('Captura una empresa válida de hasta 80 caracteres.');
+      $receiptDate = trim((string)($_POST['receipt_date'] ?? ''));
+      $periodStart = trim((string)($_POST['period_start'] ?? ''));
+      $periodEnd = trim((string)($_POST['period_end'] ?? ''));
+      $validDate = static fn(string $date): bool => DateTimeImmutable::createFromFormat('!Y-m-d', $date) instanceof DateTimeImmutable
+        && DateTimeImmutable::createFromFormat('!Y-m-d', $date)->format('Y-m-d') === $date;
+      if (!$validDate($receiptDate) || !$validDate($periodStart) || !$validDate($periodEnd) || $periodEnd < $periodStart) {
+        throw new InvalidArgumentException('Revisa la fecha del recibo y el periodo capturado.');
+      }
+      $quantity = $cleanNumber($_POST['receipt_quantity'] ?? null);
+      $postedReceiptId = filter_var($_POST['receipt_id'] ?? null, FILTER_VALIDATE_INT);
+      $previousReceipt = is_int($postedReceiptId) ? energyLoadReceipt($postedReceiptId) : [];
+      if (is_int($postedReceiptId) && $previousReceipt === []) throw new RuntimeException('El recibo que intentas editar ya no existe.');
+      $amount = $cleanNumber($_POST['receipt_amount'] ?? null);
+      if ($serviceKey === 'electricidad') {
+        $amount = is_numeric($previousReceipt['amount'] ?? null) ? (float)$previousReceipt['amount'] : 0.0;
+      }
+      if ($quantity === null || $amount === null) throw new InvalidArgumentException('El consumo y el importe del recibo son obligatorios.');
+      $receiptProduction = energyLoadProductionKgDates($periodStart, $periodEnd, $productionDatabase, $timezone);
+      $capturedNow = new DateTimeImmutable('now', $timezone);
+      $registeredAt = trim((string)($previousReceipt['registered_at'] ?? '')) ?: $capturedNow->format('Y-m-d H:i:s');
+      $savedReceiptId = energySaveReceipt([
+        'id' => is_int($postedReceiptId) ? $postedReceiptId : 0,
+        'service_key' => $serviceKey,
+        'company' => $company,
+        'receipt_date' => $receiptDate,
+        'period_start' => $periodStart,
+        'period_end' => $periodEnd,
+        'reference' => trim((string)($_POST['reference'] ?? '')),
+        'quantity' => $quantity,
+        'amount' => $amount,
+        'production_kg' => $receiptProduction['kg'] ?? null,
+        'production_start' => $receiptProduction['inicio'] ?? '',
+        'production_end' => $receiptProduction['fin'] ?? '',
+        'registered_at' => $registeredAt,
+        'updated_at' => $previousReceipt !== [] ? $capturedNow->format('Y-m-d H:i:s') : null,
+      ]);
+      $_SESSION['energy_csrf'] = bin2hex(random_bytes(24));
+      header('Location: captura.php?' . http_build_query(['recibo_guardado' => 1, 'editar_recibo' => $savedReceiptId]));
+      exit;
+    }
+
     $postYear = filter_var($_POST['anio'] ?? null, FILTER_VALIDATE_INT);
     $postWeek = filter_var($_POST['semana'] ?? null, FILTER_VALIDATE_INT);
     if (!is_int($postYear) || !is_int($postWeek) || !energyValidWeek($postYear, $postWeek)) throw new InvalidArgumentException('La semana seleccionada no es válida.');
@@ -49,8 +100,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $selectedWeek = $postWeek;
     $production = energyLoadProductionKg($selectedYear, $selectedWeek, $productionDatabase, $timezone);
     $productionKg = is_numeric($production['kg'] ?? null) ? (float)$production['kg'] : null;
-    if ($productionKg === null) throw new RuntimeException((string)($production['error'] ?? 'No fue posible consultar la producción semanal.'));
-    if ($productionKg <= 0) throw new RuntimeException('El corte semanal no tiene kilogramos producidos; no es posible calcular los consumos por kilogramo.');
     $existingRecord = energyLoadData($selectedYear, $selectedWeek);
     $capturedNow = new DateTimeImmutable('now', $timezone);
     $registeredAt = trim((string)($existingRecord['registrado_en'] ?? ''));
@@ -69,11 +118,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       $registeredAt = $capturedNow->format('Y-m-d H:i:s');
     }
     $updatedAt = $existingRecord !== [] ? $capturedNow->format('Y-m-d H:i:s') : null;
-    $electricityTotal = $cleanNumber($_POST['electricidad_total'] ?? null);
-    $gasTotal = $cleanNumber($_POST['gas_natural_total'] ?? null);
-    $waterTotal = $cleanNumber($_POST['agua_total'] ?? null);
-    $ratio = static fn(?float $total): ?float => $total !== null ? $total / $productionKg : null;
-    $data = [
+    $data = energyMergeData($existingRecord, [
       'anio' => $selectedYear,
       'semana' => $selectedWeek,
       'registrado_en' => $registeredAt,
@@ -90,11 +135,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'fin' => (string)($production['fin'] ?? ''),
         'corte_consultado_en' => $capturedNow->format('Y-m-d H:i:s'),
       ],
-      'consumos' => [
-        'electricidad' => ['total' => $electricityTotal, 'valor' => $cleanNumber($_POST['electricidad_valor'] ?? null), 'value' => $ratio($electricityTotal)],
-        'gas_natural' => ['total' => $gasTotal, 'valor' => $cleanNumber($_POST['gas_natural_valor'] ?? null), 'value' => $ratio($gasTotal)],
-        'agua' => ['total' => $waterTotal, 'valor' => $cleanNumber($_POST['agua_valor'] ?? null), 'value' => $ratio($waterTotal)],
-      ],
       'recuperaciones' => [
         'recuperacion_grasa' => ['m3' => $cleanNumber($_POST['recuperacion_grasa_m3'] ?? null), 'valor' => $cleanNumber($_POST['recuperacion_grasa_valor'] ?? null)],
         'ollas' => ['m3' => $cleanNumber($_POST['ollas_m3'] ?? null), 'valor' => $cleanNumber($_POST['ollas_valor'] ?? null)],
@@ -104,7 +144,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'panel_solar' => ['kw' => $cleanNumber($_POST['panel_solar_kw'] ?? null), 'valor' => $cleanNumber($_POST['panel_solar_valor'] ?? null)],
         'cogenerador' => ['kw' => $cleanNumber($_POST['cogenerador_kw'] ?? null), 'valor' => $cleanNumber($_POST['cogenerador_valor'] ?? null)],
       ],
-    ];
+    ]);
     energySaveData($selectedYear, $selectedWeek, $data);
     $_SESSION['energy_csrf'] = bin2hex(random_bytes(24));
     header('Location: captura.php?' . http_build_query(['anio' => $selectedYear, 'semana' => $selectedWeek, 'guardado' => 1]));
@@ -114,7 +154,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($data) && is_array($data)) $values = energyMergeData($config, $data);
   }
 }
-$consumptions = (array)($values['consumos'] ?? []);
 $recoveries = (array)($values['recuperaciones'] ?? []);
 $generation = (array)($values['generacion'] ?? []);
 ?>
@@ -154,6 +193,7 @@ $generation = (array)($values['generacion'] ?? []);
     .production-cut small { margin-top:3px; color:#64748b; font-size:10px; font-weight:700; }
     .production-cut.error { border-color:#fecaca; background:#fef2f2; }.production-cut.error i,.production-cut.error strong { color:#b91c1c; }
     .panel { margin-top:12px; padding:18px; border:1px solid var(--line); border-radius:17px; background:#fff; }
+    .section-label { margin:18px 2px 0; color:#334155; font-size:15px; font-weight:900; text-transform:uppercase; }
     .panel h2 { display:flex; align-items:center; gap:9px; margin:0 0 14px; color:#334155; font-size:17px; font-weight:900; text-transform:uppercase; }
     .panel h2 i { color:var(--amber); }
     .grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
@@ -174,8 +214,18 @@ $generation = (array)($values['generacion'] ?? []);
     .suffix input { padding-right:54px; }
     .suffix span { position:absolute; right:11px; top:50%; transform:translateY(-50%); color:var(--muted); font-size:11px; font-weight:900; pointer-events:none; }
     .calculated { margin-top:8px; color:#1e3a8a; font-size:11px; font-weight:900; }.calculated strong{font-size:14px}
+    .receipt-fields { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; align-items:end; }
+    .receipt-actions { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:13px; }
+    .receipt-result { color:#1e3a8a; font-size:11px; font-weight:800; }
+    .receipt-result strong { font-size:15px; }
+    .receipt-list-table { width:100%; margin-top:14px; border-collapse:collapse; font-size:11px; }
+    .receipt-list-table th,.receipt-list-table td { padding:9px 8px; border-top:1px solid #e2e8f0; text-align:left; }
+    .receipt-list-table th { color:#64748b; font-size:9px; text-transform:uppercase; }
+    .receipt-list-table td:nth-last-child(-n+3),.receipt-list-table th:nth-last-child(-n+3) { text-align:right; }
+    .edit-link { color:#1d4ed8; font-weight:900; text-decoration:none; }
     .actions { position:sticky; bottom:10px; display:flex; justify-content:flex-end; gap:10px; margin-top:14px; padding:13px; border:1px solid var(--line); border-radius:15px; background:rgba(255,255,255,.96); box-shadow:0 10px 28px rgba(15,23,42,.12); }
     .save { padding:12px 19px; border:0; border-radius:999px; color:#fff; background:linear-gradient(145deg,var(--amber),var(--amber-dark)); font:inherit; font-size:14px; font-weight:900; cursor:pointer; }
+    @media(max-width:900px) { .receipt-fields { grid-template-columns:repeat(2,minmax(0,1fr)); } .receipt-list-table { display:block; overflow-x:auto; white-space:nowrap; } }
     @media(max-width:760px) { .grid,.grid.two { grid-template-columns:1fr; } .week-selector { align-items:stretch; flex-direction:column; } .week-selector .field,.week-selector .registered { width:100%; } .week-context { margin-left:0; text-align:left; } .production-cut{grid-template-columns:auto 1fr}.production-cut strong{grid-column:2} }
     @media(max-width:480px) { .topbar { flex-direction:column; } .header { padding:16px; } .fields { grid-template-columns:1fr; } }
   </style>
@@ -183,18 +233,32 @@ $generation = (array)($values['generacion'] ?? []);
 <body>
   <main class="page">
     <div class="topbar"><a class="link" href="../index.php"><i class="fa-solid fa-arrow-left"></i> Centro de reportes</a><a class="link" href="index.php?anio=<?= $e($selectedYear) ?>&amp;semana=<?= $e($selectedWeek) ?>" target="_blank"><i class="fa-solid fa-chart-column"></i> Ver reporte</a></div>
-    <header class="header"><span class="header-icon"><i class="fa-solid fa-bolt"></i></span><div><h1>Captura del Reporte de Energía</h1><p>Registro semanal de consumos y generación energética.</p></div></header>
-    <form class="week-selector" method="get"><div class="field"><label>Semana del año</label><input type="number" name="semana" min="1" max="53" required value="<?= $e($selectedWeek) ?>"></div><div class="field"><label>Año</label><input type="number" name="anio" min="2020" max="2100" required value="<?= $e($selectedYear) ?>"></div><button class="load" type="submit">Cargar semana</button><?php if ($registeredWeeks !== []): ?><div class="field registered"><label>Semanas registradas</label><select onchange="if(this.value) window.location.href=this.value"><option value="">Seleccionar</option><?php foreach ($registeredWeeks as $week): ?><option value="?anio=<?= $e($week['anio']) ?>&amp;semana=<?= $e($week['semana']) ?>" <?= (int)$week['anio'] === $selectedYear && (int)$week['semana'] === $selectedWeek ? 'selected' : '' ?>>Semana <?= $e($week['semana']) ?> · <?= $e($week['anio']) ?></option><?php endforeach; ?></select></div><?php endif; ?><div class="week-context"><?= $recordExists ? 'Editando registro existente' : 'Nuevo registro' ?>: <strong>semana <?= $e($selectedWeek) ?> de <?= $e($selectedYear) ?></strong><br><?= $e($rangeLabel) ?></div></form>
-    <section class="production-cut <?= !is_numeric($production['kg'] ?? null) ? 'error' : '' ?>"><i class="fa-solid fa-industry"></i><div><span>Producción del corte semanal</span><small>Lunes 07:00 a lunes 07:00 · sólo tarimas con etiquetado válido</small></div><strong><?= is_numeric($production['kg'] ?? null) ? number_format((float)$production['kg'], 0, '.', ',') . ' kg' : 'No disponible' ?></strong></section>
-    <?php if ($success): ?><div class="notice success">Semana <?= $e($selectedWeek) ?> guardada correctamente.</div><?php endif; ?>
+    <header class="header"><span class="header-icon"><i class="fa-solid fa-bolt"></i></span><div><h1>Captura del Reporte de Energía</h1><p>Recibos de consumo por periodo y registro operativo semanal.</p></div></header>
+    <?php if ($success !== ''): ?><div class="notice success"><?= $e($success) ?></div><?php endif; ?>
     <?php if ($error !== ''): ?><div class="notice error"><?= $e($error) ?></div><?php endif; ?>
 
-    <form method="post" autocomplete="off"><input type="hidden" name="csrf" value="<?= $e($_SESSION['energy_csrf']) ?>"><input type="hidden" name="anio" value="<?= $e($selectedYear) ?>"><input type="hidden" name="semana" value="<?= $e($selectedWeek) ?>">
-      <section class="panel"><h2><i class="fa-solid fa-gauge-high"></i> Consumo por producción</h2><div class="grid">
-        <div class="entry-card"><h3><i class="fa-solid fa-bolt"></i> Energía eléctrica</h3><div class="fields"><div class="field"><label>Consumo del registro</label><div class="suffix"><input type="number" min="0" step="0.001" name="electricidad_total" data-ratio-output="electricidad_ratio" value="<?= $e($totalField((array)($consumptions['electricidad'] ?? []))) ?>"><span>kW</span></div></div><div class="field"><label>Importe del recibo</label><div class="suffix"><input type="number" min="0" step="0.01" name="electricidad_valor" value="<?= $e($field((array)($consumptions['electricidad'] ?? []), 'valor')) ?>"><span>$</span></div></div></div><div class="calculated">Resultado: <strong id="electricidad_ratio">—</strong> kW/kg</div></div>
-        <div class="entry-card"><h3><i class="fa-solid fa-fire-flame-simple"></i> Gas natural</h3><div class="fields"><div class="field"><label>Consumo del registro</label><div class="suffix"><input type="number" min="0" step="0.001" name="gas_natural_total" data-ratio-output="gas_natural_ratio" value="<?= $e($totalField((array)($consumptions['gas_natural'] ?? []))) ?>"><span>m³</span></div></div><div class="field"><label>Importe del recibo</label><div class="suffix"><input type="number" min="0" step="0.01" name="gas_natural_valor" value="<?= $e($field((array)($consumptions['gas_natural'] ?? []), 'valor')) ?>"><span>$</span></div></div></div><div class="calculated">Resultado: <strong id="gas_natural_ratio">—</strong> m³/kg</div></div>
-        <div class="entry-card"><h3><i class="fa-solid fa-droplet"></i> Agua</h3><div class="fields"><div class="field"><label>Consumo del registro</label><div class="suffix"><input type="number" min="0" step="0.001" name="agua_total" data-ratio-output="agua_ratio" value="<?= $e($totalField((array)($consumptions['agua'] ?? []))) ?>"><span>m³</span></div></div><div class="field"><label>Importe del recibo</label><div class="suffix"><input type="number" min="0" step="0.01" name="agua_valor" value="<?= $e($field((array)($consumptions['agua'] ?? []), 'valor')) ?>"><span>$</span></div></div></div><div class="calculated">Resultado: <strong id="agua_ratio">—</strong> m³/kg</div></div>
-      </div></section>
+    <form method="post" autocomplete="off">
+      <input type="hidden" name="csrf" value="<?= $e($_SESSION['energy_csrf']) ?>"><input type="hidden" name="action" value="save_receipt"><input type="hidden" name="receipt_id" value="<?= $e($editingReceipt['id'] ?? '') ?>">
+      <section class="panel"><h2><i class="fa-regular fa-file-lines"></i> <?= $editingReceipt !== [] ? 'Editar recibo de consumo' : 'Nuevo recibo de consumo' ?></h2>
+        <div class="receipt-fields">
+          <div class="field"><label>Servicio</label><select name="service_key" id="receiptService" required><?php foreach ((array)$config['consumos'] as $key => $metric): ?><option value="<?= $e($key) ?>" <?= ($editingReceipt['service_key'] ?? 'gas_natural') === $key ? 'selected' : '' ?>><?= $e($metric['label'] ?? $key) ?></option><?php endforeach; ?></select></div>
+          <div class="field"><label>Empresa</label><input type="text" name="company" maxlength="80" required placeholder="Nombre de la empresa" value="<?= $e($editingReceipt['company'] ?? '') ?>"></div>
+          <div class="field"><label>Fecha del recibo</label><input type="date" name="receipt_date" required value="<?= $e($editingReceipt['receipt_date'] ?? $now->format('Y-m-d')) ?>"></div>
+          <div class="field"><label>Inicio del periodo</label><input type="date" name="period_start" required value="<?= $e($editingReceipt['period_start'] ?? $now->modify('first day of last month')->format('Y-m-d')) ?>"></div>
+          <div class="field"><label>Fin del periodo</label><input type="date" name="period_end" required value="<?= $e($editingReceipt['period_end'] ?? $now->modify('last day of last month')->format('Y-m-d')) ?>"></div>
+          <div class="field"><label>Consumo</label><input type="number" min="0" step="0.001" name="receipt_quantity" required value="<?= $e($editingReceipt['quantity'] ?? '') ?>"></div>
+          <div class="field"><label id="receiptAmountLabel">Importe</label><div class="suffix"><input type="number" min="0" step="0.01" name="receipt_amount" id="receiptAmount" required value="<?= $e($editingReceipt['amount'] ?? '') ?>"><span>$</span></div></div>
+        </div>
+        <div class="receipt-actions"><div class="field" style="max-width:270px;flex:1"><label>Referencia del recibo (opcional)</label><input type="text" maxlength="80" name="reference" value="<?= $e($editingReceipt['reference'] ?? '') ?>"></div><div class="receipt-result">Producción del periodo: <strong><?= is_numeric($editingReceipt['production_kg'] ?? null) ? number_format((float)$editingReceipt['production_kg'], 0, '.', ',') . ' kg' : 'se calculará al guardar' ?></strong></div><div><?php if ($editingReceipt !== []): ?><a class="link" href="captura.php">Cancelar edición</a><?php endif; ?> <button class="save" type="submit"><?= $editingReceipt !== [] ? 'Actualizar recibo' : 'Guardar recibo' ?></button></div></div>
+        <?php if ($recentReceipts !== []): ?><table class="receipt-list-table"><thead><tr><th>Servicio</th><th>Empresa</th><th>Fecha</th><th>Periodo</th><th>Consumo</th><th>Importe</th><th></th></tr></thead><tbody><?php foreach ($recentReceipts as $receipt): $receiptMetric = (array)($config['consumos'][$receipt['service_key']] ?? []); ?><tr><td><?= $e($receiptMetric['label'] ?? $receipt['service_key']) ?></td><td><?= $e($receipt['company'] ?? 'Progel') ?></td><td><?= $e($receipt['receipt_date']) ?></td><td><?= $e($receipt['period_start']) ?> al <?= $e($receipt['period_end']) ?></td><td><?= number_format((float)$receipt['quantity'], 2, '.', ',') ?> <?= $e($receiptMetric['total_unit'] ?? '') ?></td><td><?= ($receipt['service_key'] ?? '') === 'electricidad' && (float)($receipt['amount'] ?? 0) <= 0 ? 'Automático en reporte' : '$' . number_format((float)$receipt['amount'], 2, '.', ',') ?></td><td><a class="edit-link" href="?editar_recibo=<?= $e($receipt['id']) ?>">Editar</a></td></tr><?php endforeach; ?></tbody></table><?php endif; ?>
+      </section>
+    </form>
+
+    <div class="section-label">Registro operativo semanal</div>
+    <form class="week-selector" method="get"><div class="field"><label>Semana del año</label><input type="number" name="semana" min="1" max="53" required value="<?= $e($selectedWeek) ?>"></div><div class="field"><label>Año</label><input type="number" name="anio" min="2020" max="2100" required value="<?= $e($selectedYear) ?>"></div><button class="load" type="submit">Cargar semana</button><?php if ($registeredWeeks !== []): ?><div class="field registered"><label>Semanas registradas</label><select onchange="if(this.value) window.location.href=this.value"><option value="">Seleccionar</option><?php foreach ($registeredWeeks as $week): ?><option value="?anio=<?= $e($week['anio']) ?>&amp;semana=<?= $e($week['semana']) ?>" <?= (int)$week['anio'] === $selectedYear && (int)$week['semana'] === $selectedWeek ? 'selected' : '' ?>>Semana <?= $e($week['semana']) ?> · <?= $e($week['anio']) ?></option><?php endforeach; ?></select></div><?php endif; ?><div class="week-context"><?= $recordExists ? 'Editando registro existente' : 'Nuevo registro' ?>: <strong>semana <?= $e($selectedWeek) ?> de <?= $e($selectedYear) ?></strong><br><?= $e($rangeLabel) ?></div></form>
+    <section class="production-cut <?= !is_numeric($production['kg'] ?? null) ? 'error' : '' ?>"><i class="fa-solid fa-industry"></i><div><span>Producción del corte semanal</span><small>Lunes 07:00 a lunes 07:00 · sólo tarimas con etiquetado válido</small></div><strong><?= is_numeric($production['kg'] ?? null) ? number_format((float)$production['kg'], 0, '.', ',') . ' kg' : 'No disponible' ?></strong></section>
+
+    <form method="post" autocomplete="off"><input type="hidden" name="csrf" value="<?= $e($_SESSION['energy_csrf']) ?>"><input type="hidden" name="action" value="save_weekly"><input type="hidden" name="anio" value="<?= $e($selectedYear) ?>"><input type="hidden" name="semana" value="<?= $e($selectedWeek) ?>">
       <section class="panel"><h2><i class="fa-solid fa-recycle"></i> Recuperación</h2><div class="grid">
         <?php foreach (['recuperacion_grasa' => ['Recuperación de grasa','fa-oil-can'], 'ollas' => ['Ollas','fa-fire-burner'], 'polimeros' => ['Polímeros','fa-flask']] as $key => $meta): $metric = (array)($recoveries[$key] ?? []); ?>
           <div class="entry-card recovery-<?= $e($key) ?>"><h3><i class="fa-solid <?= $e($meta[1]) ?>"></i> <?= $e($meta[0]) ?></h3><div class="fields"><div class="field"><label>Recuperación</label><div class="suffix"><input type="number" min="0" step="0.001" name="<?= $e($key) ?>_m3" value="<?= $e($field($metric, 'm3')) ?>"><span>m³</span></div></div><div class="field"><label>Valor económico</label><div class="suffix"><input type="number" min="0" step="0.01" name="<?= $e($key) ?>_valor" value="<?= $e($field($metric, 'valor')) ?>"><span>$</span></div></div></div></div>
@@ -220,13 +284,26 @@ $generation = (array)($values['generacion'] ?? []);
         }
         const total = Number(input.value);
         output.textContent = Number.isFinite(total) && Number.isFinite(productionKg) && productionKg > 0
-          ? (total / productionKg).toLocaleString('es-MX', { maximumFractionDigits: 6 })
+          ? (total / productionKg).toLocaleString('es-MX', { maximumFractionDigits: 2 })
           : '—';
       };
       document.querySelectorAll('[data-ratio-output]').forEach((input) => {
         input.addEventListener('input', () => updateRatio(input));
         updateRatio(input);
       });
+      const receiptService = document.getElementById('receiptService');
+      const receiptAmount = document.getElementById('receiptAmount');
+      const receiptAmountLabel = document.getElementById('receiptAmountLabel');
+      const syncReceiptAmount = () => {
+        if (!receiptService || !receiptAmount || !receiptAmountLabel) return;
+        const automatic = receiptService.value === 'electricidad';
+        receiptAmount.readOnly = automatic;
+        receiptAmount.required = !automatic;
+        receiptAmount.placeholder = automatic ? 'Automático desde API' : '';
+        receiptAmountLabel.textContent = automatic ? 'Importe automático' : 'Importe';
+      };
+      receiptService?.addEventListener('change', syncReceiptAmount);
+      syncReceiptAmount();
     })();
   </script>
 </body>

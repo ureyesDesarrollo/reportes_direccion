@@ -135,6 +135,14 @@ El proyecto combina varias fuentes. No documentar ni imprimir sus credenciales.
 
 ## Decisiones por reporte
 
+### Dirección General
+
+- La vista `modo=direccion-general` contiene únicamente estos ocho accesos y en
+  este orden: Producción, Calidad, Compras, MP / Rendimiento, RRHH, Proyectos,
+  Ventas y Comportamiento de competencia.
+- Los títulos ejecutivos de esa vista pueden diferir del título del reporte en su
+  grupo operativo; se definen con `direccion_general_title` en el registro.
+
 ### Secadores
 
 - Temperatura y humedad de cada recámara forman un mismo bloque y deben reflejarse con el mismo diseño.
@@ -195,6 +203,10 @@ El proyecto combina varias fuentes. No documentar ni imprimir sus credenciales.
 - Semáforo de consumo: misma lógica, con límite amarillo base × 1.06.
 - Las gráficas conservan el formato de los reportes origen: línea de un solo color, puntos coloreados por semáforo y fondos de rango visibles.
 - Los valores se muestran con tres decimales en las secciones donde así quedó solicitado.
+- En Refacciones críticas, la frecuencia de compra se calcula con entradas
+  `TIPO_MOV = E` y `CVE_MOV = 1`. `NO_MOV` representa el evento de compra; el
+  promedio de días usa fechas de compra distintas para no crear intervalos cero
+  cuando un recibo contiene varias partidas.
 
 ### Compra de materia prima
 
@@ -203,6 +215,15 @@ El proyecto combina varias fuentes. No documentar ni imprimir sus credenciales.
 - Los rangos propios se mantienen en el `config.php` del reporte y están expresados en toneladas; los valores principales se muestran en kilogramos.
 - El acumulado semanal va del lunes a la fecha seleccionada y multiplica los rangos diarios por el número de día ISO de la semana.
 - Las tarjetas abren el detalle de tickets, categorías de stock o desglose diario, según corresponda.
+
+### Finanzas
+
+- Los importes principales, tarjetas y distribución por departamento se calculan con
+  el subtotal convertido de las facturas, no con el total que incluye impuestos.
+- El total completo de la factura permanece visible únicamente como referencia al
+  abrir su detalle.
+- La moneda 1 se trata como MXN y no aplica tipo de cambio; las demás monedas sí
+  aplican el tipo de cambio informado por el API.
 
 ### Proyectos
 
@@ -220,18 +241,24 @@ El proyecto combina varias fuentes. No documentar ni imprimir sus credenciales.
 
 ### Energía
 
-- Es un registro semanal con vista y captura.
-- La captura se espera el lunes después de las 07:00 y propone la semana cerrada
-  anterior. La producción se suma de lunes 07:00 a lunes 07:00 desde
-  `rev_tarimas.tar_kilos`, conservando el filtro de etiquetado mayor que cero.
-- Electricidad, gas y agua se capturan como consumos totales semanales; el
-  indicador por kilogramo se calcula automáticamente con los kilogramos del
-  corte. Los kilogramos no son un campo manual.
+- La captura se divide en recibos de consumo por periodo y registro operativo semanal.
+- Electricidad, gas y agua se registran como recibos con fecha de emisión, inicio y fin
+  del periodo, consumo e importe. La producción del mismo periodo se consulta
+  automáticamente desde `rev_tarimas.tar_kilos`, conservando el filtro de etiquetado
+  mayor que cero; los kilogramos no son un campo manual.
+- Los recibos evitan duplicar un mismo servicio y periodo, se pueden editar y se
+  agrupan por año y mes en el reporte.
+- La captura operativa propone la semana cerrada anterior. Su producción se suma de
+  lunes 07:00 a lunes 07:00.
 - Agua y gas se expresan en metros cúbicos según la métrica mostrada.
-- Recuperación de grasa, ollas y polímeros guardan recuperación y valor económico; no se consideran consumo.
+- Recuperación de grasa, ollas y polímeros, así como panel solar y cogenerador,
+  permanecen como registros semanales.
+- Recuperación de grasa, ollas y polímeros guardan recuperación y valor económico;
+  no se consideran consumo.
 - El primer guardado de una semana conserva `registrado_en`, fecha, hora y zona horaria.
 - Una edición posterior conserva la fecha original y escribe por separado `actualizado_en`, fecha y hora de actualización.
-- Los registros manuales se guardan en SQLite en `reports/energia/data/energia.sqlite`.
+- Los registros manuales y los recibos se guardan en SQLite en
+  `reports/energia/data/energia.sqlite`.
 - Al abrir la base por primera vez, los registros existentes en `weekly.json` se importan una sola vez sin sobrescribir semanas ya guardadas.
 - La información de Agua en la vista anual requiere autorización de servidor. La clave no se guarda en el repositorio; se valida contra el hash de `ENERGIA_AGUA_CLAVE_HASH` y la captura semanal permanece sin este bloqueo. El acceso termina al cerrar el navegador o después de 40 minutos de inactividad.
 

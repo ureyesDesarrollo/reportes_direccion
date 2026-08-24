@@ -7,6 +7,34 @@ return [
   'timezone' => 'America/Mexico_City',
   'intervalo_actualizacion_ms' => 600000,
 
+  'semaforos_ventas' => [
+    'industrial' => [
+      'amarillo_desde' => 500,
+      'verde_desde' => 530,
+      'verde_inclusivo' => false,
+    ],
+    'comercial' => [
+      'amarillo_desde' => 55,
+      'verde_desde' => 70,
+      'verde_inclusivo' => false,
+    ],
+    'total' => [
+      'amarillo_desde' => 555,
+      'verde_desde' => 600,
+      'verde_inclusivo' => true,
+    ],
+    'precio_promedio' => [
+      'amarillo_desde' => 110,
+      'verde_arriba_de' => 112,
+    ],
+  ],
+
+  'semaforo_backorder' => [
+    'amarillo_desde' => 420,
+    'verde_arriba_de' => 450,
+    'distribuir_segun_objetivo_ventas' => true,
+  ],
+
   'pedidos_api' => [
     'url' => 'http://192.168.1.104:5000/api/pedidos',
     'detalle_url' => 'http://192.168.1.104:5000/api/pedidos/detalle',
@@ -26,10 +54,12 @@ return [
     ['clave' => 'GRE230C', 'grupo' => '230', 'orden' => 230, 'descripcion' => 'GRENETINA ALIMENTICIA 230 BLOOM CAJA'],
     ['clave' => 'GRE265C', 'grupo' => '265', 'orden' => 265, 'descripcion' => 'GRENETINA ALIMENTICIA 265 BLOOM CAJA'],
     ['clave' => 'GRE300C', 'grupo' => '300', 'orden' => 300, 'descripcion' => 'GRENETINA ALIMENTICIA 300 BLOOM CAJA'],
+    ['clave' => 'GRE300CL', 'grupo' => '300', 'orden' => 300, 'descripcion' => 'GRENETINA ALIMENTICIA 300 BLOOM SACOS DE 25 KG', 'presentacion_kg' => 25],
     ['clave' => 'GRE315C', 'grupo' => '315', 'orden' => 315, 'descripcion' => 'GRENETINA ALIMENTICIA 315 BLOOM CAJA'],
     ['clave' => 'GRE3151/4', 'grupo' => '315', 'orden' => 315, 'descripcion' => 'GRENETINA ALIMENTICIA 315 BLOOM CAJA 1/4'],
     ['clave' => 'GREECO', 'grupo' => 'Económica', 'orden' => 229, 'descripcion' => 'GRENETINA ALIMENTICIA ECONOMICA'],
     ['clave' => 'GRE300BL', 'grupo' => '300', 'orden' => 300, 'descripcion' => 'GRENETINA ALIMENTICIA DORADA'],
+    ['clave' => 'GRE315BL', 'grupo' => '315', 'orden' => 315, 'descripcion' => 'GRENETINA ALIMENTICIA 315 BLOOM'],
   ],
 
   // Relación de la calidad física del producto empacado con las cards de Bloom.

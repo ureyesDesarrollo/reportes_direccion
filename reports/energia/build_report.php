@@ -50,11 +50,47 @@ function energyMetricRecord(array $record, array $metric): array
   ];
 }
 
-function energyBuildAnnualMetric(array $records, array $metric, int $selectedYear, DateTimeZone $timezone): array
+function energyBuildAnnualMetric(array $records, array $metric, int $selectedYear, DateTimeZone $timezone, array $receipts = []): array
 {
   $months = [];
   for ($month = 1; $month <= 12; $month++) {
     $months[$month] = ['quantity' => 0.0, 'money' => 0.0, 'production' => 0.0, 'records' => [], 'has_quantity' => false, 'has_money' => false];
+  }
+
+  if ((string)($metric['group'] ?? '') === 'Consumos') {
+    foreach ($receipts as $receipt) {
+      if (!is_array($receipt) || (string)($receipt['service_key'] ?? '') !== (string)($metric['key'] ?? '')) continue;
+      $receiptDate = DateTimeImmutable::createFromFormat('!Y-m-d', (string)($receipt['receipt_date'] ?? ''), $timezone);
+      if (!$receiptDate instanceof DateTimeImmutable || (int)$receiptDate->format('Y') !== $selectedYear) continue;
+      $quantity = is_numeric($receipt['quantity'] ?? null) ? (float)$receipt['quantity'] : null;
+      $money = is_numeric($receipt['amount'] ?? null) ? (float)$receipt['amount'] : null;
+      $production = is_numeric($receipt['production_kg'] ?? null) ? (float)$receipt['production_kg'] : null;
+      if ($quantity === null && $money === null) continue;
+      $month = (int)$receiptDate->format('n');
+      if ($quantity !== null) {
+        $months[$month]['quantity'] += $quantity;
+        $months[$month]['has_quantity'] = true;
+        if ($production !== null && $production > $months[$month]['production']) $months[$month]['production'] = $production;
+      }
+      if ($money !== null) {
+        $months[$month]['money'] += $money;
+        $months[$month]['has_money'] = true;
+      }
+      $months[$month]['records'][] = [
+        'source' => 'receipt',
+        'id' => (int)($receipt['id'] ?? 0),
+        'company' => (string)($receipt['company'] ?? 'Progel'),
+        'date' => $receiptDate,
+        'period_start' => (string)($receipt['period_start'] ?? ''),
+        'period_end' => (string)($receipt['period_end'] ?? ''),
+        'reference' => (string)($receipt['reference'] ?? ''),
+        'quantity' => $quantity,
+        'money' => $money,
+        'production' => $production,
+        'cost_source' => (string)($receipt['cost_source'] ?? 'captured'),
+        'cost_payment_dates' => (array)($receipt['cost_payment_dates'] ?? []),
+      ];
+    }
   }
 
   foreach ($records as $recordKey => $record) {
@@ -80,6 +116,7 @@ function energyBuildAnnualMetric(array $records, array $metric, int $selectedYea
       $months[$month]['has_money'] = true;
     }
     $months[$month]['records'][] = [
+      'source' => 'weekly',
       'key' => (string)$recordKey,
       'week' => $week,
       'date' => $weekStart,

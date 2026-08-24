@@ -7,6 +7,7 @@ return [
   'productos'                 => [],
   'tolerancia_pct'            => 10,
   'cve_mov'                   => 17,
+  'cve_mov_compra'            => 1,
   'usar_todos_los_productos'  => true,
   'anio_pivot'                => (int)date('Y'),
   'lugar'                     => 'CRITICOS',

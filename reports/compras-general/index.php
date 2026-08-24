@@ -80,6 +80,9 @@ $fmtPct = static function ($value): string {
     .dryer-metric-label { font-size: 11px; font-weight: 900; line-height: 1.15; letter-spacing: .04em; text-transform: uppercase; }
     .dryer-metric-value { font-size: clamp(21px, 1.7vw, 29px); font-weight: 900; line-height: 1; white-space: nowrap; }
     .dryer-metric-change { font-size: 9px; font-weight: 800; opacity: .9; }
+    .dryer-metric-base { display: inline-flex; align-items: baseline; gap: 5px; padding: 5px 8px; border: 1px solid rgba(255,255,255,.52); border-radius: 8px; background: rgba(255,255,255,.16); font-size: 9px; font-weight: 800; }
+    .dryer-metric-base strong { font-size: 12px; font-weight: 900; }
+    .dryer-metric-status.is-yellow .dryer-metric-base { border-color: rgba(17,24,39,.28); background: rgba(255,255,255,.34); }
     .dryer-metric-ranges { min-width: 0; display: grid; align-content: center; padding: 11px 13px; color: #111827; background: #fff; }
     .dryer-range-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
     .dryer-range-item { display: grid; grid-template-columns: 9px minmax(108px, auto) minmax(0, 1fr); align-items: center; gap: 7px; font-size: 11px; font-weight: 800; line-height: 1.15; }
@@ -105,6 +108,14 @@ $fmtPct = static function ($value): string {
     .increases .price-change { color: #dc2626; }
     .decreases .price-change { color: #15803d; }
     .empty-list { min-height: 42px; display: grid; place-items: center; color: #94a3b8; font-size: 9px; font-weight: 700; }
+    .frequency-panel { margin-top: 7px; padding: 8px; border: 1px solid var(--line); border-radius: 10px; background: #f8fafc; }
+    .frequency-panel h3 { display: flex; align-items: center; gap: 6px; margin: 0 0 6px; color: #334155; font-size: 10px; font-weight: 900; text-transform: uppercase; }
+    .frequency-panel h3 i { color: var(--accent); }
+    .frequency-list { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 5px; }
+    .frequency-row { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 3px 8px; padding: 6px 8px; border: 1px solid #e2e8f0; border-radius: 8px; background: #fff; }
+    .frequency-name { overflow: hidden; color: #334155; font-size: 9px; font-weight: 900; text-overflow: ellipsis; white-space: nowrap; }
+    .frequency-rate { color: var(--accent); font-size: 10px; font-weight: 900; white-space: nowrap; }
+    .frequency-meta { grid-column: 1/-1; color: #64748b; font-size: 8px; font-weight: 700; }
     .trend-panel { margin-top: 7px; padding: 7px; border: 1px solid var(--line); border-radius: 10px; }
     .trend-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 3px; }
     .trend-title { font-size: 10px; font-weight: 900; text-transform: uppercase; }
@@ -125,9 +136,9 @@ $fmtPct = static function ($value): string {
         <a class="back-link" href="../index.php"><i class="fa-solid fa-arrow-left"></i> Reportes</a>
         <h1><?= $e($titulo) ?></h1>
       </div>
-      <div class="production-header-card" aria-label="Producción acumulada">
+      <div class="production-header-card" aria-label="Producción acumulada anual">
         <i class="fa-solid fa-industry"></i>
-        <div><div class="production-header-label">Producción acumulada</div><div class="production-header-value"><?= $e($fmt($produccion_acumulada ?? null, 0)) ?></div></div>
+        <div><div class="production-header-label">Producción acumulada anual</div><div class="production-header-value"><?= $e($fmt($produccion_acumulada ?? null, 0)) ?></div></div>
       </div>
       <div class="report-filters" role="group" aria-label="Filtro general del reporte">
         <button class="report-filter is-active" type="button" data-report-mode="costo_produccion"><i class="fa-solid fa-industry"></i> Costo / producción</button>
@@ -181,6 +192,7 @@ $fmtPct = static function ($value): string {
                   <div class="dryer-metric-status<?= $statusIsYellow ? ' is-yellow' : '' ?>" data-role="metric-status">
                     <div class="dryer-metric-label" data-role="metric-label"><?= $e($initialSummary['etiqueta'] ?? '') ?></div>
                     <div class="dryer-metric-value" data-role="metric-value"><?= $e($initialIsMoney ? $fmtMoney($initialSummary['actual'] ?? null, 3) : $fmt($initialSummary['actual'] ?? null, 3)) ?></div>
+                    <div class="dryer-metric-base"><span data-role="metric-base-year">Base <?= $e($quadrant['anio_anterior'] ?? '') ?></span><strong data-role="metric-base-value"><?= $e($initialIsMoney ? $fmtMoney($metricBase, 3) : $fmt($metricBase, 3)) ?></strong></div>
                     <div class="dryer-metric-change" data-role="metric-change"><?= $e($fmtPct($initialSummary['variacion'] ?? null)) ?> vs base</div>
                   </div>
                   <div class="dryer-metric-ranges">
@@ -193,7 +205,7 @@ $fmtPct = static function ($value): string {
                 </article>
                 <article class="chemical-support-card">
                   <div class="kpi-icon"><i class="fa-solid <?= $isConsumption ? 'fa-flask' : 'fa-sack-dollar' ?>"></i></div>
-                  <div class="kpi-label" data-role="support-one-label"><?= $isConsumption ? 'Consumo acumulado' : 'Gasto acumulado' ?></div>
+                  <div class="kpi-label" data-role="support-one-label"><?= $isConsumption ? 'Consumo acumulado anual' : 'Gasto acumulado anual' ?></div>
                   <div class="kpi-value" data-role="support-one-value"><?= $e($isConsumption ? $fmt($quadrant['consumo_actual'] ?? null, 0) : $fmtMoney($quadrant['gasto_actual'] ?? null, 0)) ?></div>
                   <div class="kpi-meta"><?= $e($quadrant['anio_actual'] ?? '') ?></div>
                 </article>
@@ -202,13 +214,13 @@ $fmtPct = static function ($value): string {
             <div class="kpi-grid">
               <div class="kpi-card">
                 <div class="kpi-icon"><i class="fa-solid <?= $isConsumption ? 'fa-flask' : ($isFixedCost ? 'fa-sack-dollar' : 'fa-tags') ?>"></i></div>
-                <div class="kpi-label"><?= $isConsumption ? 'Consumo acumulado' : ($isFixedCost ? 'Gasto químico acumulado' : 'Costo unitario promedio') ?></div>
+                <div class="kpi-label"><?= $isConsumption ? 'Consumo acumulado anual' : ($isFixedCost ? 'Gasto químico acumulado anual' : 'Costo unitario promedio') ?></div>
                 <div class="kpi-value"><?= $e($isConsumption ? $fmt($quadrant['consumo_actual'] ?? null, 0) : ($isFixedCost ? $fmtMoney($quadrant['gasto_actual'] ?? null, 0) : $fmtMoney($quadrant['costo_unitario'] ?? null))) ?></div>
                 <div class="kpi-meta"><?= $isConsumption ? 'Consumo total ' : ($isFixedCost ? 'Costo/kg × kg consumidos ' : 'Promedio ponderado ') ?><?= $e($quadrant['anio_actual'] ?? '') ?></div>
               </div>
               <div class="kpi-card">
                 <div class="kpi-icon"><i class="fa-solid <?= ($isConsumption || $isFixedCost) ? 'fa-industry' : 'fa-money-bill-trend-up' ?>"></i></div>
-                <div class="kpi-label"><?= ($isConsumption || $isFixedCost) ? 'Producción acumulada' : ($usesProduction ? 'Gasto / producción' : 'Gasto acumulado') ?></div>
+                <div class="kpi-label"><?= ($isConsumption || $isFixedCost) ? 'Producción acumulada anual' : ($usesProduction ? 'Gasto / producción' : 'Gasto acumulado anual') ?></div>
                 <div class="kpi-value"><?= $e(($isConsumption || $isFixedCost) ? $fmt($quadrant['produccion_actual'] ?? null, 0) : $fmtMoney($usesProduction ? ($quadrant['gasto_produccion'] ?? null) : ($quadrant['gasto_actual'] ?? null))) ?></div>
                 <div class="kpi-meta"><?= ($isConsumption || $isFixedCost) ? 'Producción total ' . $e($quadrant['anio_actual'] ?? '') : 'Gasto total ' . $e($fmtMoney($quadrant['gasto_actual'] ?? null, 0)) ?></div>
               </div>
@@ -225,6 +237,22 @@ $fmtPct = static function ($value): string {
                 <div class="kpi-meta"><?= $e($quadrant['estado_global'] ?? 'Sin dato') ?></div>
               </div>
             </div>
+            <?php endif; ?>
+
+            <?php $purchaseFrequency = (array)($quadrant['frecuencia_compras'] ?? []); ?>
+            <?php if ($purchaseFrequency !== []): ?>
+              <section class="frequency-panel">
+                <h3><i class="fa-solid fa-calendar-days"></i> Frecuencia de compra · <?= $e($quadrant['anio_actual'] ?? '') ?></h3>
+                <div class="frequency-list">
+                  <?php foreach ($purchaseFrequency as $frequency): ?>
+                    <div class="frequency-row">
+                      <span class="frequency-name" title="<?= $e($frequency['label'] ?? $frequency['key'] ?? '') ?>"><?= $e($frequency['label'] ?? $frequency['key'] ?? 'Refacción') ?></span>
+                      <strong class="frequency-rate"><?= is_numeric($frequency['promedio_dias'] ?? null) ? 'Cada ' . $e($fmt($frequency['promedio_dias'], 1)) . ' días' : 'Una compra' ?></strong>
+                      <small class="frequency-meta"><?= $e($frequency['eventos'] ?? 0) ?> pedido<?= (int)($frequency['eventos'] ?? 0) === 1 ? '' : 's' ?> · último <?= $e($frequency['ultima_compra'] ?? '—') ?></small>
+                    </div>
+                  <?php endforeach; ?>
+                </div>
+              </section>
             <?php endif; ?>
 
             <div class="tops-grid">
@@ -309,20 +337,22 @@ $fmtPct = static function ($value): string {
       if (badge) badge.textContent = summary.estado || 'Sin dato';
       setText('[data-role="metric-label"]', summary.etiqueta || 'Indicador');
       setText('[data-role="metric-value"]', format(summary.actual));
+      setText('[data-role="metric-base-year"]', 'Base ' + (source.anio_anterior || 'año anterior'));
+      setText('[data-role="metric-base-value"]', format(summary.base));
       setText('[data-role="metric-change"]', percentValue(summary.variacion) + ' vs base');
       setText('[data-role="range-green"]', '≤ ' + format(summary.limite_verde));
       setText('[data-role="range-yellow"]', '> ' + format(summary.limite_verde) + ' – ≤ ' + format(summary.limite_amarillo));
       setText('[data-role="range-red"]', '> ' + format(summary.limite_amarillo));
 
       if (mode === 'costo_produccion') {
-        setText('[data-role="support-one-label"]', 'Gasto acumulado');
+        setText('[data-role="support-one-label"]', 'Gasto acumulado anual');
         setText('[data-role="support-one-value"]', moneyTick(source.gasto_actual));
-        setText('[data-role="support-two-label"]', source.usa_produccion ? 'Producción acumulada' : 'Consumo acumulado');
+        setText('[data-role="support-two-label"]', source.usa_produccion ? 'Producción acumulada anual' : 'Consumo acumulado anual');
         setText('[data-role="support-two-value"]', numberValue(source.usa_produccion ? source.produccion_actual : source.consumo_actual, 0));
       } else {
-        setText('[data-role="support-one-label"]', 'Consumo acumulado');
+        setText('[data-role="support-one-label"]', 'Consumo acumulado anual');
         setText('[data-role="support-one-value"]', numberValue(source.consumo_actual, 0));
-        setText('[data-role="support-two-label"]', source.usa_produccion ? 'Producción acumulada' : 'Periodos registrados');
+        setText('[data-role="support-two-label"]', source.usa_produccion ? 'Producción acumulada anual' : 'Periodos registrados');
         setText('[data-role="support-two-value"]', numberValue(source.usa_produccion ? source.produccion_actual : source.periodos_actual, 0));
       }
     }

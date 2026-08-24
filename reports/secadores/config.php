@@ -74,8 +74,8 @@ $config = array_replace_recursive($detailConfig, [
     ],
     'solido_entrada' => [
       'label' => 'Sólido entrada',
-      'source' => 'mysql_producto',
-      'field' => 'churro_solidos',
+      'source' => 'sqlserver',
+      'field' => 'SOLIDOS_DE_VOTATORS',
       'unit' => '%',
       'available' => true,
       'empty_label' => '-',

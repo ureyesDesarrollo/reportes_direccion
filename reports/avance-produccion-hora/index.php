@@ -15,7 +15,9 @@ $formatValue = static function (array $metric): string {
   if (!is_numeric($value)) {
     return '—';
   }
-  $decimals = floor((float)$value) === (float)$value ? 0 : 2;
+  $decimals = isset($metric['decimals'])
+    ? max(0, min(6, (int)$metric['decimals']))
+    : (floor((float)$value) === (float)$value ? 0 : 2);
   return number_format((float)$value, $decimals, '.', ',');
 };
 $tarimaSummaryStatus = static function ($value, int $turns = 1): string {

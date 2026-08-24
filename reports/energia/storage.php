@@ -49,8 +49,205 @@ function energyOpenDatabase(): PDO
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
   ");
+  $pdo->exec("
+    CREATE TABLE IF NOT EXISTS energy_receipts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      service_key TEXT NOT NULL,
+      company TEXT NOT NULL COLLATE NOCASE,
+      receipt_date TEXT NOT NULL,
+      period_start TEXT NOT NULL,
+      period_end TEXT NOT NULL,
+      reference TEXT NULL,
+      quantity REAL NULL,
+      amount REAL NOT NULL,
+      production_kg REAL NULL,
+      production_start TEXT NULL,
+      production_end TEXT NULL,
+      registered_at TEXT NOT NULL,
+      updated_at TEXT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      modified_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE (service_key, company, period_start, period_end)
+    )
+  ");
+  energyEnsureReceiptsCompanySchema($pdo);
+  energyEnsureReceiptsNullableQuantitySchema($pdo);
+  $pdo->exec('CREATE INDEX IF NOT EXISTS idx_energy_receipts_date ON energy_receipts(receipt_date)');
   energyImportLegacyJson($pdo);
   return $pdo;
+}
+
+function energyEnsureReceiptsNullableQuantitySchema(PDO $pdo): void
+{
+  $columns = $pdo->query('PRAGMA table_info(energy_receipts)')->fetchAll();
+  foreach ($columns as $column) {
+    if ((string)($column['name'] ?? '') === 'quantity' && (int)($column['notnull'] ?? 0) === 0) return;
+  }
+
+  $pdo->beginTransaction();
+  try {
+    $pdo->exec('ALTER TABLE energy_receipts RENAME TO energy_receipts_quantity_required');
+    $pdo->exec("
+      CREATE TABLE energy_receipts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        service_key TEXT NOT NULL,
+        company TEXT NOT NULL COLLATE NOCASE,
+        receipt_date TEXT NOT NULL,
+        period_start TEXT NOT NULL,
+        period_end TEXT NOT NULL,
+        reference TEXT NULL,
+        quantity REAL NULL,
+        amount REAL NOT NULL,
+        production_kg REAL NULL,
+        production_start TEXT NULL,
+        production_end TEXT NULL,
+        registered_at TEXT NOT NULL,
+        updated_at TEXT NULL,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        modified_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE (service_key, company, period_start, period_end)
+      )
+    ");
+    $pdo->exec("
+      INSERT INTO energy_receipts
+        (id, service_key, company, receipt_date, period_start, period_end, reference, quantity, amount,
+         production_kg, production_start, production_end, registered_at, updated_at, created_at, modified_at)
+      SELECT
+        id, service_key, company, receipt_date, period_start, period_end, reference, quantity, amount,
+        production_kg, production_start, production_end, registered_at, updated_at, created_at, modified_at
+      FROM energy_receipts_quantity_required
+    ");
+    $pdo->exec('DROP TABLE energy_receipts_quantity_required');
+    $pdo->commit();
+  } catch (Throwable $exception) {
+    if ($pdo->inTransaction()) $pdo->rollBack();
+    throw $exception;
+  }
+}
+
+function energyEnsureReceiptsCompanySchema(PDO $pdo): void
+{
+  $columns = $pdo->query('PRAGMA table_info(energy_receipts)')->fetchAll();
+  foreach ($columns as $column) {
+    if ((string)($column['name'] ?? '') === 'company') return;
+  }
+
+  $pdo->beginTransaction();
+  try {
+    $pdo->exec('ALTER TABLE energy_receipts RENAME TO energy_receipts_legacy');
+    $pdo->exec("
+      CREATE TABLE energy_receipts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        service_key TEXT NOT NULL,
+        company TEXT NOT NULL COLLATE NOCASE,
+        receipt_date TEXT NOT NULL,
+        period_start TEXT NOT NULL,
+        period_end TEXT NOT NULL,
+        reference TEXT NULL,
+        quantity REAL NULL,
+        amount REAL NOT NULL,
+        production_kg REAL NULL,
+        production_start TEXT NULL,
+        production_end TEXT NULL,
+        registered_at TEXT NOT NULL,
+        updated_at TEXT NULL,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        modified_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE (service_key, company, period_start, period_end)
+      )
+    ");
+    $pdo->exec("
+      INSERT INTO energy_receipts
+        (id, service_key, company, receipt_date, period_start, period_end, reference, quantity, amount,
+         production_kg, production_start, production_end, registered_at, updated_at, created_at, modified_at)
+      SELECT
+        id, service_key, 'Progel', receipt_date, period_start, period_end, reference, quantity, amount,
+        production_kg, production_start, production_end, registered_at, updated_at, created_at, modified_at
+      FROM energy_receipts_legacy
+    ");
+    $pdo->exec('DROP TABLE energy_receipts_legacy');
+    $pdo->commit();
+  } catch (Throwable $exception) {
+    if ($pdo->inTransaction()) $pdo->rollBack();
+    throw $exception;
+  }
+}
+
+function energyLoadReceipts(?int $year = null): array
+{
+  $pdo = energyOpenDatabase();
+  if ($year !== null) {
+    $statement = $pdo->prepare("SELECT * FROM energy_receipts WHERE substr(receipt_date, 1, 4) = ? ORDER BY receipt_date DESC, id DESC");
+    $statement->execute([sprintf('%04d', $year)]);
+  } else {
+    $statement = $pdo->query('SELECT * FROM energy_receipts ORDER BY receipt_date DESC, id DESC');
+  }
+  return $statement->fetchAll();
+}
+
+function energyLoadReceipt(int $id): array
+{
+  if ($id < 1) return [];
+  $statement = energyOpenDatabase()->prepare('SELECT * FROM energy_receipts WHERE id = ? LIMIT 1');
+  $statement->execute([$id]);
+  $receipt = $statement->fetch();
+  return is_array($receipt) ? $receipt : [];
+}
+
+function energySaveReceipt(array $receipt): int
+{
+  $pdo = energyOpenDatabase();
+  $id = is_numeric($receipt['id'] ?? null) ? (int)$receipt['id'] : 0;
+  $parameters = [
+    ':service_key' => (string)$receipt['service_key'],
+    ':company' => (string)$receipt['company'],
+    ':receipt_date' => (string)$receipt['receipt_date'],
+    ':period_start' => (string)$receipt['period_start'],
+    ':period_end' => (string)$receipt['period_end'],
+    ':reference' => trim((string)($receipt['reference'] ?? '')) ?: null,
+    ':quantity' => is_numeric($receipt['quantity'] ?? null) ? (float)$receipt['quantity'] : null,
+    ':amount' => (float)$receipt['amount'],
+    ':production_kg' => is_numeric($receipt['production_kg'] ?? null) ? (float)$receipt['production_kg'] : null,
+    ':production_start' => trim((string)($receipt['production_start'] ?? '')) ?: null,
+    ':production_end' => trim((string)($receipt['production_end'] ?? '')) ?: null,
+    ':registered_at' => (string)$receipt['registered_at'],
+    ':updated_at' => trim((string)($receipt['updated_at'] ?? '')) ?: null,
+  ];
+
+  try {
+    if ($id > 0) {
+      $parameters[':id'] = $id;
+      $statement = $pdo->prepare("
+        UPDATE energy_receipts SET
+          service_key = :service_key, company = :company, receipt_date = :receipt_date,
+          period_start = :period_start, period_end = :period_end,
+          reference = :reference, quantity = :quantity, amount = :amount,
+          production_kg = :production_kg, production_start = :production_start,
+          production_end = :production_end, updated_at = :updated_at,
+          modified_at = CURRENT_TIMESTAMP
+        WHERE id = :id
+      ");
+      $statement->execute($parameters);
+      if ($statement->rowCount() === 0 && energyLoadReceipt($id) === []) throw new RuntimeException('El recibo que intentas editar ya no existe.');
+      return $id;
+    }
+
+    $statement = $pdo->prepare("
+      INSERT INTO energy_receipts
+        (service_key, company, receipt_date, period_start, period_end, reference, quantity, amount,
+         production_kg, production_start, production_end, registered_at, updated_at, modified_at)
+      VALUES
+        (:service_key, :company, :receipt_date, :period_start, :period_end, :reference, :quantity, :amount,
+         :production_kg, :production_start, :production_end, :registered_at, :updated_at, CURRENT_TIMESTAMP)
+    ");
+    $statement->execute($parameters);
+    return (int)$pdo->lastInsertId();
+  } catch (PDOException $exception) {
+    if ((string)$exception->getCode() === '23000' || strpos($exception->getMessage(), 'UNIQUE constraint failed') !== false) {
+      throw new RuntimeException('Ya existe un recibo de ese servicio, empresa y periodo. Puedes editar el registro existente.');
+    }
+    throw $exception;
+  }
 }
 
 function energyImportLegacyJson(PDO $pdo): void

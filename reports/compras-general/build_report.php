@@ -437,6 +437,9 @@ foreach ((array)($config['fuentes'] ?? []) as $key => $definition) {
         'es_dinero' => true,
       ],
       'tops' => $tops,
+      'frecuencia_compras' => $type === 'refacciones'
+        ? array_slice((array)($sourceReport['frecuenciaCompraRefacciones'] ?? []), 0, 8)
+        : [],
       'top_tipo' => $fixedMode === 'consumo' ? 'consumo_produccion' : 'precio',
       'tendencia' => $weeklyTrend,
       'error' => '',

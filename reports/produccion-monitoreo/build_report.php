@@ -1479,8 +1479,7 @@ $secadoresTableOrder = array_merge(
   array_map(static fn(int $room): string => 'Temp R' . $room, range(1, 9))
 );
 
-[$votatorMysqlItems, $votatorMysqlWarning] = $buildVotatorMysqlItems((array)($secadoresSummaryConfig['votator_mysql'] ?? []));
-$votatorsSummary = $buildVotatorSummary((array)($secadoresReport['tuneles'] ?? []), $secadoresSummaryConfig, $votatorMysqlItems);
+$votatorsSummary = $buildVotatorSummary((array)($secadoresReport['tuneles'] ?? []), $secadoresSummaryConfig);
 $votatorItems = [];
 foreach ($votatorsSummary as $votator) {
   foreach ((array)($votator['items'] ?? []) as $item) {
@@ -1618,7 +1617,7 @@ return [
     'warnings' => array_values(array_filter(array_merge(
       (array)($secadoresReport['warnings'] ?? []),
       (array)($concentradoresReport['meta']['warnings'] ?? []),
-      [$votatorMysqlWarning, $extraccionIndicadoresWarning, $cocedoresWarning, $clarificadoresWarning, $integracionWarning]
+      [$extraccionIndicadoresWarning, $cocedoresWarning, $clarificadoresWarning, $integracionWarning]
     ))),
   ],
   'version' => max(

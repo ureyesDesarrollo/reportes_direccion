@@ -37,6 +37,7 @@ if (empty($meses)) {
     'marcas' => [],
     'gruposBloom' => [],
     'filas' => [],
+    'rankingsNatural' => [],
     'tendencias' => ['labels' => [], 'series' => []],
     'kpis' => ['marcas' => 0, 'blooms' => 0, 'parametros' => 0, 'reportes' => 0, 'alertas' => 0],
     'meta' => [
@@ -268,6 +269,47 @@ foreach ($stmtComportamiento->fetchAll() as $row) {
   ];
 }
 
+$rankingsNatural = [];
+$mesRanking = !empty($mesKeys) ? (string)$mesKeys[count($mesKeys) - 1] : '';
+foreach ($gruposBloom as $bloomKey => $grupoBloom) {
+  $rankingsNatural[$bloomKey] = [
+    'mes' => $mesRanking,
+    'fuera' => [],
+    'dentro' => [],
+  ];
+
+  foreach (['fuera' => 'FUERA', 'dentro' => 'DENTRO'] as $rankingKey => $condicion) {
+    $rowKey = 'comp:' . $condicion . ':NATURAL';
+    foreach ((array)($grupoBloom['marcas'] ?? []) as $marca) {
+      $marcaId = (int)($marca['id'] ?? 0);
+      $cell = (array)($filas[$rowKey]['valores'][$marcaId][$mesRanking] ?? []);
+      if (!is_numeric($cell['valor'] ?? null)) {
+        continue;
+      }
+
+      $rankingsNatural[$bloomKey][$rankingKey][] = [
+        'marca_id' => $marcaId,
+        'nombre' => (string)($marca['nombre'] ?? ''),
+        'valor' => (float)$cell['valor'],
+        'muestras' => (int)($cell['muestras'] ?? 0),
+      ];
+    }
+
+    usort($rankingsNatural[$bloomKey][$rankingKey], static function (array $left, array $right): int {
+      $valueComparison = (float)$right['valor'] <=> (float)$left['valor'];
+      if ($valueComparison !== 0) {
+        return $valueComparison;
+      }
+      $samplesComparison = (int)$right['muestras'] <=> (int)$left['muestras'];
+      return $samplesComparison !== 0
+        ? $samplesComparison
+        : strcasecmp((string)$left['nombre'], (string)$right['nombre']);
+    });
+
+    $rankingsNatural[$bloomKey][$rankingKey] = array_slice($rankingsNatural[$bloomKey][$rankingKey], 0, 3);
+  }
+}
+
 $stmtTendenciaMeses = $pdo->prepare("
   SELECT
     DATE_FORMAT(fecha, '%Y-%m') AS mes_key,
@@ -352,12 +394,27 @@ $tendencias = [
 
 $totalReportes = array_sum(array_map(static fn(array $row): int => (int)$row['reportes'], $mesesResumen));
 
+// El comportamiento es el dato principal del comparativo: se muestra antes
+// que los parámetros fisicoquímicos, conservando el orden de cada grupo.
+$filasOrdenadas = [];
+foreach ($filas as $key => $fila) {
+  if (($fila['tipo'] ?? '') === 'comportamiento') {
+    $filasOrdenadas[$key] = $fila;
+  }
+}
+foreach ($filas as $key => $fila) {
+  if (($fila['tipo'] ?? '') !== 'comportamiento') {
+    $filasOrdenadas[$key] = $fila;
+  }
+}
+
 return [
   'titulo' => (string)($config['titulo'] ?? 'PULSO DE MERCADO / Competencia'),
   'meses' => $mesesResumen,
   'marcas' => $marcas,
   'gruposBloom' => array_values($gruposBloom),
-  'filas' => array_values($filas),
+  'filas' => array_values($filasOrdenadas),
+  'rankingsNatural' => $rankingsNatural,
   'tendencias' => $tendencias,
   'kpis' => [
     'marcas' => count($marcas),

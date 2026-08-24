@@ -204,30 +204,6 @@ try {
 }
 
 try {
-  $concentratorPdo = isset($clarifierPdo)
-    ? $clarifierPdo
-    : conectar((array)($config['clarificador_database'] ?? []));
-  $concentratorStmt = $concentratorPdo->prepare("
-  SELECT d.churro_solidos, COALESCE(dh.hora_exacta, dh.fecha_creacion) AS fecha_lectura
-  FROM datos_producto d
-  INNER JOIN datos_hora dh ON dh.id = d.id_datos_hora
-  WHERE COALESCE(dh.hora_exacta, dh.fecha_creacion) <= ?
-    AND d.churro_solidos IS NOT NULL
-  ORDER BY COALESCE(dh.hora_exacta, dh.fecha_creacion) DESC, d.id DESC
-  LIMIT 1
-");
-  $concentratorStmt->execute([$now->format('Y-m-d H:i:s')]);
-  $concentratorRow = $concentratorStmt->fetch() ?: [];
-  $concentratorValue = $concentratorRow['churro_solidos'] ?? null;
-  $metricConfig['solidos_concentradores']['value'] = is_numeric($concentratorValue)
-    ? (float)$concentratorValue
-    : null;
-  $metricConfig['solidos_concentradores']['fecha_lectura'] = (string)($concentratorRow['fecha_lectura'] ?? '');
-} catch (Throwable $e) {
-  $metricConfig['solidos_concentradores']['value'] = null;
-}
-
-try {
   $membranesPdo = isset($clarifierPdo)
     ? $clarifierPdo
     : conectar((array)($config['clarificador_database'] ?? []));
@@ -261,6 +237,31 @@ try {
     }
     return is_scalar($value) ? trim((string)$value) : '';
   };
+  try {
+    $concentratorSensor = (string)($config['solidos_concentradores_sensor'] ?? 'SOLIDOS_DE_VOTATORS');
+    $safeConcentratorSensor = $quoteSqlServerIdentifier($concentratorSensor);
+    $concentratorSensorSql = "
+      SELECT TOP (1)
+        TRY_CONVERT(float, {$safeConcentratorSensor}) AS valor,
+        {$sensorTimestamp} AS fecha_lectura
+      FROM {$sensorTable}
+      WHERE {$sensorTimestamp} <= GETDATE()
+        AND TRY_CONVERT(float, {$safeConcentratorSensor}) IS NOT NULL
+      ORDER BY {$sensorTimestamp} DESC
+    ";
+    $concentratorSensorRow = $sensorPdo->query($concentratorSensorSql)->fetch() ?: [];
+    $concentratorSensorValue = $concentratorSensorRow['valor'] ?? null;
+    $metricConfig['solidos_concentradores']['value'] = is_numeric($concentratorSensorValue)
+      ? trim((string)$concentratorSensorValue)
+      : null;
+    $metricConfig['solidos_concentradores']['fecha_lectura'] = $formatSensorDate($concentratorSensorRow['fecha_lectura'] ?? null);
+    $metricConfig['solidos_concentradores']['componentes'] = [
+      $concentratorSensor => is_numeric($concentratorSensorValue) ? trim((string)$concentratorSensorValue) : null,
+    ];
+  } catch (Throwable $e) {
+    $metricConfig['solidos_concentradores']['value'] = null;
+    $metricConfig['solidos_concentradores']['fecha_lectura'] = '';
+  }
   foreach ((array)($config['flujo_sensores'] ?? []) as $metricKey => $sensorFields) {
     $metricKey = (string)$metricKey;
     $sensorFields = array_values((array)$sensorFields);
@@ -300,6 +301,8 @@ try {
     $metricConfig[$metricKey]['componentes'] = $sensorComponents;
   }
 } catch (Throwable $e) {
+  $metricConfig['solidos_concentradores']['value'] = null;
+  $metricConfig['solidos_concentradores']['fecha_lectura'] = '';
   foreach ((array)($config['flujo_sensores'] ?? []) as $metricKey => $sensorFields) {
     $metricConfig[(string)$metricKey]['value'] = null;
     $metricConfig[(string)$metricKey]['fecha_lectura'] = '';

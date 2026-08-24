@@ -131,27 +131,42 @@ $crearEquipoVotator = static function (string $label, array $campos): array {
   return $config;
 };
 
+$sensorSolidosVotator = $crearSensorVotator('solidos', 'SOLIDOS_DE_VOTATORS', [
+  'semaforo' => $reglaSolidosVotator,
+  'leyenda' => '≥37',
+]);
+
 $camposSqlVotator = [
   'tunel_1' => [
     'votator_1' => $crearEquipoVotator('', [
       'amperaje_bomba' => $crearSensorVotator('amperaje_bomba', 'CORRIENTE_DE_EXTRUSOR_V1_SA'),
+      'solidos' => $sensorSolidosVotator,
     ]),
     'votator_2' => $crearEquipoVotator('', [
       'amperaje_bomba' => $crearSensorVotator('amperaje_bomba', 'CORRIENTE_DE_EXTRUSOR'),
+      'solidos' => $sensorSolidosVotator,
     ]),
   ],
   'tunel_2' => [
+    'votator_3' => $crearEquipoVotator('', [
+      'solidos' => $sensorSolidosVotator,
+    ]),
+    'votator_4' => $crearEquipoVotator('', [
+      'solidos' => $sensorSolidosVotator,
+    ]),
     'votator_5' => $crearEquipoVotator('Votator 5', [
       'flujo' => $crearSensorVotator('flujo', 'flujo_votator_3', [
         'semaforo' => $reglaFlujoVotator,
         'leyenda' => '11.5-12.5',
       ]),
+      'solidos' => $sensorSolidosVotator,
     ]),
     'votator_6' => $crearEquipoVotator('Votator 6', [
       'flujo' => $crearSensorVotator('flujo', 'FLujo_votator_4', [
         'semaforo' => $reglaFlujoVotator,
         'leyenda' => '11.5-12.5',
       ]),
+      'solidos' => $sensorSolidosVotator,
     ]),
   ],
 ];
@@ -185,14 +200,6 @@ $camposSecadores = [
   'humedad_recamara_4',
   'humedad_recamara_8',
   'humedad_suministro_aire',
-];
-
-$camposVotatorBitacora = [
-  'solidos' => $crearCampoBitacora('Sólidos', 'churro_solidos', '%', [
-    'empty_label' => 'Sin dato',
-    'semaforo' => $reglaSolidosVotator,
-    'optimo_label' => '> 37 %',
-  ]),
 ];
 
 /*
@@ -351,13 +358,6 @@ $configuracionSecadores = [
     'votator_5' => 'Votator 5',
     'votator_6' => 'Votator 6',
   ],
-  'votator_mysql' => [
-    'mysql_105' => $conexionMysqlProgelProcesos,
-    'tabla_datos' => 'datos_producto',
-    'columnas_orden' => $ordenDatosHora,
-    'columna_fo' => 'estado_fo_churro',
-    'campos' => $camposVotatorBitacora,
-  ],
   'votator_campos_overlay' => $camposSqlVotator,
   'votator_campos_extra' => $camposBaseVotator,
 ];
@@ -397,6 +397,7 @@ $configuracionIntegracion = [
 $productionMonitoringConfig = [
   'titulo' => 'Avance Producción',
   'intervalo_actualizacion_ms' => 60000,
+  'tendencia_limite_registros' => 300,
   'sqlserver_aveva' => $configuracionSqlServerAveva,
   'extraccion' => $configuracionExtraccion,
   'secadores' => $configuracionSecadores,
@@ -406,7 +407,6 @@ $productionMonitoringConfig = [
 ];
 
 $productionMonitoringConfig['secadores']['votator_campos_extra']['presion_cuajado']['rule'] = (array)($masterVotatorRules['presion_cuajado'] ?? []);
-$productionMonitoringConfig['secadores']['votator_mysql']['campos']['solidos']['semaforo'] = (array)($masterVotatorRules['solidos'] ?? []);
 foreach ((array)($productionMonitoringConfig['secadores']['votator_campos_overlay'] ?? []) as $tunnelKey => $votators) {
   foreach (array_keys((array)$votators) as $votatorKey) {
     if (isset($productionMonitoringConfig['secadores']['votator_campos_overlay'][$tunnelKey][$votatorKey]['campos']['flujo'])) {

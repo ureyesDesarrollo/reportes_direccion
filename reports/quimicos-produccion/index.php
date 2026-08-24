@@ -68,6 +68,7 @@ $showModeTabs         = false;
 
 <body>
   <?php require __DIR__ . '/../../shared/partials/header.php'; ?>
+  <?php if (trim((string)($meta['sourceWarning'] ?? '')) !== ''): ?><div role="alert" style="margin:12px auto;max-width:1400px;padding:10px 14px;border:1px solid #fcd34d;border-radius:12px;background:#fffbeb;color:#854d0e;font-weight:700"><?= htmlspecialchars((string)$meta['sourceWarning'], ENT_QUOTES, 'UTF-8') ?></div><?php endif; ?>
   <?php require __DIR__ . '/../../shared/partials/kpis.php'; ?>
   <?php require __DIR__ . '/../../shared/partials/chart.php'; ?>
 

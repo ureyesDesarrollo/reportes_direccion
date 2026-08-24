@@ -15,10 +15,15 @@ function energyProductionPeriod(int $year, int $week, DateTimeZone $timezone): a
 function energyLoadProductionKg(int $year, int $week, array $databaseConfig, DateTimeZone $timezone): array
 {
   $period = energyProductionPeriod($year, $week, $timezone);
+  return energyLoadProductionKgPeriod($period['inicio'], $period['fin'], $databaseConfig);
+}
+
+function energyLoadProductionKgPeriod(DateTimeImmutable $start, DateTimeImmutable $end, array $databaseConfig): array
+{
   $result = [
     'kg' => null,
-    'inicio' => $period['inicio']->format('Y-m-d H:i:s'),
-    'fin' => $period['fin']->format('Y-m-d H:i:s'),
+    'inicio' => $start->format('Y-m-d H:i:s'),
+    'fin' => $end->format('Y-m-d H:i:s'),
     'error' => '',
   ];
 
@@ -41,3 +46,13 @@ function energyLoadProductionKg(int $year, int $week, array $databaseConfig, Dat
   return $result;
 }
 
+function energyLoadProductionKgDates(string $periodStart, string $periodEnd, array $databaseConfig, DateTimeZone $timezone): array
+{
+  $start = DateTimeImmutable::createFromFormat('!Y-m-d', $periodStart, $timezone);
+  $endDate = DateTimeImmutable::createFromFormat('!Y-m-d', $periodEnd, $timezone);
+  if (!$start instanceof DateTimeImmutable || !$endDate instanceof DateTimeImmutable || $endDate < $start) {
+    return ['kg' => null, 'inicio' => '', 'fin' => '', 'error' => 'El periodo del recibo no es válido.'];
+  }
+
+  return energyLoadProductionKgPeriod($start->setTime(7, 0), $endDate->modify('+1 day')->setTime(7, 0), $databaseConfig);
+}

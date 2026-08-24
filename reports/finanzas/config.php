@@ -4,10 +4,11 @@ declare(strict_types=1);
 
 return [
   'titulo' => 'Reporte de Finanzas',
-  'subtitulo' => 'Resumen mensual de gastos, fabricación y venta',
+  'subtitulo' => 'Resumen de gastos, fabricación y venta',
   'timezone' => 'America/Mexico_City',
   'api_facturas_compra' => [
     'url' => 'http://192.168.1.104:5000/api/facturas-compra',
+    'detail_segment' => 'MAT',
     'query_parameter' => 'cvde1',
     'response_field' => 'cvede1',
     'clasificaciones' => [
@@ -18,7 +19,7 @@ return [
     ],
     'timeout' => 30,
     'cache_ttl' => 900,
-    'cache_version' => 5,
+    'cache_version' => 9,
   ],
   'gastos' => [
     'materia_prima_nacional' => [

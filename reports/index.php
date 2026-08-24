@@ -104,6 +104,16 @@ $groups = array_values(array_filter($groups, static function (array $group): boo
   return !empty($group['reports']);
 }));
 
+if ($currentMode === 'direccion-general') {
+  foreach ($groups as &$group) {
+    if (($group['key'] ?? '') !== 'direccion-general') continue;
+    usort($group['reports'], static function (array $left, array $right): int {
+      return ((int)($left['direccion_general_order'] ?? 999)) <=> ((int)($right['direccion_general_order'] ?? 999));
+    });
+  }
+  unset($group);
+}
+
 $selectedGroup = null;
 if ($selectedGroupKey !== '') {
   foreach ($groups as $group) {
@@ -741,6 +751,9 @@ if ($selectedGroupKey !== '') {
         <div class="reports-grid">
           <?php foreach ($selectedGroup['reports'] as $report): ?>
             <?php
+            $reportTitle = $currentMode === 'direccion-general'
+              ? (string)($report['direccion_general_title'] ?? $report['title'] ?? 'Reporte')
+              : (string)($report['title'] ?? 'Reporte');
             $reportUrl = (string)($report['url'] ?? '#');
             $isExternalReport = isExternalUrl($reportUrl) || !empty($report['external']);
             // Preserve current mode when opening internal reports from group view
@@ -754,13 +767,13 @@ if ($selectedGroupKey !== '') {
               $reportCtaLabel = $isExternalReport ? 'Ir al sitio' : 'Ver reporte';
             }
             ?>
-            <article class="report-card report-item-card" data-search="<?= e(mb_strtolower(($report['title'] ?? '') . ' ' . ($report['description'] ?? '') . ' ' . ($report['slug'] ?? ''))) ?>">
+            <article class="report-card report-item-card" data-search="<?= e(mb_strtolower($reportTitle . ' ' . ($report['description'] ?? '') . ' ' . ($report['slug'] ?? ''))) ?>">
               <div class="report-card-top">
                 <div class="icon-wrap" style="background: <?= e($report['color'] ?? '#10b981') ?>; width: 50px; height: 50px; border-radius: 14px; font-size: 1.2rem;">
                   <i class="fas <?= e($report['icon'] ?? 'fa-chart-line') ?>"></i>
                 </div>
                 <div>
-                  <h4><?= e($report['title'] ?? 'Reporte') ?></h4>
+                  <h4><?= e($reportTitle) ?></h4>
                   <div class="report-slug"><?= e($report['slug'] ?? '') ?></div>
                 </div>
               </div>
