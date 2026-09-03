@@ -70,6 +70,28 @@ return [
   'fecha_desde' => '2025-01-01',
   'campo_fecha_movs' => 'F_MOV',
 
+  'movimientos_api' => [
+    'url' => 'http://192.168.1.104:5000/api/movimientos-salida',
+    'timeout' => 30,
+    'cache_ttl' => 3600,
+    'cache_version' => 1,
+  ],
+  'conversiones_unidad_producto' => [
+    'TOROHY1' => [
+      'SACO' => 25,
+      'SACOS' => 25,
+    ],
+    'SAL02' => [
+      'BULTO' => 20,
+      'BULTOS' => 20,
+    ],
+    'PASTIL1' => [
+      'CUBET' => 4,
+      'CUBETA' => 4,
+      'CUBETAS' => 4,
+    ],
+  ],
+
   'productos' => $grupos[$grupoSolicitado]['productos'],
   'grupos' => $grupos,
   'grupo_estructura' => [

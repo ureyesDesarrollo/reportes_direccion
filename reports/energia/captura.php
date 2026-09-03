@@ -8,28 +8,32 @@ $databaseConfig = require __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/storage.php';
 $timezone = new DateTimeZone((string)($config['timezone'] ?? 'America/Mexico_City'));
 $now = new DateTimeImmutable('now', $timezone);
-$defaultWeekDate = $now->modify('-7 days');
-$selectedYear = filter_input(INPUT_GET, 'anio', FILTER_VALIDATE_INT);
-$selectedWeek = filter_input(INPUT_GET, 'semana', FILTER_VALIDATE_INT);
-$selectedYear = is_int($selectedYear) ? $selectedYear : (int)$defaultWeekDate->format('o');
-$selectedWeek = is_int($selectedWeek) ? $selectedWeek : (int)$defaultWeekDate->format('W');
-if (!energyValidWeek($selectedYear, $selectedWeek)) {
-  $selectedYear = (int)$defaultWeekDate->format('o');
-  $selectedWeek = (int)$defaultWeekDate->format('W');
+$monthNames = [1 => 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+$defaultMonthDate = $now->modify('first day of last month');
+$selectedMonthlyYear = filter_input(INPUT_GET, 'anio_mensual', FILTER_VALIDATE_INT);
+$selectedMonth = filter_input(INPUT_GET, 'mes', FILTER_VALIDATE_INT);
+$selectedMonthlyYear = is_int($selectedMonthlyYear) ? $selectedMonthlyYear : (int)$defaultMonthDate->format('Y');
+$selectedMonth = is_int($selectedMonth) ? $selectedMonth : (int)$defaultMonthDate->format('n');
+if (!energyValidMonth($selectedMonthlyYear, $selectedMonth)) {
+  $selectedMonthlyYear = (int)$defaultMonthDate->format('Y');
+  $selectedMonth = (int)$defaultMonthDate->format('n');
 }
 $productionDatabase = (array)($config['production_database'] ?? ($databaseConfig[(string)($config['database_key'] ?? 'prod')] ?? $databaseConfig['prod'] ?? []));
 require_once __DIR__ . '/production.php';
-$production = energyLoadProductionKg($selectedYear, $selectedWeek, $productionDatabase, $timezone);
-$saved = energyLoadData($selectedYear, $selectedWeek);
-$recordExists = $saved !== [];
-$values = energyMergeData($config, $saved);
-$registeredWeeks = array_slice(energyRegisteredWeeks(energyLoadRecords()), 0, 12);
+$monthlyPeriodStart = sprintf('%04d-%02d-01', $selectedMonthlyYear, $selectedMonth);
+$monthlyPeriodEnd = (new DateTimeImmutable($monthlyPeriodStart, $timezone))->modify('last day of this month')->format('Y-m-d');
+$monthlyProduction = energyLoadProductionKgDates($monthlyPeriodStart, $monthlyPeriodEnd, $productionDatabase, $timezone);
+$monthlySaved = energyLoadMonthlyData($selectedMonthlyYear, $selectedMonth);
+$monthlyRecordExists = $monthlySaved !== [];
+$monthlyValues = energyMergeData($config, $monthlySaved);
+$registeredMonths = array_slice(energyRegisteredMonths(energyLoadMonthlyRecords()), 0, 18);
 $receiptId = filter_input(INPUT_GET, 'editar_recibo', FILTER_VALIDATE_INT);
 $editingReceipt = is_int($receiptId) ? energyLoadReceipt($receiptId) : [];
 $recentReceipts = array_slice(energyLoadReceipts(), 0, 15);
-$rangeLabel = energyWeekRangeLabel($selectedYear, $selectedWeek);
 $error = '';
-$success = isset($_GET['guardado']) ? 'Registro operativo guardado correctamente.' : (isset($_GET['recibo_guardado']) ? 'Recibo guardado correctamente.' : '');
+$success = isset($_GET['mensual_guardado'])
+  ? 'Registro mensual guardado correctamente.'
+  : (isset($_GET['recibo_guardado']) ? 'Recibo guardado correctamente.' : '');
 $e = static fn($value): string => htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
 $field = static fn(array $source, string $key): string => is_numeric($source[$key] ?? null) ? (string)$source[$key] : '';
 $totalField = static fn(array $source): string => is_numeric($source['total'] ?? null) ? (string)$source['total'] : '';
@@ -45,7 +49,7 @@ $cleanNumber = static function ($value): ?float {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   try {
     if (!hash_equals((string)$_SESSION['energy_csrf'], (string)($_POST['csrf'] ?? ''))) throw new RuntimeException('La sesión expiró. Recarga la página e intenta nuevamente.');
-    $action = (string)($_POST['action'] ?? 'save_weekly');
+    $action = (string)($_POST['action'] ?? '');
     if ($action === 'save_receipt') {
       $serviceKey = trim((string)($_POST['service_key'] ?? ''));
       if (!isset($config['consumos'][$serviceKey])) throw new InvalidArgumentException('El servicio seleccionado no es válido.');
@@ -93,69 +97,60 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       exit;
     }
 
-    $postYear = filter_var($_POST['anio'] ?? null, FILTER_VALIDATE_INT);
-    $postWeek = filter_var($_POST['semana'] ?? null, FILTER_VALIDATE_INT);
-    if (!is_int($postYear) || !is_int($postWeek) || !energyValidWeek($postYear, $postWeek)) throw new InvalidArgumentException('La semana seleccionada no es válida.');
-    $selectedYear = $postYear;
-    $selectedWeek = $postWeek;
-    $production = energyLoadProductionKg($selectedYear, $selectedWeek, $productionDatabase, $timezone);
-    $productionKg = is_numeric($production['kg'] ?? null) ? (float)$production['kg'] : null;
-    $existingRecord = energyLoadData($selectedYear, $selectedWeek);
-    $capturedNow = new DateTimeImmutable('now', $timezone);
-    $registeredAt = trim((string)($existingRecord['registrado_en'] ?? ''));
-    if ($registeredAt === '' && $existingRecord !== []) {
-      $legacyRegisteredAt = DateTimeImmutable::createFromFormat(
-        'd/m/Y H:i',
-        trim((string)($existingRecord['actualizado'] ?? '')),
-        $timezone
-      );
-      if ($legacyRegisteredAt instanceof DateTimeImmutable) $registeredAt = $legacyRegisteredAt->format('Y-m-d H:i:s');
+    if ($action === 'save_monthly') {
+      $postMonthlyYear = filter_var($_POST['anio_mensual'] ?? null, FILTER_VALIDATE_INT);
+      $postMonth = filter_var($_POST['mes'] ?? null, FILTER_VALIDATE_INT);
+      if (!is_int($postMonthlyYear) || !is_int($postMonth) || !energyValidMonth($postMonthlyYear, $postMonth)) {
+        throw new InvalidArgumentException('El mes seleccionado no es válido.');
+      }
+      $selectedMonthlyYear = $postMonthlyYear;
+      $selectedMonth = $postMonth;
+      $monthlyPeriodStart = sprintf('%04d-%02d-01', $selectedMonthlyYear, $selectedMonth);
+      $monthlyPeriodEnd = (new DateTimeImmutable($monthlyPeriodStart, $timezone))->modify('last day of this month')->format('Y-m-d');
+      $monthlyProduction = energyLoadProductionKgDates($monthlyPeriodStart, $monthlyPeriodEnd, $productionDatabase, $timezone);
+      $monthlyProductionKg = is_numeric($monthlyProduction['kg'] ?? null) ? (float)$monthlyProduction['kg'] : null;
+      $existingMonthlyRecord = energyLoadMonthlyData($selectedMonthlyYear, $selectedMonth);
+      $capturedNow = new DateTimeImmutable('now', $timezone);
+      $registeredAt = trim((string)($existingMonthlyRecord['registrado_en'] ?? '')) ?: $capturedNow->format('Y-m-d H:i:s');
+      $monthlyData = energyMergeData($existingMonthlyRecord, [
+        'anio' => $selectedMonthlyYear,
+        'mes' => $selectedMonth,
+        'registrado_en' => $registeredAt,
+        'actualizado_en' => $existingMonthlyRecord !== [] ? $capturedNow->format('Y-m-d H:i:s') : null,
+        'zona_horaria' => 'America/Mexico_City',
+        'produccion' => [
+          'kg' => $monthlyProductionKg,
+          'inicio' => (string)($monthlyProduction['inicio'] ?? ''),
+          'fin' => (string)($monthlyProduction['fin'] ?? ''),
+          'corte_consultado_en' => $capturedNow->format('Y-m-d H:i:s'),
+        ],
+        'recuperaciones' => [
+          'recuperacion_grasa' => ['m3' => $cleanNumber($_POST['recuperacion_grasa_m3'] ?? null), 'valor' => $cleanNumber($_POST['recuperacion_grasa_valor'] ?? null)],
+          'ollas' => ['m3' => $cleanNumber($_POST['ollas_m3'] ?? null), 'valor' => $cleanNumber($_POST['ollas_valor'] ?? null)],
+          'polimeros' => ['m3' => $cleanNumber($_POST['polimeros_m3'] ?? null), 'valor' => $cleanNumber($_POST['polimeros_valor'] ?? null)],
+        ],
+        'generacion' => [
+          'panel_solar' => ['kw' => $cleanNumber($_POST['panel_solar_kw'] ?? null), 'valor' => $cleanNumber($_POST['panel_solar_valor'] ?? null)],
+          'cogenerador' => ['kw' => $cleanNumber($_POST['cogenerador_kw'] ?? null), 'valor' => $cleanNumber($_POST['cogenerador_valor'] ?? null)],
+        ],
+      ]);
+      energySaveMonthlyData($selectedMonthlyYear, $selectedMonth, $monthlyData);
+      $_SESSION['energy_csrf'] = bin2hex(random_bytes(24));
+      header('Location: captura.php?' . http_build_query([
+        'anio_mensual' => $selectedMonthlyYear,
+        'mes' => $selectedMonth,
+        'mensual_guardado' => 1,
+      ]));
+      exit;
     }
-    if ($registeredAt === '') $registeredAt = $capturedNow->format('Y-m-d H:i:s');
-    $registeredAtDate = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $registeredAt, $timezone);
-    if (!$registeredAtDate instanceof DateTimeImmutable) {
-      $registeredAtDate = $capturedNow;
-      $registeredAt = $capturedNow->format('Y-m-d H:i:s');
-    }
-    $updatedAt = $existingRecord !== [] ? $capturedNow->format('Y-m-d H:i:s') : null;
-    $data = energyMergeData($existingRecord, [
-      'anio' => $selectedYear,
-      'semana' => $selectedWeek,
-      'registrado_en' => $registeredAt,
-      'fecha_registro' => $registeredAtDate->format('Y-m-d'),
-      'hora_registro' => $registeredAtDate->format('H:i:s'),
-      'actualizado_en' => $updatedAt,
-      'fecha_actualizacion' => $updatedAt !== null ? $capturedNow->format('Y-m-d') : null,
-      'hora_actualizacion' => $updatedAt !== null ? $capturedNow->format('H:i:s') : null,
-      'zona_horaria' => 'America/Mexico_City',
-      'actualizado' => $capturedNow->format('d/m/Y H:i:s'),
-      'produccion' => [
-        'kg' => $productionKg,
-        'inicio' => (string)($production['inicio'] ?? ''),
-        'fin' => (string)($production['fin'] ?? ''),
-        'corte_consultado_en' => $capturedNow->format('Y-m-d H:i:s'),
-      ],
-      'recuperaciones' => [
-        'recuperacion_grasa' => ['m3' => $cleanNumber($_POST['recuperacion_grasa_m3'] ?? null), 'valor' => $cleanNumber($_POST['recuperacion_grasa_valor'] ?? null)],
-        'ollas' => ['m3' => $cleanNumber($_POST['ollas_m3'] ?? null), 'valor' => $cleanNumber($_POST['ollas_valor'] ?? null)],
-        'polimeros' => ['m3' => $cleanNumber($_POST['polimeros_m3'] ?? null), 'valor' => $cleanNumber($_POST['polimeros_valor'] ?? null)],
-      ],
-      'generacion' => [
-        'panel_solar' => ['kw' => $cleanNumber($_POST['panel_solar_kw'] ?? null), 'valor' => $cleanNumber($_POST['panel_solar_valor'] ?? null)],
-        'cogenerador' => ['kw' => $cleanNumber($_POST['cogenerador_kw'] ?? null), 'valor' => $cleanNumber($_POST['cogenerador_valor'] ?? null)],
-      ],
-    ]);
-    energySaveData($selectedYear, $selectedWeek, $data);
-    $_SESSION['energy_csrf'] = bin2hex(random_bytes(24));
-    header('Location: captura.php?' . http_build_query(['anio' => $selectedYear, 'semana' => $selectedWeek, 'guardado' => 1]));
-    exit;
+    throw new InvalidArgumentException('La operación solicitada no es válida.');
   } catch (Throwable $exception) {
     $error = $exception->getMessage();
-    if (isset($data) && is_array($data)) $values = energyMergeData($config, $data);
+    if (isset($monthlyData) && is_array($monthlyData)) $monthlyValues = energyMergeData($config, $monthlyData);
   }
 }
-$recoveries = (array)($values['recuperaciones'] ?? []);
-$generation = (array)($values['generacion'] ?? []);
+$monthlyRecoveries = (array)($monthlyValues['recuperaciones'] ?? []);
+$monthlyGeneration = (array)($monthlyValues['generacion'] ?? []);
 ?>
 <!doctype html>
 <html lang="es">
@@ -197,15 +192,19 @@ $generation = (array)($values['generacion'] ?? []);
     .panel h2 { display:flex; align-items:center; gap:9px; margin:0 0 14px; color:#334155; font-size:17px; font-weight:900; text-transform:uppercase; }
     .panel h2 i { color:var(--amber); }
     .grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
-    .grid.two { grid-template-columns:repeat(2,minmax(0,1fr)); }
-    .entry-card { padding:15px; border:1px solid var(--line); border-radius:14px; background:var(--soft); }
+    .monthly-grid { grid-template-columns:repeat(6,minmax(0,1fr)); }
+    .monthly-grid.three .entry-card { grid-column:span 2; }
+    .monthly-grid.two-centered .entry-card { grid-column:span 2; }
+    .monthly-grid.two-centered .entry-card:first-child { grid-column:2 / span 2; }
+    .entry-card { display:flex; min-width:0; flex-direction:column; padding:15px; border:1px solid var(--line); border-radius:14px; background:var(--soft); }
     .entry-card h3 { display:flex; align-items:center; gap:8px; margin:0 0 12px; font-size:13px; font-weight:900; text-transform:uppercase; }
     .entry-card h3 i { color:var(--amber); }
     .generation-entry h3 i { color:var(--green); }
     .recovery-recuperacion_grasa h3 i { color:#475569; }
     .recovery-ollas h3 i { color:#78716c; }
     .recovery-polimeros h3 i { color:#71717a; }
-    .fields { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    .fields { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:auto; }
+    .monthly-grid .field label { display:flex; min-height:30px; align-items:flex-end; }
     .field { display:flex; flex-direction:column; gap:6px; min-width:0; }
     label { color:#475569; font-size:12px; font-weight:800; }
     input,select { width:100%; min-height:43px; padding:10px 11px; border:1px solid #cbd5e1; border-radius:10px; color:var(--ink); background:#fff; font:inherit; font-size:14px; outline:none; }
@@ -226,14 +225,14 @@ $generation = (array)($values['generacion'] ?? []);
     .actions { position:sticky; bottom:10px; display:flex; justify-content:flex-end; gap:10px; margin-top:14px; padding:13px; border:1px solid var(--line); border-radius:15px; background:rgba(255,255,255,.96); box-shadow:0 10px 28px rgba(15,23,42,.12); }
     .save { padding:12px 19px; border:0; border-radius:999px; color:#fff; background:linear-gradient(145deg,var(--amber),var(--amber-dark)); font:inherit; font-size:14px; font-weight:900; cursor:pointer; }
     @media(max-width:900px) { .receipt-fields { grid-template-columns:repeat(2,minmax(0,1fr)); } .receipt-list-table { display:block; overflow-x:auto; white-space:nowrap; } }
-    @media(max-width:760px) { .grid,.grid.two { grid-template-columns:1fr; } .week-selector { align-items:stretch; flex-direction:column; } .week-selector .field,.week-selector .registered { width:100%; } .week-context { margin-left:0; text-align:left; } .production-cut{grid-template-columns:auto 1fr}.production-cut strong{grid-column:2} }
+    @media(max-width:760px) { .grid,.monthly-grid { grid-template-columns:1fr; } .monthly-grid.three .entry-card,.monthly-grid.two-centered .entry-card,.monthly-grid.two-centered .entry-card:first-child { grid-column:auto; } .monthly-grid .field label { min-height:0; } .week-selector { align-items:stretch; flex-direction:column; } .week-selector .field,.week-selector .registered { width:100%; } .week-context { margin-left:0; text-align:left; } .production-cut{grid-template-columns:auto 1fr}.production-cut strong{grid-column:2} }
     @media(max-width:480px) { .topbar { flex-direction:column; } .header { padding:16px; } .fields { grid-template-columns:1fr; } }
   </style>
 </head>
 <body>
   <main class="page">
-    <div class="topbar"><a class="link" href="../index.php"><i class="fa-solid fa-arrow-left"></i> Centro de reportes</a><a class="link" href="index.php?anio=<?= $e($selectedYear) ?>&amp;semana=<?= $e($selectedWeek) ?>" target="_blank"><i class="fa-solid fa-chart-column"></i> Ver reporte</a></div>
-    <header class="header"><span class="header-icon"><i class="fa-solid fa-bolt"></i></span><div><h1>Captura del Reporte de Energía</h1><p>Recibos de consumo por periodo y registro operativo semanal.</p></div></header>
+    <div class="topbar"><a class="link" href="../index.php"><i class="fa-solid fa-arrow-left"></i> Centro de reportes</a><a class="link" href="index.php?anio=<?= $e($selectedMonthlyYear) ?>" target="_blank"><i class="fa-solid fa-chart-column"></i> Ver reporte</a></div>
+    <header class="header"><span class="header-icon"><i class="fa-solid fa-bolt"></i></span><div><h1>Captura del Reporte de Energía</h1><p>Recibos de consumo e indicadores operativos mensuales.</p></div></header>
     <?php if ($success !== ''): ?><div class="notice success"><?= $e($success) ?></div><?php endif; ?>
     <?php if ($error !== ''): ?><div class="notice error"><?= $e($error) ?></div><?php endif; ?>
 
@@ -254,43 +253,32 @@ $generation = (array)($values['generacion'] ?? []);
       </section>
     </form>
 
-    <div class="section-label">Registro operativo semanal</div>
-    <form class="week-selector" method="get"><div class="field"><label>Semana del año</label><input type="number" name="semana" min="1" max="53" required value="<?= $e($selectedWeek) ?>"></div><div class="field"><label>Año</label><input type="number" name="anio" min="2020" max="2100" required value="<?= $e($selectedYear) ?>"></div><button class="load" type="submit">Cargar semana</button><?php if ($registeredWeeks !== []): ?><div class="field registered"><label>Semanas registradas</label><select onchange="if(this.value) window.location.href=this.value"><option value="">Seleccionar</option><?php foreach ($registeredWeeks as $week): ?><option value="?anio=<?= $e($week['anio']) ?>&amp;semana=<?= $e($week['semana']) ?>" <?= (int)$week['anio'] === $selectedYear && (int)$week['semana'] === $selectedWeek ? 'selected' : '' ?>>Semana <?= $e($week['semana']) ?> · <?= $e($week['anio']) ?></option><?php endforeach; ?></select></div><?php endif; ?><div class="week-context"><?= $recordExists ? 'Editando registro existente' : 'Nuevo registro' ?>: <strong>semana <?= $e($selectedWeek) ?> de <?= $e($selectedYear) ?></strong><br><?= $e($rangeLabel) ?></div></form>
-    <section class="production-cut <?= !is_numeric($production['kg'] ?? null) ? 'error' : '' ?>"><i class="fa-solid fa-industry"></i><div><span>Producción del corte semanal</span><small>Lunes 07:00 a lunes 07:00 · sólo tarimas con etiquetado válido</small></div><strong><?= is_numeric($production['kg'] ?? null) ? number_format((float)$production['kg'], 0, '.', ',') . ' kg' : 'No disponible' ?></strong></section>
+    <div class="section-label">Registro operativo mensual</div>
+    <form class="week-selector" method="get">
+      <div class="field"><label>Mes</label><select name="mes" required><?php foreach ($monthNames as $monthNumber => $monthName): ?><option value="<?= $e($monthNumber) ?>" <?= $monthNumber === $selectedMonth ? 'selected' : '' ?>><?= $e($monthName) ?></option><?php endforeach; ?></select></div>
+      <div class="field"><label>Año</label><input type="number" name="anio_mensual" min="2020" max="2100" required value="<?= $e($selectedMonthlyYear) ?>"></div>
+      <button class="load" type="submit">Cargar mes</button>
+      <?php if ($registeredMonths !== []): ?><div class="field registered"><label>Meses registrados</label><select onchange="if(this.value) window.location.href=this.value"><option value="">Seleccionar</option><?php foreach ($registeredMonths as $registeredMonth): ?><option value="?anio_mensual=<?= $e($registeredMonth['anio']) ?>&amp;mes=<?= $e($registeredMonth['mes']) ?>" <?= (int)$registeredMonth['anio'] === $selectedMonthlyYear && (int)$registeredMonth['mes'] === $selectedMonth ? 'selected' : '' ?>><?= $e($monthNames[(int)$registeredMonth['mes']] ?? $registeredMonth['mes']) ?> · <?= $e($registeredMonth['anio']) ?></option><?php endforeach; ?></select></div><?php endif; ?>
+      <div class="week-context"><?= $monthlyRecordExists ? 'Editando registro existente' : 'Nuevo registro' ?>: <strong><?= $e($monthNames[$selectedMonth]) ?> de <?= $e($selectedMonthlyYear) ?></strong></div>
+    </form>
+    <section class="production-cut <?= !is_numeric($monthlyProduction['kg'] ?? null) ? 'error' : '' ?>"><i class="fa-solid fa-industry"></i><div><span>Producción del mes</span><small><?= $e($monthlyPeriodStart) ?> al <?= $e($monthlyPeriodEnd) ?> · corte de 07:00 a 07:00</small></div><strong><?= is_numeric($monthlyProduction['kg'] ?? null) ? number_format((float)$monthlyProduction['kg'], 0, '.', ',') . ' kg' : 'No disponible' ?></strong></section>
 
-    <form method="post" autocomplete="off"><input type="hidden" name="csrf" value="<?= $e($_SESSION['energy_csrf']) ?>"><input type="hidden" name="action" value="save_weekly"><input type="hidden" name="anio" value="<?= $e($selectedYear) ?>"><input type="hidden" name="semana" value="<?= $e($selectedWeek) ?>">
-      <section class="panel"><h2><i class="fa-solid fa-recycle"></i> Recuperación</h2><div class="grid">
-        <?php foreach (['recuperacion_grasa' => ['Recuperación de grasa','fa-oil-can'], 'ollas' => ['Ollas','fa-fire-burner'], 'polimeros' => ['Polímeros','fa-flask']] as $key => $meta): $metric = (array)($recoveries[$key] ?? []); ?>
-          <div class="entry-card recovery-<?= $e($key) ?>"><h3><i class="fa-solid <?= $e($meta[1]) ?>"></i> <?= $e($meta[0]) ?></h3><div class="fields"><div class="field"><label>Recuperación</label><div class="suffix"><input type="number" min="0" step="0.001" name="<?= $e($key) ?>_m3" value="<?= $e($field($metric, 'm3')) ?>"><span>m³</span></div></div><div class="field"><label>Valor económico</label><div class="suffix"><input type="number" min="0" step="0.01" name="<?= $e($key) ?>_valor" value="<?= $e($field($metric, 'valor')) ?>"><span>$</span></div></div></div></div>
+    <form method="post" autocomplete="off"><input type="hidden" name="csrf" value="<?= $e($_SESSION['energy_csrf']) ?>"><input type="hidden" name="action" value="save_monthly"><input type="hidden" name="anio_mensual" value="<?= $e($selectedMonthlyYear) ?>"><input type="hidden" name="mes" value="<?= $e($selectedMonth) ?>">
+      <section class="panel"><h2><i class="fa-solid fa-recycle"></i> Recuperación mensual</h2><div class="grid monthly-grid three">
+        <?php foreach (['recuperacion_grasa' => ['Recuperación de grasa','fa-oil-can'], 'ollas' => ['Ollas','fa-fire-burner'], 'polimeros' => ['Polímeros','fa-flask']] as $key => $meta): $metric = (array)($monthlyRecoveries[$key] ?? []); ?>
+          <div class="entry-card recovery-<?= $e($key) ?>"><h3><i class="fa-solid <?= $e($meta[1]) ?>"></i> <?= $e($meta[0]) ?></h3><div class="fields"><div class="field"><label>Recuperación mensual</label><div class="suffix"><input type="number" min="0" step="0.001" name="<?= $e($key) ?>_m3" value="<?= $e($field($metric, 'm3')) ?>"><span>m³</span></div></div><div class="field"><label>Valor económico</label><div class="suffix"><input type="number" min="0" step="0.01" name="<?= $e($key) ?>_valor" value="<?= $e($field($metric, 'valor')) ?>"><span>$</span></div></div></div></div>
         <?php endforeach; ?>
       </div></section>
-      <section class="panel"><h2><i class="fa-solid fa-leaf"></i> Generación</h2><div class="grid two">
-        <?php foreach (['panel_solar' => ['Panel solar','fa-solar-panel'], 'cogenerador' => ['Cogenerador','fa-industry']] as $key => $meta): $metric = (array)($generation[$key] ?? []); ?>
-          <div class="entry-card generation-entry"><h3><i class="fa-solid <?= $e($meta[1]) ?>"></i> <?= $e($meta[0]) ?></h3><div class="fields"><div class="field"><label>Producción</label><div class="suffix"><input type="number" min="0" step="0.01" name="<?= $e($key) ?>_kw" value="<?= $e($field($metric, 'kw')) ?>"><span>kW</span></div></div><div class="field"><label>Valor económico</label><div class="suffix"><input type="number" min="0" step="0.01" name="<?= $e($key) ?>_valor" value="<?= $e($field($metric, 'valor')) ?>"><span>$</span></div></div></div></div>
+      <section class="panel"><h2><i class="fa-solid fa-leaf"></i> Generación mensual</h2><div class="grid monthly-grid two-centered">
+        <?php foreach (['panel_solar' => ['Panel solar','fa-solar-panel'], 'cogenerador' => ['Cogenerador','fa-industry']] as $key => $meta): $metric = (array)($monthlyGeneration[$key] ?? []); ?>
+          <div class="entry-card generation-entry"><h3><i class="fa-solid <?= $e($meta[1]) ?>"></i> <?= $e($meta[0]) ?></h3><div class="fields"><div class="field"><label>Producción mensual</label><div class="suffix"><input type="number" min="0" step="0.01" name="<?= $e($key) ?>_kw" value="<?= $e($field($metric, 'kw')) ?>"><span>kW</span></div></div><div class="field"><label>Valor económico</label><div class="suffix"><input type="number" min="0" step="0.01" name="<?= $e($key) ?>_valor" value="<?= $e($field($metric, 'valor')) ?>"><span>$</span></div></div></div></div>
         <?php endforeach; ?>
       </div></section>
-      <div class="actions"><a class="link" href="index.php?anio=<?= $e($selectedYear) ?>&amp;semana=<?= $e($selectedWeek) ?>" target="_blank">Vista previa</a><button class="save" type="submit"><?= $recordExists ? 'Actualizar' : 'Guardar' ?> semana <?= $e($selectedWeek) ?></button></div>
+      <div class="actions"><a class="link" href="index.php?anio=<?= $e($selectedMonthlyYear) ?>" target="_blank">Vista previa</a><button class="save" type="submit"><?= $monthlyRecordExists ? 'Actualizar' : 'Guardar' ?> <?= $e($monthNames[$selectedMonth]) ?></button></div>
     </form>
   </main>
   <script>
     (() => {
-      const productionKg = <?= is_numeric($production['kg'] ?? null) ? json_encode((float)$production['kg']) : 'null' ?>;
-      const updateRatio = (input) => {
-        const output = document.getElementById(input.dataset.ratioOutput || '');
-        if (!output) return;
-        if (String(input.value || '').trim() === '') {
-          output.textContent = '—';
-          return;
-        }
-        const total = Number(input.value);
-        output.textContent = Number.isFinite(total) && Number.isFinite(productionKg) && productionKg > 0
-          ? (total / productionKg).toLocaleString('es-MX', { maximumFractionDigits: 2 })
-          : '—';
-      };
-      document.querySelectorAll('[data-ratio-output]').forEach((input) => {
-        input.addEventListener('input', () => updateRatio(input));
-        updateRatio(input);
-      });
       const receiptService = document.getElementById('receiptService');
       const receiptAmount = document.getElementById('receiptAmount');
       const receiptAmountLabel = document.getElementById('receiptAmountLabel');

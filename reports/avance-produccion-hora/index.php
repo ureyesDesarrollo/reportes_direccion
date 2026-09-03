@@ -16,7 +16,7 @@ $formatValue = static function (array $metric): string {
     return '—';
   }
   $decimals = isset($metric['decimals'])
-    ? max(0, min(6, (int)$metric['decimals']))
+    ? max(0, min(2, (int)$metric['decimals']))
     : (floor((float)$value) === (float)$value ? 0 : 2);
   return number_format((float)$value, $decimals, '.', ',');
 };
@@ -256,6 +256,7 @@ $renderCard = static function (array $metric) use ($e, $formatValue, $metricRang
     @media (max-width: 900px) { .hour-grid.flows { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
     @media (max-width: 680px) { .hour-grid, .hour-grid.flows, .shift-summary { grid-template-columns: 1fr; } .supervisor-card { grid-template-columns: 1fr; } .turno-badge { grid-column: 1; } .hour-header-row { align-items: flex-start; flex-direction: column; } }
   </style>
+  <script src="../../assets/js/display-mode.js?v=<?= urlencode((string)(@filemtime(__DIR__ . '/../../assets/js/display-mode.js') ?: time())) ?>"></script>
 </head>
 <body class="<?= $captureMode ? 'capture-mode' : '' ?>">
   <main class="hour-report">

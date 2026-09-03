@@ -814,6 +814,7 @@ $semaforoDeficit = static function ($value): string {
       const fmtNumber = (value, decimals = 1) => {
         const number = asNumber(value);
         if (number === null) return '-';
+        decimals = Math.max(0, Math.min(2, Math.trunc(Number(decimals) || 0)));
         return new Intl.NumberFormat('es-MX', {
           minimumFractionDigits: decimals,
           maximumFractionDigits: decimals,

@@ -96,6 +96,7 @@ if ($capturedAtLabel === '' && $saved !== []) $capturedAtLabel = trim((string)($
     @media(max-width:760px){.summary{grid-template-columns:1fr 1fr}.footer-stats{grid-template-columns:1fr}.meta{display:none}.equipment-table th,.equipment-table td{padding:9px 7px}.equipment-name span{font-size:11px}}
     <?php if ($captureMode): ?>body{background:#fff}.report{width:1060px;margin:7px auto}.top-actions,.history,.picker{display:none}.header{padding:13px 17px;box-shadow:none}.summary{margin-top:9px}.summary-card{padding:11px 14px}.summary-card strong{font-size:26px}.panel{margin-top:9px}.equipment-table th,.equipment-table td{padding:6px 10px}.footer-stats{margin-top:9px}.large-stat{padding:12px 16px}<?php endif; ?>
   </style>
+  <script src="../../assets/js/display-mode.js?v=<?= urlencode((string)(@filemtime(__DIR__ . '/../../assets/js/display-mode.js') ?: time())) ?>"></script>
 </head>
 <body><main class="report">
   <div class="top-actions"><a class="pill" href="../index.php">Centro de reportes</a><a class="pill capture-link" href="captura.php?fecha=<?= $e($selectedDate) ?>">Capturar</a></div>

@@ -5,6 +5,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../shared/helpers.php';
 require_once __DIR__ . '/../../shared/ReportHelpers.php';
 require_once __DIR__ . '/../../shared/ReportEngine.php';
+require_once __DIR__ . '/../../shared/ChemicalMovementsApi.php';
 
 /*
 |--------------------------------------------------------------------------
@@ -62,24 +63,30 @@ if (empty($productosGrupo)) {
   throw new RuntimeException('No hay productos definidos para el grupo.');
 }
 
-$state = ReportEngine::createContext($config, $appConfig, $dbConfig);
-$pdoMovs = $state['pdoMovs'];
-$pdoProd = $state['pdoProd'];
-$campoFechaMovsSql = $state['campoFechaMovsSql'];
-$campoCostoSql = "m.`{$campoCosto}`";
-$campoCantidadSql = "
-        CASE
-            WHEN UPPER(TRIM(m.UNIUSU)) IN ('KG','KGS','KILO','KILOS') THEN m.CANT_PROD
-            WHEN UPPER(TRIM(m.UNIUSU)) IN ('G','GR','GRAMO','GRAMOS') THEN m.CANT_PROD / 1000
-            ELSE m.CANT_PROD
-        END
-    ";
+$sourceWarnings = [];
+$pdoProd = null;
+try {
+  $pdoProd = conectar($dbConfig['prod']);
+} catch (Throwable $exception) {
+  $sourceWarnings[] = 'La producción no está disponible; los ratios se muestran sin ese dato.';
+}
 
-$weekFields = $state['weekFields'];
-$placeholdersGrupo = createPlaceholders($productosGrupo);
-
-$consumoExpr = getConsumoExpression();
-$costoPromedioExpr = getCostoExpression($campoCosto);
+$timezone = new DateTimeZone((string)($config['timezone'] ?? 'America/Mexico_City'));
+$apiResult = loadChemicalMovementsApi(
+  (array)($config['movimientos_api'] ?? []),
+  [$anioAnterior, $anioActual],
+  (array)($config['conversiones_unidad_producto'] ?? []),
+  $timezone
+);
+$chemicalMovements = array_values(array_filter(
+  (array)($apiResult['movements'] ?? []),
+  static function ($movement) use ($fechaDesde): bool {
+    return is_array($movement) && (string)($movement['semana_fin'] ?? '') >= $fechaDesde;
+  }
+));
+$sourceWarnings = array_merge($sourceWarnings, (array)($apiResult['warnings'] ?? []));
+$sourceWarning = implode(' ', array_values(array_unique($sourceWarnings)));
+$rowsProductosApi = aggregateChemicalMovementsWeekly($chemicalMovements, (array)$productosGrupo);
 
 /*
 |--------------------------------------------------------------------------
@@ -114,76 +121,51 @@ if ($modo === 'costo') {
 | 1) DETALLE SEMANAL DEL GRUPO
 |--------------------------------------------------------------------------
 */
-if ($modo === 'consumo') {
-  $sqlDetalle = "
-        SELECT
-            YEARWEEK($campoFechaMovsSql, 3) AS periodo,
-            DATE_FORMAT($campoFechaMovsSql, '%x-S%v') AS semana_iso,
-            DATE_FORMAT(DATE_SUB(DATE($campoFechaMovsSql), INTERVAL WEEKDAY($campoFechaMovsSql) DAY), '%Y-%m-%d') AS semana_inicio,
-            DATE_FORMAT(DATE_ADD(DATE($campoFechaMovsSql), INTERVAL (6 - WEEKDAY($campoFechaMovsSql)) DAY), '%Y-%m-%d') AS semana_fin,
-            $consumoExpr AS consumo_kg
-        FROM movs m
-        WHERE $campoFechaMovsSql >= ?
-          AND TRIM(m.TIPO_MOV) = 'S'
-          AND TRIM(m.CVE_PROD) IN ($placeholdersGrupo)
-    ";
-} elseif ($modo === 'costo') {
-  $sqlDetalle = "
-        SELECT
-            YEARWEEK($campoFechaMovsSql, 3) AS periodo,
-            DATE_FORMAT($campoFechaMovsSql, '%x-S%v') AS semana_iso,
-            DATE_FORMAT(DATE_SUB(DATE($campoFechaMovsSql), INTERVAL WEEKDAY($campoFechaMovsSql) DAY), '%Y-%m-%d') AS semana_inicio,
-            DATE_FORMAT(DATE_ADD(DATE($campoFechaMovsSql), INTERVAL (6 - WEEKDAY($campoFechaMovsSql)) DAY), '%Y-%m-%d') AS semana_fin,
-            $costoPromedioExpr AS costo_promedio
-        FROM movs m
-        WHERE $campoFechaMovsSql >= ?
-          AND TRIM(m.TIPO_MOV) = 'S'
-          AND TRIM(m.CVE_PROD) IN ($placeholdersGrupo)
-    ";
-} else {
-  // impacto
-  $sqlDetalle = "
-        SELECT
-            YEARWEEK($campoFechaMovsSql, 3) AS periodo,
-            DATE_FORMAT($campoFechaMovsSql, '%x-S%v') AS semana_iso,
-            DATE_FORMAT(DATE_SUB(DATE($campoFechaMovsSql), INTERVAL WEEKDAY($campoFechaMovsSql) DAY), '%Y-%m-%d') AS semana_inicio,
-            DATE_FORMAT(DATE_ADD(DATE($campoFechaMovsSql), INTERVAL (6 - WEEKDAY($campoFechaMovsSql)) DAY), '%Y-%m-%d') AS semana_fin,
-            $consumoExpr AS consumo_kg,
-            $costoPromedioExpr AS costo_promedio
-        FROM movs m
-        WHERE $campoFechaMovsSql >= ?
-          AND TRIM(m.TIPO_MOV) = 'S'
-          AND TRIM(m.CVE_PROD) IN ($placeholdersGrupo)
-    ";
-}
-
-$paramsDetalle = array_merge([$fechaDesde], $productosGrupo);
-
-if ($cveMov !== null && $cveMov !== '') {
-  $sqlDetalle .= " AND m.CVE_MOV = ? ";
-  $paramsDetalle[] = $cveMov;
-}
-
-$sqlDetalle .= "
-    GROUP BY" . buildWeekGroupBy($campoFechaMovsSql) . "
-    ORDER BY periodo
-";
-
-$stmtDetalle = $pdoMovs->prepare($sqlDetalle);
-$stmtDetalle->execute($paramsDetalle);
-
 $detallePorPeriodo = [];
-while ($row = $stmtDetalle->fetch()) {
-  $periodo = (int)$row['periodo'];
-  $detallePorPeriodo[$periodo] = $row;
+$detalleProductosPorPeriodo = [];
+foreach ($rowsProductosApi as $row) {
+  $periodo = (int)($row['periodo'] ?? 0);
+  $cveProd = trim((string)($row['cve_prod'] ?? ''));
+  if ($periodo <= 0 || $cveProd === '') continue;
+
+  if (!isset($detallePorPeriodo[$periodo])) {
+    $detallePorPeriodo[$periodo] = [
+      'periodo' => $periodo,
+      'semana_iso' => (string)($row['semana_iso'] ?? ''),
+      'semana_inicio' => (string)($row['semana_inicio'] ?? ''),
+      'semana_fin' => (string)($row['semana_fin'] ?? ''),
+      'consumo_kg' => 0.0,
+      'impacto_economico' => 0.0,
+      'costo_promedio' => 0.0,
+    ];
+  }
+
+  $consumo = (float)($row['consumo_kg'] ?? 0.0);
+  $impacto = (float)($row['impacto_economico'] ?? 0.0);
+  $detallePorPeriodo[$periodo]['consumo_kg'] += $consumo;
+  $detallePorPeriodo[$periodo]['impacto_economico'] += $impacto;
+  $detalleProductosPorPeriodo[$periodo][$cveProd] = [
+    'consumo_kg' => $consumo,
+    'costo_promedio' => is_numeric($row['costo_promedio'] ?? null) ? (float)$row['costo_promedio'] : null,
+  ];
 }
+
+foreach ($detallePorPeriodo as &$row) {
+  $consumo = (float)($row['consumo_kg'] ?? 0.0);
+  $row['costo_promedio'] = $consumo > 0
+    ? (float)($row['impacto_economico'] ?? 0.0) / $consumo
+    : 0.0;
+}
+unset($row);
 
 /*
 |--------------------------------------------------------------------------
 | 2) PRODUCCIÓN POR SEMANA
 |--------------------------------------------------------------------------
 */
-$produccionPorPeriodo = ReportEngine::fetchProductionSeries($pdoProd, $fechaDesde);
+$produccionPorPeriodo = $pdoProd instanceof PDO
+  ? ReportEngine::fetchProductionSeries($pdoProd, $fechaDesde)
+  : [];
 
 /*
 |--------------------------------------------------------------------------
@@ -194,39 +176,22 @@ $costoBaseGrupo = null;
 $costoPromedioActualGrupo = null;
 
 if ($modo === 'costo' || $modo === 'impacto') {
-  $sqlCostoBase = "
-        SELECT
-            CASE WHEN SUM(CASE WHEN CAST(DATE_FORMAT($campoFechaMovsSql, '%x') AS UNSIGNED) = ? THEN $campoCantidadSql END) > 0
-                 THEN SUM(CASE WHEN CAST(DATE_FORMAT($campoFechaMovsSql, '%x') AS UNSIGNED) = ? THEN $campoCostoSql * $campoCantidadSql END) /
-                      SUM(CASE WHEN CAST(DATE_FORMAT($campoFechaMovsSql, '%x') AS UNSIGNED) = ? THEN $campoCantidadSql END)
-                 ELSE NULL END AS promedio_anio_anterior,
-            CASE WHEN SUM(CASE WHEN CAST(DATE_FORMAT($campoFechaMovsSql, '%x') AS UNSIGNED) = ? THEN $campoCantidadSql END) > 0
-                 THEN SUM(CASE WHEN CAST(DATE_FORMAT($campoFechaMovsSql, '%x') AS UNSIGNED) = ? THEN $campoCostoSql * $campoCantidadSql END) /
-                      SUM(CASE WHEN CAST(DATE_FORMAT($campoFechaMovsSql, '%x') AS UNSIGNED) = ? THEN $campoCantidadSql END)
-                 ELSE NULL END AS promedio_anio_actual
-        FROM movs m
-        WHERE $campoFechaMovsSql >= ?
-          AND TRIM(m.TIPO_MOV) = 'S'
-          AND TRIM(m.CVE_PROD) IN ($placeholdersGrupo)
-    ";
-
-  $paramsCostoBase = array_merge([$anioAnterior, $anioAnterior, $anioAnterior, $anioActual, $anioActual, $anioActual, $fechaDesde], $productosGrupo);
-
-  if ($cveMov !== null && $cveMov !== '') {
-    $sqlCostoBase .= " AND m.CVE_MOV = ? ";
-    $paramsCostoBase[] = $cveMov;
+  $costosPorAnio = [
+    $anioAnterior => ['consumo' => 0.0, 'impacto' => 0.0],
+    $anioActual => ['consumo' => 0.0, 'impacto' => 0.0],
+  ];
+  foreach ($rowsProductosApi as $row) {
+    $anioIso = (int)substr((string)($row['semana_iso'] ?? ''), 0, 4);
+    if (!isset($costosPorAnio[$anioIso])) continue;
+    $costosPorAnio[$anioIso]['consumo'] += (float)($row['consumo_kg'] ?? 0.0);
+    $costosPorAnio[$anioIso]['impacto'] += (float)($row['impacto_economico'] ?? 0.0);
   }
 
-  $stmtCostoBase = $pdoMovs->prepare($sqlCostoBase);
-  $stmtCostoBase->execute($paramsCostoBase);
-  $rowCostoBase = $stmtCostoBase->fetch();
-
-  $costoBaseGrupo = isset($rowCostoBase['promedio_anio_anterior']) && $rowCostoBase['promedio_anio_anterior'] !== null
-    ? (float)$rowCostoBase['promedio_anio_anterior']
+  $costoBaseGrupo = $costosPorAnio[$anioAnterior]['consumo'] > 0
+    ? $costosPorAnio[$anioAnterior]['impacto'] / $costosPorAnio[$anioAnterior]['consumo']
     : null;
-
-  $costoPromedioActualGrupo = isset($rowCostoBase['promedio_anio_actual']) && $rowCostoBase['promedio_anio_actual'] !== null
-    ? (float)$rowCostoBase['promedio_anio_actual']
+  $costoPromedioActualGrupo = $costosPorAnio[$anioActual]['consumo'] > 0
+    ? $costosPorAnio[$anioActual]['impacto'] / $costosPorAnio[$anioActual]['consumo']
     : null;
 
   // Si no hay costo base histórico, usar el promedio actual como referencia
@@ -242,52 +207,6 @@ if ($modo === 'costo' || $modo === 'impacto') {
 | Útil para resaltar producto seleccionado o ver desglose futuro
 |--------------------------------------------------------------------------
 */
-$sqlProductosSemana = "
-    SELECT
-        YEARWEEK($campoFechaMovsSql, 3) AS periodo,
-        DATE_FORMAT($campoFechaMovsSql, '%x-S%v') AS semana_iso,
-        TRIM(m.CVE_PROD) AS cve_prod,
-        $consumoExpr AS consumo_kg,
-        $costoPromedioExpr AS costo_promedio
-    FROM movs m
-    WHERE $campoFechaMovsSql >= ?
-      AND TRIM(m.TIPO_MOV) = 'S'
-      AND TRIM(m.CVE_PROD) IN ($placeholdersGrupo)
-";
-
-$paramsProductosSemana = array_merge([$fechaDesde], $productosGrupo);
-
-if ($cveMov !== null && $cveMov !== '') {
-  $sqlProductosSemana .= " AND m.CVE_MOV = ? ";
-  $paramsProductosSemana[] = $cveMov;
-}
-
-$sqlProductosSemana .= "
-    GROUP BY
-        YEARWEEK($campoFechaMovsSql, 3),
-        DATE_FORMAT($campoFechaMovsSql, '%x-S%v'),
-        TRIM(m.CVE_PROD)
-    ORDER BY periodo, cve_prod
-";
-
-$stmtProductosSemana = $pdoMovs->prepare($sqlProductosSemana);
-$stmtProductosSemana->execute($paramsProductosSemana);
-
-$detalleProductosPorPeriodo = [];
-while ($row = $stmtProductosSemana->fetch()) {
-  $periodo = (int)$row['periodo'];
-  $cveProd = trim((string)$row['cve_prod']);
-
-  if (!isset($detalleProductosPorPeriodo[$periodo])) {
-    $detalleProductosPorPeriodo[$periodo] = [];
-  }
-
-  $detalleProductosPorPeriodo[$periodo][$cveProd] = [
-    'consumo_kg' => (float)($row['consumo_kg'] ?? 0),
-    'costo_promedio' => isset($row['costo_promedio']) ? (float)$row['costo_promedio'] : null,
-  ];
-}
-
 /*
 |--------------------------------------------------------------------------
 | 5) ARMADO DEL REPORTE
@@ -299,9 +218,6 @@ $periodoData = ReportEngine::assemblePeriods(
   static function (array $row, array $produccion, int $periodo) use (
     $modo,
     $costoBaseGrupo,
-    $costoPromedioExpr,
-    $consumoExpr,
-    $campoFechaMovsSql,
     $detalleProductosPorPeriodo
   ): array {
     $produccionKg = isset($produccion['kilos_producidos']) ? (float)$produccion['kilos_producidos'] : 0.0;
@@ -452,115 +368,39 @@ $impactoEconomicoAnioActual = [];
 // Extraer estructura de grupos del config
 $grupoEstructura = $config['grupo_estructura'] ?? [];
 
-// Iterar sobre los grupos en lugar de productos individuales
+// Totales por grupo calculados exclusivamente con movimientos del API.
 foreach ($grupoEstructura as $grupoKey => $grupoInfo) {
-  $grupoTitulo = $grupoInfo['titulo'] ?? $grupoKey;
-  $productosEnGrupo = $grupoInfo['productos'] ?? [];
-  $placeholdersGrupoActual = implode(',', array_fill(0, count($productosEnGrupo), '?'));
+  $grupoTitulo = (string)($grupoInfo['titulo'] ?? $grupoKey);
+  $productosEnGrupo = array_fill_keys(array_map('strval', (array)($grupoInfo['productos'] ?? [])), true);
+  $totales = [
+    $anioAnterior => ['consumo' => 0.0, 'impacto' => 0.0],
+    $anioActual => ['consumo' => 0.0, 'impacto' => 0.0],
+  ];
 
-  // Sumar consumo año anterior para todos los productos del grupo
-  $sqlConsumoAnioAnterior = "
-    SELECT SUM($campoCantidadSql) AS consumo_kg
-    FROM movs m
-    WHERE CAST(DATE_FORMAT($campoFechaMovsSql, '%x') AS UNSIGNED) = ?
-      AND TRIM(m.TIPO_MOV) = 'S'
-      AND TRIM(m.CVE_PROD) IN ($placeholdersGrupoActual)
-  ";
-  $paramsConsumoAnterior = [$anioAnterior, ...$productosEnGrupo];
-
-  if ($cveMov !== null && $cveMov !== '') {
-    $sqlConsumoAnioAnterior .= " AND m.CVE_MOV = ? ";
-    $paramsConsumoAnterior[] = $cveMov;
+  foreach ($chemicalMovements as $movement) {
+    $product = (string)($movement['cve_prod'] ?? '');
+    $year = (int)($movement['anio_iso'] ?? 0);
+    if (!isset($productosEnGrupo[$product], $totales[$year])) continue;
+    $totales[$year]['consumo'] += (float)($movement['consumo_kg'] ?? 0.0);
+    $totales[$year]['impacto'] += (float)($movement['impacto_economico'] ?? 0.0);
   }
 
-  $stmtConsumoAnioAnterior = $pdoMovs->prepare($sqlConsumoAnioAnterior);
-  $stmtConsumoAnioAnterior->execute($paramsConsumoAnterior);
-  $rowConsumoAnioAnterior = $stmtConsumoAnioAnterior->fetch();
-  $consumoEnzimaAnioAnterior[$grupoTitulo] = (float)($rowConsumoAnioAnterior['consumo_kg'] ?? 0);
-
-  // Sumar consumo año actual para todos los productos del grupo
-  $sqlConsumoAnioActual = "
-    SELECT SUM($campoCantidadSql) AS consumo_kg
-    FROM movs m
-    WHERE CAST(DATE_FORMAT($campoFechaMovsSql, '%x') AS UNSIGNED) = ?
-      AND TRIM(m.TIPO_MOV) = 'S'
-      AND TRIM(m.CVE_PROD) IN ($placeholdersGrupoActual)
-  ";
-  $paramsConsumoActual = [$anioActual, ...$productosEnGrupo];
-
-  if ($cveMov !== null && $cveMov !== '') {
-    $sqlConsumoAnioActual .= " AND m.CVE_MOV = ? ";
-    $paramsConsumoActual[] = $cveMov;
-  }
-
-  $stmtConsumoAnioActual = $pdoMovs->prepare($sqlConsumoAnioActual);
-  $stmtConsumoAnioActual->execute($paramsConsumoActual);
-  $rowConsumoAnioActual = $stmtConsumoAnioActual->fetch();
-  $consumoEnzimaAnioActual[$grupoTitulo] = (float)($rowConsumoAnioActual['consumo_kg'] ?? 0);
-
-  // Costo ponderado año anterior para todos los productos del grupo
-  $sqlCostoPromedioAnioAnterior = "
-    SELECT
-      CASE WHEN SUM($campoCantidadSql) > 0
-           THEN SUM($campoCostoSql * $campoCantidadSql) / SUM($campoCantidadSql)
-           ELSE 0 END AS costo_promedio
-    FROM movs m
-    WHERE CAST(DATE_FORMAT($campoFechaMovsSql, '%x') AS UNSIGNED) = ?
-      AND TRIM(m.TIPO_MOV) = 'S'
-      AND TRIM(m.CVE_PROD) IN ($placeholdersGrupoActual)
-  ";
-  $paramsCostoAnterior = [$anioAnterior, ...$productosEnGrupo];
-
-  if ($cveMov !== null && $cveMov !== '') {
-    $sqlCostoPromedioAnioAnterior .= " AND m.CVE_MOV = ? ";
-    $paramsCostoAnterior[] = $cveMov;
-  }
-
-  $stmtCostoPromedioAnioAnterior = $pdoMovs->prepare($sqlCostoPromedioAnioAnterior);
-  $stmtCostoPromedioAnioAnterior->execute($paramsCostoAnterior);
-  $rowCostoPromedioAnioAnterior = $stmtCostoPromedioAnioAnterior->fetch();
-  $costoPromedioAnioAnterior[$grupoTitulo] = (float)($rowCostoPromedioAnioAnterior['costo_promedio'] ?? 0);
-
-  // Costo ponderado año actual para todos los productos del grupo
-  $sqlCostoPromedioAnioActual = "
-    SELECT
-      CASE WHEN SUM($campoCantidadSql) > 0
-           THEN SUM($campoCostoSql * $campoCantidadSql) / SUM($campoCantidadSql)
-           ELSE 0 END AS costo_promedio
-    FROM movs m
-    WHERE CAST(DATE_FORMAT($campoFechaMovsSql, '%x') AS UNSIGNED) = ?
-      AND TRIM(m.TIPO_MOV) = 'S'
-      AND TRIM(m.CVE_PROD) IN ($placeholdersGrupoActual)
-  ";
-  $paramsCostoActual = [$anioActual, ...$productosEnGrupo];
-
-  if ($cveMov !== null && $cveMov !== '') {
-    $sqlCostoPromedioAnioActual .= " AND m.CVE_MOV = ? ";
-    $paramsCostoActual[] = $cveMov;
-  }
-
-  $stmtCostoPromedioAnioActual = $pdoMovs->prepare($sqlCostoPromedioAnioActual);
-  $stmtCostoPromedioAnioActual->execute($paramsCostoActual);
-  $rowCostoPromedioAnioActual = $stmtCostoPromedioAnioActual->fetch();
-  $costoPromedioAnioActual[$grupoTitulo] = (float)($rowCostoPromedioAnioActual['costo_promedio'] ?? 0);
-
-  // Impacto económico año anterior (consumo * costo promedio)
-  $impactoEconomicoAnioAnterior[$grupoTitulo] = $consumoEnzimaAnioAnterior[$grupoTitulo] * $costoPromedioAnioAnterior[$grupoTitulo];
-
-  // Impacto económico año actual (consumo * costo promedio)
-  $impactoEconomicoAnioActual[$grupoTitulo] = $consumoEnzimaAnioActual[$grupoTitulo] * $costoPromedioAnioActual[$grupoTitulo];
-
-  // Variación de consumo
-  $variacionConsumo = $consumoEnzimaAnioAnterior[$grupoTitulo] > 0
-    ? (($consumoEnzimaAnioActual[$grupoTitulo] - $consumoEnzimaAnioAnterior[$grupoTitulo]) / $consumoEnzimaAnioAnterior[$grupoTitulo]) * 100
-    : 0;
-  $variacionConsumoEnzima[$grupoTitulo] = $variacionConsumo;
-
-  // Variación de costo (precio unitario promedio)
-  $variacionCosto = $costoPromedioAnioAnterior[$grupoTitulo] > 0
+  $consumoEnzimaAnioAnterior[$grupoTitulo] = $totales[$anioAnterior]['consumo'];
+  $consumoEnzimaAnioActual[$grupoTitulo] = $totales[$anioActual]['consumo'];
+  $impactoEconomicoAnioAnterior[$grupoTitulo] = $totales[$anioAnterior]['impacto'];
+  $impactoEconomicoAnioActual[$grupoTitulo] = $totales[$anioActual]['impacto'];
+  $costoPromedioAnioAnterior[$grupoTitulo] = $totales[$anioAnterior]['consumo'] > 0
+    ? $totales[$anioAnterior]['impacto'] / $totales[$anioAnterior]['consumo']
+    : 0.0;
+  $costoPromedioAnioActual[$grupoTitulo] = $totales[$anioActual]['consumo'] > 0
+    ? $totales[$anioActual]['impacto'] / $totales[$anioActual]['consumo']
+    : 0.0;
+  $variacionConsumoEnzima[$grupoTitulo] = $totales[$anioAnterior]['consumo'] > 0
+    ? (($totales[$anioActual]['consumo'] - $totales[$anioAnterior]['consumo']) / $totales[$anioAnterior]['consumo']) * 100
+    : 0.0;
+  $variacionCostoEnzima[$grupoTitulo] = $costoPromedioAnioAnterior[$grupoTitulo] > 0
     ? (($costoPromedioAnioActual[$grupoTitulo] - $costoPromedioAnioAnterior[$grupoTitulo]) / $costoPromedioAnioAnterior[$grupoTitulo]) * 100
-    : 0;
-  $variacionCostoEnzima[$grupoTitulo] = $variacionCosto;
+    : 0.0;
 }
 
 // Crear catálogos y matrices para tabla pivote
@@ -570,11 +410,42 @@ $totalesConsumoQuimico = $consumoEnzimaAnioActual;
 $totalesCostoQuimico = $impactoEconomicoAnioActual;
 $anioPivot = $anioActual;
 
-// Matrices vacías para compatibilidad con tabla pivote
-$semanasCatalogo = [];
+// Matrices semanales construidas con API + producción de rev_tarimas.
+$semanasCatalogo = array_map(static fn(int $week): string => 'S' . str_pad((string)$week, 2, '0', STR_PAD_LEFT), range(1, 52));
 $matrizRatioQuimicos = [];
 $matrizImpactoEconomicoQuimicos = [];
 $ratioBasePorQuimico = [];
+$produccionPivotPorSemana = [];
+foreach ($produccionPorPeriodo as $row) {
+  $weekIso = (string)($row['semana_iso'] ?? '');
+  if ((int)substr($weekIso, 0, 4) !== $anioPivot) continue;
+  $produccionPivotPorSemana[substr($weekIso, -3)] = (float)($row['kilos_producidos'] ?? 0.0);
+}
+
+foreach ($grupoEstructura as $grupoKey => $grupoInfo) {
+  $productosEnGrupo = array_fill_keys(array_map('strval', (array)($grupoInfo['productos'] ?? [])), true);
+  $consumoSemanal = [];
+  $impactoSemanal = [];
+  foreach ($chemicalMovements as $movement) {
+    if ((int)($movement['anio_iso'] ?? 0) !== $anioPivot) continue;
+    if (!isset($productosEnGrupo[(string)($movement['cve_prod'] ?? '')])) continue;
+    $weekLabel = substr((string)($movement['semana_iso'] ?? ''), -3);
+    $consumoSemanal[$weekLabel] = ($consumoSemanal[$weekLabel] ?? 0.0) + (float)($movement['consumo_kg'] ?? 0.0);
+    $impactoSemanal[$weekLabel] = ($impactoSemanal[$weekLabel] ?? 0.0) + (float)($movement['impacto_economico'] ?? 0.0);
+  }
+
+  foreach ($semanasCatalogo as $weekLabel) {
+    $production = (float)($produccionPivotPorSemana[$weekLabel] ?? 0.0);
+    $consumption = (float)($consumoSemanal[$weekLabel] ?? 0.0);
+    $matrizRatioQuimicos[$grupoKey][$weekLabel] = $production > 0 ? $consumption / $production : null;
+    $matrizImpactoEconomicoQuimicos[$grupoKey][$weekLabel] = (float)($impactoSemanal[$weekLabel] ?? 0.0);
+  }
+
+  $grupoTitulo = (string)($grupoInfo['titulo'] ?? $grupoKey);
+  $ratioBasePorQuimico[$grupoKey] = $totalProduccionAnioAnterior > 0
+    ? (float)($consumoEnzimaAnioAnterior[$grupoTitulo] ?? 0.0) / $totalProduccionAnioAnterior
+    : null;
+}
 
 /*
 |--------------------------------------------------------------------------
@@ -653,6 +524,8 @@ $result = [
     'metricaTitulo' => $metricaTitulo,
     'metricaUnidad' => $metricaUnidad,
     'badgeRatio' => $badgeRatio,
+    'sourceWarning' => $sourceWarning,
+    'fuenteMovimientos' => 'API movimientos-salida',
     'grupo_estructura' => $config['grupo_estructura'] ?? [],
     'consumoEnzimaAnioAnterior' => $consumoEnzimaAnioAnterior,
     'consumoEnzimaAnioActual' => $consumoEnzimaAnioActual,
@@ -671,6 +544,7 @@ $result = [
     'matrizRatioQuimicos' => $matrizRatioQuimicos,
     'matrizImpactoEconomicoQuimicos' => $matrizImpactoEconomicoQuimicos,
     'ratioBasePorQuimico' => $ratioBasePorQuimico,
+    'produccionPivotPorSemana' => $produccionPivotPorSemana,
   ],
 ];
 

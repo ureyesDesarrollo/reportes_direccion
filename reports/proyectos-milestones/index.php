@@ -739,6 +739,7 @@ $topBackLabel = 'Regresar al inicio';
       }
     }
   </style>
+  <script src="../../assets/js/display-mode.js?v=<?= urlencode((string)(@filemtime(__DIR__ . '/../../assets/js/display-mode.js') ?: time())) ?>"></script>
 </head>
 
 <body>

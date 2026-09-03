@@ -207,15 +207,18 @@ $mysqlColumns = [];
 $mysqlTimestampColumn = null;
 
 $flowFields = [];
+$historyFields = [];
 foreach ($concentratorConfig as $concentrator) {
   $field = trim((string)($concentrator['flujo_field'] ?? ''));
   if ($field !== '') {
     $flowFields[$field] = $field;
+    $historyFields[$field] = $field;
   }
   foreach ((array)($concentrator['metric_fields'] ?? []) as $metricField) {
     $metricField = trim((string)$metricField);
     if ($metricField !== '') {
       $flowFields[$metricField] = $metricField;
+      $historyFields[$metricField] = $metricField;
     }
   }
   foreach ((array)($concentrator['metricas_extra'] ?? []) as $metric) {
@@ -226,6 +229,9 @@ foreach ($concentratorConfig as $concentrator) {
     $metricField = trim((string)($metric['field'] ?? ''));
     if ($metricField !== '') {
       $flowFields[$metricField] = $metricField;
+      if (!array_key_exists('history', $metric) || $metric['history'] !== false) {
+        $historyFields[$metricField] = $metricField;
+      }
     }
   }
 }
@@ -253,57 +259,63 @@ if ($flowFields !== []) {
       $flowValues[$field] = is_numeric($value) ? (float)$value : null;
     }
 
-    $sqlHistory = 'WITH tendencia AS ('
-      . ' SELECT ' . implode(', ', $selectParts)
-      . ', ROW_NUMBER() OVER (PARTITION BY DATEDIFF(minute, 0, ' . $safeTimestamp . ') ORDER BY ' . $safeTimestamp . ' DESC) AS [__minute_rn]'
-      . ' FROM ' . $safeTable
-      . ' WHERE ' . $safeTimestamp . ' >= DATEADD(day, -31, GETDATE())'
-      . ') SELECT TOP (' . $sqlServerHistoryLimit . ') * FROM tendencia'
-      . ' WHERE [__minute_rn] = 1'
-      . ' ORDER BY [__timestamp] DESC';
-    $historyRows = $pdoSqlServer->query($sqlHistory)->fetchAll() ?: [];
-
-    foreach ($flowFields as $field) {
-      $history = [];
-      foreach ($historyRows as $historyRow) {
-        $historyValue = $historyRow[$field] ?? null;
-        $historyNumericValue = is_numeric($historyValue) ? (float)$historyValue : null;
-        $history[] = [
-          'timestamp' => $formatHistoryTimestamp($historyRow['__timestamp'] ?? null),
-          'iso' => $formatHistoryIsoTimestamp($historyRow['__timestamp'] ?? null),
-          'value' => $historyNumericValue,
-          'formatted' => $historyNumericValue !== null ? n($historyNumericValue, 2) : '-',
-        ];
+    if ($historyFields !== []) {
+      $historySelectParts = [$safeTimestamp . ' AS [__timestamp]'];
+      foreach ($historyFields as $fieldName) {
+        $historySelectParts[] = $quoteSqlServerIdentifier($fieldName);
       }
-      $flowHistoryByField[$field] = $history;
-    }
+      $sqlHistory = 'WITH tendencia AS ('
+        . ' SELECT ' . implode(', ', $historySelectParts)
+        . ', ROW_NUMBER() OVER (PARTITION BY DATEDIFF(minute, 0, ' . $safeTimestamp . ') ORDER BY ' . $safeTimestamp . ' DESC) AS [__minute_rn]'
+        . ' FROM ' . $safeTable
+        . ' WHERE ' . $safeTimestamp . ' >= DATEADD(day, -31, GETDATE())'
+        . ') SELECT TOP (' . $sqlServerHistoryLimit . ') * FROM tendencia'
+        . ' WHERE [__minute_rn] = 1'
+        . ' ORDER BY [__timestamp] DESC';
+      $historyRows = $pdoSqlServer->query($sqlHistory)->fetchAll() ?: [];
 
-    $averageSelectParts = [
-      'DATEADD(week, DATEDIFF(week, 0, ' . $safeTimestamp . '), 0) AS [__timestamp]',
-    ];
-    foreach ($flowFields as $fieldName) {
-      $averageSelectParts[] = 'AVG(TRY_CONVERT(float, ' . $quoteSqlServerIdentifier($fieldName) . ')) AS ' . $quoteSqlServerIdentifier($fieldName);
-    }
-    $sqlMonthHistory = 'SELECT ' . implode(', ', $averageSelectParts)
-      . ' FROM ' . $safeTable
-      . ' WHERE ' . $safeTimestamp . ' >= DATEADD(month, DATEDIFF(month, 0, GETDATE()), 0)'
-      . ' AND ' . $safeTimestamp . ' < DATEADD(month, DATEDIFF(month, 0, GETDATE()) + 1, 0)'
-      . ' GROUP BY DATEADD(week, DATEDIFF(week, 0, ' . $safeTimestamp . '), 0)'
-      . ' ORDER BY [__timestamp] DESC';
-    $monthHistoryRows = $pdoSqlServer->query($sqlMonthHistory)->fetchAll() ?: [];
-    foreach ($flowFields as $field) {
-      $history = [];
-      foreach ($monthHistoryRows as $historyRow) {
-        $historyValue = $historyRow[$field] ?? null;
-        $historyNumericValue = is_numeric($historyValue) ? (float)$historyValue : null;
-        $history[] = [
-          'timestamp' => $formatHistoryTimestamp($historyRow['__timestamp'] ?? null),
-          'iso' => $formatHistoryIsoTimestamp($historyRow['__timestamp'] ?? null),
-          'value' => $historyNumericValue,
-          'formatted' => $historyNumericValue !== null ? n($historyNumericValue, 2) : '-',
-        ];
+      foreach ($historyFields as $field) {
+        $history = [];
+        foreach ($historyRows as $historyRow) {
+          $historyValue = $historyRow[$field] ?? null;
+          $historyNumericValue = is_numeric($historyValue) ? (float)$historyValue : null;
+          $history[] = [
+            'timestamp' => $formatHistoryTimestamp($historyRow['__timestamp'] ?? null),
+            'iso' => $formatHistoryIsoTimestamp($historyRow['__timestamp'] ?? null),
+            'value' => $historyNumericValue,
+            'formatted' => $historyNumericValue !== null ? n($historyNumericValue, 2) : '-',
+          ];
+        }
+        $flowHistoryByField[$field] = $history;
       }
-      $flowMonthHistoryByField[$field] = $history;
+
+      $averageSelectParts = [
+        'DATEADD(week, DATEDIFF(week, 0, ' . $safeTimestamp . '), 0) AS [__timestamp]',
+      ];
+      foreach ($historyFields as $fieldName) {
+        $averageSelectParts[] = 'AVG(TRY_CONVERT(float, ' . $quoteSqlServerIdentifier($fieldName) . ')) AS ' . $quoteSqlServerIdentifier($fieldName);
+      }
+      $sqlMonthHistory = 'SELECT ' . implode(', ', $averageSelectParts)
+        . ' FROM ' . $safeTable
+        . ' WHERE ' . $safeTimestamp . ' >= DATEADD(month, DATEDIFF(month, 0, GETDATE()), 0)'
+        . ' AND ' . $safeTimestamp . ' < DATEADD(month, DATEDIFF(month, 0, GETDATE()) + 1, 0)'
+        . ' GROUP BY DATEADD(week, DATEDIFF(week, 0, ' . $safeTimestamp . '), 0)'
+        . ' ORDER BY [__timestamp] DESC';
+      $monthHistoryRows = $pdoSqlServer->query($sqlMonthHistory)->fetchAll() ?: [];
+      foreach ($historyFields as $field) {
+        $history = [];
+        foreach ($monthHistoryRows as $historyRow) {
+          $historyValue = $historyRow[$field] ?? null;
+          $historyNumericValue = is_numeric($historyValue) ? (float)$historyValue : null;
+          $history[] = [
+            'timestamp' => $formatHistoryTimestamp($historyRow['__timestamp'] ?? null),
+            'iso' => $formatHistoryIsoTimestamp($historyRow['__timestamp'] ?? null),
+            'value' => $historyNumericValue,
+            'formatted' => $historyNumericValue !== null ? n($historyNumericValue, 2) : '-',
+          ];
+        }
+        $flowMonthHistoryByField[$field] = $history;
+      }
     }
   } catch (Throwable $e) {
     $warnings[] = 'No se pudo leer flujo desde AVEVA: ' . $e->getMessage();

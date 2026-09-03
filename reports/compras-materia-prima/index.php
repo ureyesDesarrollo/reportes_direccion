@@ -63,6 +63,7 @@ $renderCard = static function (array $metric) use ($e, $formatKg, $formatRange, 
     @media(max-width:850px){.metrics,.metrics.daily,.metrics.weekly{grid-template-columns:1fr}}@media(max-width:520px){.report{width:calc(100% - 16px);margin-top:8px}.header{align-items:flex-start;padding:15px}.meta{display:none}.metric-card{grid-template-columns:42% 1fr}.range-row{grid-template-columns:8px 1fr}.range-row b{grid-column:2}.metric-main{padding:12px}}
     <?php if ($captureMode): ?>body{background:#fff}.report{width:1120px;margin:7px auto}.topbar,.filter{display:none}.header{padding:12px 17px;box-shadow:none}.section{margin-top:9px}.metric-card{min-height:132px}.metric-main{padding:11px}.metric-title{min-height:27px;font-size:11px}.metric-main strong{font-size:31px}.metric-main .value-large{font-size:27px}.metrics.weekly .metric-main .value-large{font-size:24px}.ranges{padding:7px 10px}.range-row{padding:1px 0}.modal{display:none!important}<?php endif; ?>
   </style>
+  <script src="../../assets/js/display-mode.js?v=<?= urlencode((string)(@filemtime(__DIR__ . '/../../assets/js/display-mode.js') ?: time())) ?>"></script>
 </head>
 <body><main class="report">
   <div class="topbar"><a class="back" href="../index.php">Centro de reportes</a></div>

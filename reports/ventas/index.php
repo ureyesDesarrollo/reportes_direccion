@@ -103,13 +103,16 @@ $chartTarget = array_fill(0, count($chartLabels), round($objetivoDiario, 2));
 
     .ventas-header {
       display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 18px;
-      margin-bottom: 12px;
+      align-items: center;
+      gap: 20px;
+      margin-bottom: 14px;
+      padding: 10px 16px;
+      border-radius: 20px;
+      flex-wrap: nowrap;
     }
 
     .ventas-header-copy {
+      flex: 1 1 280px;
       min-width: 0;
     }
 
@@ -119,13 +122,18 @@ $chartTarget = array_fill(0, count($chartLabels), round($objetivoDiario, 2));
 
     .ventas-header .back-btn {
       flex: 0 0 auto;
-      margin-top: 2px;
+      margin-left: auto;
     }
 
     .ventas-filter-form {
-      margin-bottom: 14px;
-      border-radius: 20px;
-      padding: 10px 16px;
+      display: flex;
+      flex: 0 1 auto;
+      align-items: flex-end;
+      gap: 10px;
+      margin: 0;
+      padding: 0;
+      border: 0;
+      background: transparent;
     }
 
     .ventas-filter-field {
@@ -748,10 +756,26 @@ $chartTarget = array_fill(0, count($chartLabels), round($objetivoDiario, 2));
     @media (max-width: 700px) {
       .ventas-header {
         align-items: center;
+        flex-wrap: wrap;
       }
 
       .ventas-header .back-btn {
         padding-inline: 11px;
+      }
+
+      .ventas-filter-form {
+        order: 3;
+        width: 100%;
+      }
+
+      .ventas-filter-field {
+        flex: 1 1 130px;
+        min-width: 0;
+      }
+
+      .ventas-filter-field .filter-select {
+        width: 100%;
+        min-width: 0;
       }
 
       .ventas-summary-grid {
@@ -793,40 +817,119 @@ $chartTarget = array_fill(0, count($chartLabels), round($objetivoDiario, 2));
         grid-template-columns: 1fr;
       }
     }
+
+    /* El modo pantalla aumenta legibilidad sin alterar la matriz 3 × 3. */
+    html.executive-display .ventas-dashboard .ventas-summary-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+      gap: 6px;
+      margin: 0 0 7px;
+    }
+
+    html.executive-display .ventas-dashboard .ventas-summary-grid > .ventas-kpi-card {
+      grid-column: span 1 !important;
+    }
+
+    html.executive-display .ventas-dashboard .ventas-kpi-card {
+      display: grid;
+      grid-template-columns: minmax(0, .78fr) minmax(0, 1.22fr);
+      grid-template-rows: auto 1fr auto;
+      column-gap: 12px;
+      min-height: 92px;
+      padding: 7px 10px 6px;
+      border-radius: 24px;
+    }
+
+    html.executive-display .ventas-dashboard .ventas-kpi-card.is-sales-status {
+      min-height: 92px;
+      padding: 7px 10px 6px;
+    }
+
+    html.executive-display .ventas-dashboard .ventas-kpi-card .kpi-icon {
+      top: 7px;
+      left: 10px;
+      margin: 0;
+      font-size: .88rem;
+    }
+
+    html.executive-display .ventas-dashboard .ventas-kpi-card .kpi-label,
+    html.executive-display .ventas-dashboard .ventas-kpi-card.is-sales-status .kpi-label,
+    html.executive-display .ventas-dashboard .ventas-kpi-card.is-backorder-status .kpi-label,
+    html.executive-display .ventas-dashboard .ventas-kpi-card.is-average-price .kpi-label {
+      grid-column: 1 / -1;
+      grid-row: 1;
+      max-width: calc(100% - 92px);
+      margin-bottom: 1px;
+      padding-left: 20px;
+      font-size: .7rem;
+      line-height: 1.05;
+    }
+
+    html.executive-display .ventas-dashboard .ventas-kpi-card .kpi-value {
+      grid-column: 1;
+      grid-row: 2 / 4;
+      align-self: center;
+      margin: 0;
+      font-size: clamp(1.5rem, 2vw, 1.95rem);
+      line-height: 1;
+    }
+
+    html.executive-display .ventas-dashboard .ventas-kpi-card.is-sales-status .kpi-value {
+      margin-top: 2px;
+      font-size: clamp(1.6rem, 2.05vw, 2rem);
+    }
+
+    html.executive-display .ventas-dashboard .ventas-kpi-card .kpi-trend {
+      grid-column: 2;
+      grid-row: 2;
+      align-self: end;
+      margin-top: 1px;
+      font-size: .66rem;
+      line-height: 1.1;
+    }
+
+    html.executive-display .ventas-dashboard .ventas-kpi-card .ventas-kpi-target {
+      grid-column: 2;
+      grid-row: 3;
+      align-self: start;
+      margin-top: 2px;
+      font-size: .6rem;
+      line-height: 1.05;
+    }
   </style>
 </head>
 
 <body>
   <main class="dashboard ventas-dashboard">
-    <header class="ventas-header">
+    <header class="filters ventas-header">
       <div class="ventas-header-copy">
         <h1><?= $e($titulo) ?></h1>
         <p><?= $e((string)($filtros['desde'] ?? '')) ?> al <?= $e((string)($filtros['hasta'] ?? '')) ?></p>
       </div>
-      <a class="back-btn" href="../index.php" data-smart-back="reports-index">
-        <i class="fas fa-arrow-left"></i>
-        Regresar al inicio
-      </a>
-    </header>
 
-    <form class="filters ventas-filter-form" method="get" id="ventasFilters">
-      <div class="ventas-filter-field">
-        <label>Año</label>
+      <form class="ventas-filter-form" method="get" id="ventasFilters">
+        <div class="ventas-filter-field">
+          <label>Año</label>
           <select class="filter-select" name="anio">
             <?php for ($year = $anioActual + 1; $year >= $anioActual - 4; $year--): ?>
               <option value="<?= $e($year) ?>" <?= (int)($filtros['anio'] ?? 0) === $year ? 'selected' : '' ?>><?= $e($year) ?></option>
             <?php endfor; ?>
           </select>
-      </div>
-      <div class="ventas-filter-field">
-        <label>Mes</label>
+        </div>
+        <div class="ventas-filter-field">
+          <label>Mes</label>
           <select class="filter-select" name="mes">
             <?php foreach ($meses as $monthNumber => $monthName): ?>
               <option value="<?= $e($monthNumber) ?>" <?= (int)($filtros['mes'] ?? 0) === $monthNumber ? 'selected' : '' ?>><?= $e($monthName) ?></option>
             <?php endforeach; ?>
           </select>
-      </div>
-    </form>
+        </div>
+      </form>
+
+      <a class="back-btn" href="../index.php" data-smart-back="reports-index">
+        <i class="fas fa-arrow-left"></i>
+        Regresar al inicio
+      </a>
+    </header>
 
     <?php foreach ((array)($meta['warnings'] ?? []) as $warning): ?>
       <div class="ventas-warning"><?= $e($warning) ?></div>
@@ -976,6 +1079,7 @@ $chartTarget = array_fill(0, count($chartLabels), round($objetivoDiario, 2));
     function ventasFormatNumber(value, decimals = 1) {
       const number = Number(value);
       if (!Number.isFinite(number)) return '-';
+      decimals = Math.max(0, Math.min(2, Math.trunc(Number(decimals) || 0)));
       return number.toLocaleString('en-US', {
         minimumFractionDigits: decimals,
         maximumFractionDigits: decimals,
@@ -985,6 +1089,7 @@ $chartTarget = array_fill(0, count($chartLabels), round($objetivoDiario, 2));
     function ventasFormatCurrency(value, decimals = 2) {
       const number = Number(value);
       if (!Number.isFinite(number)) return '—';
+      decimals = Math.max(0, Math.min(2, Math.trunc(Number(decimals) || 0)));
       return `$${number.toLocaleString('en-US', {
         minimumFractionDigits: decimals,
         maximumFractionDigits: decimals,

@@ -2,6 +2,9 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/../../shared/env.php';
+loadProjectEnvironment(__DIR__ . '/../../.env');
+
 $productionSourceConfig = require __DIR__ . '/../avance-produccion-hora/config.php';
 
 return [

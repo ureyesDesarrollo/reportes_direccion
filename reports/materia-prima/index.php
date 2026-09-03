@@ -1439,12 +1439,14 @@ if (is_numeric($producedTons)) {
     Chart.defaults.font.family = 'Inter, system-ui, sans-serif';
     Chart.defaults.color = '#475569';
 
-    const fmtNumber = (value, decimals = 1) => Number.isFinite(Number(value)) ?
-      Number(value).toLocaleString('en-US', {
-        minimumFractionDigits: decimals,
-        maximumFractionDigits: decimals
-      }) :
-      '-';
+    const fmtNumber = (value, decimals = 1) => {
+      if (!Number.isFinite(Number(value))) return '-';
+      const precision = Math.max(0, Math.min(2, Math.trunc(Number(decimals) || 0)));
+      return Number(value).toLocaleString('en-US', {
+        minimumFractionDigits: precision,
+        maximumFractionDigits: precision
+      });
+    };
     const fmtInt = (value) => Number.isFinite(Number(value)) ?
       Number(value).toLocaleString('en-US', {
         maximumFractionDigits: 0

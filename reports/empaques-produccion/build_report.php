@@ -54,11 +54,16 @@ if ($cached !== null) {
   return $cached;
 }
 
-$state = ReportEngine::createContext($config, $appConfig, $dbConfig);
-$pdoMovs = $state['pdoMovs'];
-$pdoProd = $state['pdoProd'];
-$campoFechaMovsSql = $state['campoFechaMovsSql'];
-$weekFields = $state['weekFields'];
+$sourceWarnings = [];
+$pdoMovs = conectar($dbConfig['movs']);
+$pdoProd = null;
+try {
+  $pdoProd = conectar($dbConfig['prod']);
+} catch (Throwable $exception) {
+  $sourceWarnings[] = 'La producción no está disponible; el consumo y costo de empaques continúan visibles.';
+}
+$campoFechaMovsSql = "m.`{$campoFechaMovs}`";
+$weekFields = buildWeekFields($campoFechaMovsSql);
 
 // Detectar los lugares reales para los empaques
 // SOLO buscar en EMPAQUES
@@ -245,7 +250,15 @@ while ($row = $stmtE->fetch()) {
 | 3) PRODUCCIÓN POR SEMANA
 |--------------------------------------------------------------------------
 */
-$produccionPorPeriodo = ReportEngine::fetchProductionSeries($pdoProd, $fechaDesde);
+$produccionPorPeriodo = [];
+if ($pdoProd instanceof PDO) {
+  try {
+    $produccionPorPeriodo = ReportEngine::fetchProductionSeries($pdoProd, $fechaDesde);
+  } catch (Throwable $exception) {
+    $sourceWarnings[] = 'La producción no está disponible; el consumo y costo de empaques continúan visibles.';
+  }
+}
+$sourceWarning = implode(' ', array_values(array_unique($sourceWarnings)));
 
 /*
 |--------------------------------------------------------------------------
@@ -814,6 +827,7 @@ $result = [
 
   'maxRatio' => $maxRatio,
   'version' => $version,
+  'sourceWarning' => $sourceWarning,
 
   'meta' => [
     'fechaDesde' => $fechaDesde,
@@ -825,6 +839,7 @@ $result = [
     'toleranciaPct' => $toleranciaPct,
     'intervaloActualizacion' => $intervaloActualizacion,
     'cveMov' => $cveMov,
+    'sourceWarning' => $sourceWarning,
   ],
 ];
 

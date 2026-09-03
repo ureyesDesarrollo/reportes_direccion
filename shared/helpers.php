@@ -21,6 +21,7 @@ function conectar(array $cfg): PDO
 function n(?float $valor, int $decimales = 2): string
 {
     if ($valor === null) return '-';
+    $decimales = max(0, min(2, $decimales));
     return number_format($valor, $decimales, '.', ',');
 }
 

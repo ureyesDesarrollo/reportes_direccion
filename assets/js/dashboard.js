@@ -11,9 +11,12 @@
 
   window.formatNumber = function (num, decimals) {
     if (num === undefined || num === null) return '-';
+    const precision = Number.isFinite(Number(decimals))
+      ? Math.max(0, Math.min(2, Math.trunc(Number(decimals))))
+      : 2;
     return Number(num).toLocaleString('es-MX', {
-      minimumFractionDigits: decimals,
-      maximumFractionDigits: decimals,
+      minimumFractionDigits: precision,
+      maximumFractionDigits: precision,
     });
   };
 

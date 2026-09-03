@@ -18,6 +18,51 @@ $mixes = [];
 $completedMixes = [];
 $shipments = [];
 $parameterRanges = [];
+$qualityRanges = [];
+$qualityColors = (array)($config['colores_calidad'] ?? []);
+$qualityRangesAvailable = false;
+
+$normalizeQuality = static function (?int $qualityId, string $description): string {
+  if (in_array($qualityId, [2, 4], true)) return 'Dorada';
+  if (in_array($qualityId, [1, 6], true)) return 'Verde';
+
+  $normalized = mb_strtolower(trim($description), 'UTF-8');
+  if ($normalized === 'azul') return 'Azul';
+  if ($normalized === 'dorada' || $normalized === '280') return 'Dorada';
+  if ($normalized === 'verde' || $normalized === '250') return 'Verde';
+  if ($normalized === 'morada') return 'Morada';
+
+  return 'Otros';
+};
+
+$resolveQuality = static function (?float $bloom, ?float $viscosity) use (&$qualityRanges, &$qualityRangesAvailable, $qualityColors, $normalizeQuality): array {
+  $pending = $bloom === null || $bloom <= 0 || $viscosity === null || $viscosity <= 0;
+  if ($pending || !$qualityRangesAvailable) {
+    return [
+      'calidad' => 'Pendiente',
+      'calidad_color' => (string)($qualityColors['Por Definir'] ?? '#9ca3af'),
+      'calidad_calculada' => false,
+    ];
+  }
+
+  foreach ($qualityRanges as $range) {
+    if ($bloom < $range['bloom_inicio'] || $bloom > $range['bloom_fin']) continue;
+    if ($viscosity < $range['viscosidad_inicio'] || $viscosity > $range['viscosidad_fin']) continue;
+
+    $quality = $normalizeQuality($range['cal_id'], $range['descripcion']);
+    return [
+      'calidad' => $quality,
+      'calidad_color' => (string)($qualityColors[$quality] ?? $qualityColors['Otros'] ?? '#64748b'),
+      'calidad_calculada' => true,
+    ];
+  }
+
+  return [
+    'calidad' => 'Sin Calidad',
+    'calidad_color' => (string)($qualityColors['Sin Calidad'] ?? '#ef4444'),
+    'calidad_calculada' => true,
+  ];
+};
 
 try {
   $pdo = conectar((array)($config['database'] ?? []));
@@ -39,6 +84,36 @@ try {
     }
   } catch (Throwable $exception) {
     $warnings[] = 'No fue posible consultar los límites de rev_parametros.';
+  }
+
+  try {
+    $qualityRangeStatement = $pdo->query("
+      SELECT
+        r.blo_ini,
+        r.blo_fin,
+        r.vis_ini,
+        r.vis_fin,
+        r.cal_id,
+        c.cal_descripcion
+      FROM rev_calidad_rango r
+      LEFT JOIN rev_calidad c ON c.cal_id = r.cal_id
+      ORDER BY r.cr_id ASC
+    ");
+    foreach ($qualityRangeStatement->fetchAll() ?: [] as $rangeRow) {
+      if (!is_numeric($rangeRow['blo_ini'] ?? null) || !is_numeric($rangeRow['blo_fin'] ?? null)) continue;
+      if (!is_numeric($rangeRow['vis_ini'] ?? null) || !is_numeric($rangeRow['vis_fin'] ?? null)) continue;
+      $qualityRanges[] = [
+        'bloom_inicio' => (float)$rangeRow['blo_ini'],
+        'bloom_fin' => (float)$rangeRow['blo_fin'],
+        'viscosidad_inicio' => (float)$rangeRow['vis_ini'],
+        'viscosidad_fin' => (float)$rangeRow['vis_fin'],
+        'cal_id' => is_numeric($rangeRow['cal_id'] ?? null) ? (int)$rangeRow['cal_id'] : null,
+        'descripcion' => trim((string)($rangeRow['cal_descripcion'] ?? '')),
+      ];
+    }
+    $qualityRangesAvailable = $qualityRanges !== [];
+  } catch (Throwable $exception) {
+    $warnings[] = 'No fue posible consultar los rangos de calidad por Bloom y viscosidad.';
   }
 
   $statement = $pdo->prepare("
@@ -116,13 +191,15 @@ try {
       'conductividad' => is_numeric($row['tar_ce'] ?? null) ? (float)$row['tar_ce'] : null,
       'humedad' => is_numeric($row['tar_humedad'] ?? null) ? (float)$row['tar_humedad'] : null,
       'cenizas' => is_numeric($row['tar_cenizas'] ?? null) ? (float)$row['tar_cenizas'] : null,
-      'calidad' => trim((string)($row['cal_descripcion'] ?? '')) ?: null,
+      'calidad_registrada' => trim((string)($row['cal_descripcion'] ?? '')) ?: null,
     ];
+    $pallet = array_replace($pallet, $resolveQuality($pallet['bloom'], $pallet['viscosidad']));
     $pallet['fuera_parametro'] = [];
     foreach ($parameterFields as $key => $field) {
       $value = $pallet[$key] ?? null;
       $range = $parameterRanges[$field] ?? null;
       if (in_array($key, ['malla_30', 'malla_45'], true) && $pallet['fino'] !== 'N') continue;
+      if ($key === 'bloom' && is_numeric($value) && (float)$value <= 0) continue;
       if ($value !== null && $range !== null && ($value < $range['inicio'] || $value > $range['fin'])) {
         $pallet['fuera_parametro'][] = $key;
       }
@@ -177,10 +254,12 @@ try {
         'humedad' => is_numeric($row['rev_humedad'] ?? null) ? (float)$row['rev_humedad'] : null,
         'cenizas' => is_numeric($row['rev_cenizas'] ?? null) ? (float)$row['rev_cenizas'] : null,
       ];
+      $mix = array_replace($mix, $resolveQuality($mix['bloom'], $mix['viscosidad']));
       $mix['fuera_parametro'] = [];
       foreach ($parameterFields as $key => $field) {
         $value = $mix[$key] ?? null;
         $range = $parameterRanges[$field] ?? null;
+        if ($key === 'bloom' && is_numeric($value) && (float)$value <= 0) continue;
         if ($value !== null && $range !== null && ($value < $range['inicio'] || $value > $range['fin'])) {
           $mix['fuera_parametro'][] = $key;
         }
@@ -236,10 +315,12 @@ try {
         'humedad' => is_numeric($row['rev_humedad'] ?? null) ? (float)$row['rev_humedad'] : null,
         'cenizas' => is_numeric($row['rev_cenizas'] ?? null) ? (float)$row['rev_cenizas'] : null,
       ];
+      $completedMix = array_replace($completedMix, $resolveQuality($completedMix['bloom'], $completedMix['viscosidad']));
       $completedMix['fuera_parametro'] = [];
       foreach ($parameterFields as $key => $field) {
         $value = $completedMix[$key] ?? null;
         $range = $parameterRanges[$field] ?? null;
+        if ($key === 'bloom' && is_numeric($value) && (float)$value <= 0) continue;
         if ($value !== null && $range !== null && ($value < $range['inicio'] || $value > $range['fin'])) {
           $completedMix['fuera_parametro'][] = $key;
         }

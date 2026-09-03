@@ -190,21 +190,24 @@ $hikvisionRequest = static function (string $url, string $user, string $pass, ar
 
   $response = curl_exec($ch);
   if ($response === false) {
-    $error = curl_error($ch);
     curl_close($ch);
-    throw new Exception('Error cURL: ' . $error);
+    throw new Exception('No fue posible conectar con la fuente de Hikvision.');
   }
 
   $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
   curl_close($ch);
 
   if ($httpCode < 200 || $httpCode >= 300) {
-    throw new Exception('Error HTTP ' . $httpCode . ': ' . $response);
+    if ($httpCode === 401 || $httpCode === 403) {
+      throw new Exception('No fue posible autenticar la consulta con Hikvision. Verifica la configuración del servicio.');
+    }
+
+    throw new Exception('La fuente de Hikvision no está disponible temporalmente (HTTP ' . $httpCode . ').');
   }
 
   $data = json_decode($response, true);
   if (!is_array($data)) {
-    throw new Exception('Respuesta no JSON: ' . $response);
+    throw new Exception('La fuente de Hikvision devolvió una respuesta no válida.');
   }
 
   return $data;

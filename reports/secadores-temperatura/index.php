@@ -326,6 +326,8 @@ $version = $version ?? time();
           return '-';
         }
 
+        decimals = Math.max(0, Math.min(2, Math.trunc(Number(decimals) || 0)));
+
         return Number(value).toLocaleString('en-US', {
           minimumFractionDigits: decimals,
           maximumFractionDigits: decimals,

@@ -81,8 +81,34 @@ $periodEnd = $periodStart->modify('first day of next month');
 $startDate = $periodStart->format('Y-m-d');
 $endDate = $periodEnd->format('Y-m-d');
 $startDateTime = $periodStart->format('Y-m-d 00:00:00');
-$endDateTime = $periodEnd->format('Y-m-d 00:00:00');
+$endDateTime = $periodEnd->modify('+7 hours')->format('Y-m-d H:i:s');
 $operationDateSql = "DATE(CASE WHEN TIME(t.tar_fecha) < '{$horaCorte}' THEN DATE_SUB(t.tar_fecha, INTERVAL 1 DAY) ELSE t.tar_fecha END)";
+$primaryProcessIsCarnazaSql = "EXISTS (
+  SELECT 1
+  FROM procesos_materiales pm_carnaza_primary
+  WHERE pm_carnaza_primary.pro_id = t.pro_id
+    AND pm_carnaza_primary.mat_id = 1
+)";
+$secondaryProcessIsCarnazaSql = "EXISTS (
+  SELECT 1
+  FROM procesos_materiales pm_carnaza_secondary
+  WHERE pm_carnaza_secondary.pro_id = t.pro_id_2
+    AND pm_carnaza_secondary.mat_id = 1
+)";
+$primaryProductionKilosSql = "CASE
+  WHEN t.pro_id_2 IS NOT NULL AND t.pro_id_2 <> 0 AND t.pro_id_2 <> t.pro_id
+    THEN t.tar_kilos * CASE
+      WHEN {$primaryProcessIsCarnazaSql} AND NOT {$secondaryProcessIsCarnazaSql} THEN 0.70
+      WHEN {$secondaryProcessIsCarnazaSql} AND NOT {$primaryProcessIsCarnazaSql} THEN 0.30
+      ELSE 0.50
+    END
+  ELSE t.tar_kilos
+END";
+$secondaryProductionKilosSql = "t.tar_kilos * CASE
+  WHEN {$secondaryProcessIsCarnazaSql} AND NOT {$primaryProcessIsCarnazaSql} THEN 0.70
+  WHEN {$primaryProcessIsCarnazaSql} AND NOT {$secondaryProcessIsCarnazaSql} THEN 0.30
+  ELSE 0.50
+END";
 $periodProcessSql = "
   SELECT DISTINCT process_id AS pro_id
   FROM (
@@ -215,13 +241,13 @@ $dailyStmt = $pdo->prepare("
   INNER JOIN (
     SELECT process_id AS pro_id, op_dia, SUM(kilos) AS kilos_dia
     FROM (
-      SELECT t.pro_id AS process_id, t.tar_kilos AS kilos, {$operationDateSql} AS op_dia
+      SELECT t.pro_id AS process_id, {$primaryProductionKilosSql} AS kilos, {$operationDateSql} AS op_dia
       FROM rev_tarimas t
       WHERE t.tar_fecha >= ?
         AND t.tar_fecha < ?
         AND t.tar_count_etiquetado > 0
       UNION ALL
-      SELECT t.pro_id_2 AS process_id, t.tar_kilos AS kilos, {$operationDateSql} AS op_dia
+      SELECT t.pro_id_2 AS process_id, {$secondaryProductionKilosSql} AS kilos, {$operationDateSql} AS op_dia
       FROM rev_tarimas t
       WHERE t.tar_fecha >= ?
         AND t.tar_fecha < ?
@@ -237,13 +263,13 @@ $dailyStmt = $pdo->prepare("
   INNER JOIN (
     SELECT process_id AS pro_id, SUM(kilos) AS kilos_total
     FROM (
-      SELECT t.pro_id AS process_id, t.tar_kilos AS kilos, {$operationDateSql} AS op_dia
+      SELECT t.pro_id AS process_id, {$primaryProductionKilosSql} AS kilos, {$operationDateSql} AS op_dia
       FROM rev_tarimas t
       WHERE t.tar_fecha >= ?
         AND t.tar_fecha < ?
         AND t.tar_count_etiquetado > 0
       UNION ALL
-      SELECT t.pro_id_2 AS process_id, t.tar_kilos AS kilos, {$operationDateSql} AS op_dia
+      SELECT t.pro_id_2 AS process_id, {$secondaryProductionKilosSql} AS kilos, {$operationDateSql} AS op_dia
       FROM rev_tarimas t
       WHERE t.tar_fecha >= ?
         AND t.tar_fecha < ?
@@ -406,13 +432,13 @@ $materialYieldStmt = $pdo->prepare("
     LEFT JOIN (
       SELECT process_id AS pro_id, SUM(kilos) AS kilos_producidos
       FROM (
-        SELECT t.pro_id AS process_id, t.tar_kilos AS kilos, {$operationDateSql} AS op_dia
+        SELECT t.pro_id AS process_id, {$primaryProductionKilosSql} AS kilos, {$operationDateSql} AS op_dia
         FROM rev_tarimas t
         WHERE t.tar_fecha >= ?
           AND t.tar_fecha < ?
           AND t.tar_count_etiquetado > 0
         UNION ALL
-        SELECT t.pro_id_2 AS process_id, t.tar_kilos AS kilos, {$operationDateSql} AS op_dia
+        SELECT t.pro_id_2 AS process_id, {$secondaryProductionKilosSql} AS kilos, {$operationDateSql} AS op_dia
         FROM rev_tarimas t
         WHERE t.tar_fecha >= ?
           AND t.tar_fecha < ?
@@ -521,13 +547,13 @@ $providerStmt = $pdo->prepare("
     LEFT JOIN (
       SELECT process_id AS pro_id, SUM(kilos) AS kilos_producidos
       FROM (
-        SELECT t.pro_id AS process_id, t.tar_kilos AS kilos, {$operationDateSql} AS op_dia
+        SELECT t.pro_id AS process_id, {$primaryProductionKilosSql} AS kilos, {$operationDateSql} AS op_dia
         FROM rev_tarimas t
         WHERE t.tar_fecha >= ?
           AND t.tar_fecha < ?
           AND t.tar_count_etiquetado > 0
         UNION ALL
-        SELECT t.pro_id_2 AS process_id, t.tar_kilos AS kilos, {$operationDateSql} AS op_dia
+        SELECT t.pro_id_2 AS process_id, {$secondaryProductionKilosSql} AS kilos, {$operationDateSql} AS op_dia
         FROM rev_tarimas t
         WHERE t.tar_fecha >= ?
           AND t.tar_fecha < ?
@@ -603,13 +629,13 @@ $providerMaterialStmt = $pdo->prepare("
     LEFT JOIN (
       SELECT process_id AS pro_id, SUM(kilos) AS kilos_producidos
       FROM (
-        SELECT t.pro_id AS process_id, t.tar_kilos AS kilos, {$operationDateSql} AS op_dia
+        SELECT t.pro_id AS process_id, {$primaryProductionKilosSql} AS kilos, {$operationDateSql} AS op_dia
         FROM rev_tarimas t
         WHERE t.tar_fecha >= ?
           AND t.tar_fecha < ?
           AND t.tar_count_etiquetado > 0
         UNION ALL
-        SELECT t.pro_id_2 AS process_id, t.tar_kilos AS kilos, {$operationDateSql} AS op_dia
+        SELECT t.pro_id_2 AS process_id, {$secondaryProductionKilosSql} AS kilos, {$operationDateSql} AS op_dia
         FROM rev_tarimas t
         WHERE t.tar_fecha >= ?
           AND t.tar_fecha < ?

@@ -226,6 +226,7 @@ $blacklist = (array)($config['lista_negra'] ?? []);
     .indicator-value { margin-top: 13px; }
     <?php endif; ?>
   </style>
+  <script src="../../assets/js/display-mode.js?v=<?= urlencode((string)(@filemtime(__DIR__ . '/../../assets/js/display-mode.js') ?: time())) ?>"></script>
 </head>
 <body>
   <main class="rh-report">

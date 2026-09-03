@@ -43,6 +43,19 @@ function energyOpenDatabase(): PDO
     )
   ");
   $pdo->exec("
+    CREATE TABLE IF NOT EXISTS energy_monthly_records (
+      period_key TEXT PRIMARY KEY,
+      year INTEGER NOT NULL,
+      month INTEGER NOT NULL,
+      payload TEXT NOT NULL,
+      registered_at TEXT NULL,
+      updated_at TEXT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      modified_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE (year, month)
+    )
+  ");
+  $pdo->exec("
     CREATE TABLE IF NOT EXISTS energy_meta (
       meta_key TEXT PRIMARY KEY,
       meta_value TEXT NOT NULL,
@@ -304,6 +317,16 @@ function energyWeekKey(int $year, int $week): string
   return sprintf('%04d-W%02d', $year, $week);
 }
 
+function energyMonthKey(int $year, int $month): string
+{
+  return sprintf('%04d-%02d', $year, $month);
+}
+
+function energyValidMonth(int $year, int $month): bool
+{
+  return $year >= 2020 && $year <= 2100 && $month >= 1 && $month <= 12;
+}
+
 function energyValidWeek(int $year, int $week): bool
 {
   if ($year < 2020 || $year > 2100 || $week < 1 || $week > 53) return false;
@@ -355,6 +378,41 @@ function energyRegisteredWeeks(array $records): array
   return $weeks;
 }
 
+function energyLoadMonthlyRecords(): array
+{
+  $statement = energyOpenDatabase()->query('SELECT period_key, payload FROM energy_monthly_records ORDER BY period_key');
+  $records = [];
+  foreach ($statement as $row) {
+    $record = json_decode((string)($row['payload'] ?? ''), true);
+    if (is_array($record)) $records[(string)$row['period_key']] = $record;
+  }
+  return $records;
+}
+
+function energyLoadMonthlyData(int $year, int $month): array
+{
+  if (!energyValidMonth($year, $month)) return [];
+  $statement = energyOpenDatabase()->prepare('SELECT payload FROM energy_monthly_records WHERE period_key = ? LIMIT 1');
+  $statement->execute([energyMonthKey($year, $month)]);
+  $payload = $statement->fetchColumn();
+  if (!is_string($payload) || $payload === '') return [];
+  $record = json_decode($payload, true);
+  return is_array($record) ? $record : [];
+}
+
+function energyRegisteredMonths(array $records): array
+{
+  $months = [];
+  foreach ($records as $key => $record) {
+    if (!is_array($record) || preg_match('/^(\d{4})-(\d{2})$/', (string)$key, $matches) !== 1) continue;
+    $year = (int)$matches[1];
+    $month = (int)$matches[2];
+    if (energyValidMonth($year, $month)) $months[] = ['key' => (string)$key, 'anio' => $year, 'mes' => $month];
+  }
+  usort($months, static fn(array $a, array $b): int => strcmp($b['key'], $a['key']));
+  return $months;
+}
+
 function energySaveData(int $year, int $week, array $data): void
 {
   if (!energyValidWeek($year, $week)) throw new InvalidArgumentException('La semana seleccionada no es válida.');
@@ -377,6 +435,39 @@ function energySaveData(int $year, int $week, array $data): void
       ':period_key' => energyWeekKey($year, $week),
       ':iso_year' => $year,
       ':iso_week' => $week,
+      ':payload' => $json,
+      ':registered_at' => trim((string)($data['registrado_en'] ?? '')) ?: null,
+      ':updated_at' => trim((string)($data['actualizado_en'] ?? '')) ?: null,
+    ]);
+    $pdo->commit();
+  } catch (Throwable $exception) {
+    if ($pdo->inTransaction()) $pdo->rollBack();
+    throw $exception;
+  }
+}
+
+function energySaveMonthlyData(int $year, int $month, array $data): void
+{
+  if (!energyValidMonth($year, $month)) throw new InvalidArgumentException('El mes seleccionado no es válido.');
+  $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+  $pdo = energyOpenDatabase();
+  $pdo->beginTransaction();
+  try {
+    $statement = $pdo->prepare("
+      INSERT INTO energy_monthly_records
+        (period_key, year, month, payload, registered_at, updated_at, modified_at)
+      VALUES
+        (:period_key, :year, :month, :payload, :registered_at, :updated_at, CURRENT_TIMESTAMP)
+      ON CONFLICT(period_key) DO UPDATE SET
+        payload = excluded.payload,
+        registered_at = COALESCE(energy_monthly_records.registered_at, excluded.registered_at),
+        updated_at = excluded.updated_at,
+        modified_at = CURRENT_TIMESTAMP
+    ");
+    $statement->execute([
+      ':period_key' => energyMonthKey($year, $month),
+      ':year' => $year,
+      ':month' => $month,
       ':payload' => $json,
       ':registered_at' => trim((string)($data['registrado_en'] ?? '')) ?: null,
       ':updated_at' => trim((string)($data['actualizado_en'] ?? '')) ?: null,

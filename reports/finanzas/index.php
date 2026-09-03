@@ -45,6 +45,7 @@ $indicators = (array)($report['indicadores'] ?? []);
     @media(max-width:820px){.report{width:calc(100% - 28px)}.header{flex-direction:column}.picker{flex-wrap:wrap}.expenses-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.summary-grid{grid-template-columns:1fr}.invoice-detail-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.department-overview{grid-template-columns:1fr 1fr}.overview-metric:last-child{grid-column:1/-1;border-top:1px solid #d6e2ed}.ranking-heading,.department-row-summary{grid-template-columns:34px minmax(150px,1.3fr) minmax(110px,1fr) 125px 22px}.ranking-heading span:nth-child(5),.department-invoices{display:none}.line-items-table{overflow-x:auto}.line-item{min-width:700px}}@media(max-width:570px){.report{width:calc(100% - 18px)}.meta{display:none}.expenses-grid{grid-template-columns:1fr}.picker{display:grid;grid-template-columns:1fr}.filter-control,.picker input,.picker select{width:100%;min-width:0}.summary-card{min-height:100px}.invoice-item>summary{grid-template-columns:1fr}.invoice-item>summary>strong{grid-column:1;grid-row:auto}.invoice-detail-grid{grid-template-columns:1fr}.department-overview{grid-template-columns:1fr}.overview-metric,.overview-metric:last-child{grid-column:auto;border-right:0;border-top:1px solid #d6e2ed}.overview-metric:first-child{border-top:0}.ranking-heading{display:none}.department-row-summary{grid-template-columns:28px minmax(0,1fr) 22px;gap:8px}.department-bar{grid-column:2;height:7px}.department-amount{grid-column:2;text-align:left}.department-row-summary .accordion-chevron{grid-column:3;grid-row:1/4}.department-identity .department-name{white-space:normal}}
     <?php if ($captureMode): ?>body{background:#fff}.report{width:1080px;padding:8px 0}.top-actions,.picker{display:none}.header{margin-bottom:8px}.section{margin-top:11px}.summary-card{min-height:105px}.expense-card{min-height:118px}<?php endif; ?>
   </style>
+  <script src="../../assets/js/display-mode.js?v=<?= urlencode((string)(@filemtime(__DIR__ . '/../../assets/js/display-mode.js') ?: time())) ?>"></script>
 </head>
 <body>
 <main class="report">
@@ -102,7 +103,7 @@ $indicators = (array)($report['indicadores'] ?? []);
   });
   document.querySelectorAll('.period-field input').forEach(field => field.addEventListener('change', submitPeriod));
   const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, character => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#039;','"':'&quot;'}[character]));
-  const number = value => value === null || value === undefined || value === '' ? '—' : Number(value).toLocaleString('es-MX', {maximumFractionDigits: 3});
+  const number = value => value === null || value === undefined || value === '' ? '—' : Number(value).toLocaleString('es-MX', {maximumFractionDigits: 2});
   const moneyValue = value => value === null || value === undefined || value === '' ? '—' : '$' + Number(value).toLocaleString('es-MX', {minimumFractionDigits: 2, maximumFractionDigits: 2});
   const optionalTag = (label, value) => value === null || value === undefined || value === '' || Number(value) === 0 ? '' : `<span>${escapeHtml(label)} ${escapeHtml(value)}</span>`;
 

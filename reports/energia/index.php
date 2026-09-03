@@ -20,6 +20,7 @@ require_once __DIR__ . '/water_invoices.php';
 $timezone = new DateTimeZone((string)($config['timezone'] ?? 'America/Mexico_City'));
 $now = new DateTimeImmutable('now', $timezone);
 $records = energyLoadRecords();
+$monthlyRecords = energyLoadMonthlyRecords();
 $sourceWarnings = [];
 $gasNaturalSource = (array)($config['gas_natural_invoice_api'] ?? []);
 if ($gasNaturalSource !== []) {
@@ -106,6 +107,11 @@ foreach ($records as $key => $record) {
   $calendarYear = (int)(new DateTimeImmutable('now', $timezone))->setISODate($year, $week, 1)->format('Y');
   $availableYears[$calendarYear] = true;
 }
+foreach ($monthlyRecords as $key => $record) {
+  if (preg_match('/^(\d{4})-(\d{2})$/', (string)$key, $matches) === 1) {
+    $availableYears[(int)$matches[1]] = true;
+  }
+}
 foreach ($receipts as $receipt) {
   if (preg_match('/^(\d{4})-\d{2}-\d{2}$/', (string)($receipt['receipt_date'] ?? ''), $matches) === 1) {
     $availableYears[(int)$matches[1]] = true;
@@ -152,8 +158,8 @@ $chartPayload = [];
 foreach ($catalog as $key => $metric) {
   $metricRecords = $key === 'agua' && !$waterUnlocked ? [] : $records;
   $metricReceipts = $key === 'agua' && !$waterUnlocked ? [] : $receipts;
-  $annual = energyBuildAnnualMetric($metricRecords, $metric, $selectedYear, $timezone, $metricReceipts);
-  $previousAnnual = energyBuildAnnualMetric($metricRecords, $metric, $selectedYear - 1, $timezone, $metricReceipts);
+  $annual = energyBuildAnnualMetric($metricRecords, $metric, $selectedYear, $timezone, $metricReceipts, $monthlyRecords);
+  $previousAnnual = energyBuildAnnualMetric($metricRecords, $metric, $selectedYear - 1, $timezone, $metricReceipts, $monthlyRecords);
   $previousMoney = $previousAnnual['money'];
   $moneyVariation = is_numeric($annual['money']) && is_numeric($previousMoney) && (float)$previousMoney != 0.0
     ? (((float)$annual['money'] - (float)$previousMoney) / abs((float)$previousMoney)) * 100
@@ -229,6 +235,7 @@ foreach ($catalog as $key => $metric) {
 $e = static fn($value): string => htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
 $decimal = static function ($value, int $decimals = 2): string {
   if (!is_numeric($value)) return '—';
+  $decimals = max(0, min(2, $decimals));
   return rtrim(rtrim(number_format((float)$value, $decimals, '.', ','), '0'), '.');
 };
 $money = static fn($value): string => is_numeric($value) ? '$' . number_format((float)$value, 2, '.', ',') : '—';
@@ -331,7 +338,7 @@ $money = static fn($value): string => is_numeric($value) ? '$' . number_format((
           <?php if ($item['locked']): ?>
           <div class="water-locked"><i class="fa-solid fa-lock"></i><h3>Información de Agua protegida</h3><p>Ingresa la clave autorizada para consultar registros, gráfica e importes.</p><button class="view-water" type="button" data-open-water>Ver</button></div>
           <?php else: ?>
-          <aside class="receipts"><h3 class="receipts-title"><span>Registros por mes</span><i class="fa-regular fa-folder-open"></i></h3><?php if (!$item['has_records']): ?><div class="empty">No hay registros para <?= $e($metric['label'] ?? '') ?> en <?= $e($selectedYear) ?>.</div><?php else: ?><?php foreach ($annual['months'] as $monthNumber => $month): if ($month['records'] === []) continue; ?><details class="month-group" <?= $monthNumber === (int)$now->format('n') || $item['months_with_records'] === 1 ? 'open' : '' ?>><summary><span class="month-name"><?= $e($monthNames[$monthNumber]) ?></span><span class="month-total">Total <?= $month['has_quantity'] ? $decimal($month['quantity'], 2) . ' ' . $e($metric['unit'] ?? '') : '—' ?></span></summary><div class="receipt-list"><?php foreach ($month['records'] as $receipt): ?><div class="receipt-row"><?php if (($receipt['source'] ?? '') === 'receipt'): ?><span><?= $e($receipt['company'] ?? 'Progel') ?> · <?= $e($receipt['date']->format('d/m')) ?></span><strong><?= $decimal($receipt['quantity'], 2) ?> <?= $e($metric['unit'] ?? '') ?></strong><small><?= $e($receipt['period_start']) ?> al <?= $e($receipt['period_end']) ?></small><small class="receipt-money"><?= $money($receipt['money']) ?><?= ($receipt['cost_source'] ?? '') === 'api' ? ' · API' : '' ?></small><?php else: ?><span>Semana <?= $e($receipt['week']) ?> · <?= $e($receipt['date']->format('d/m')) ?></span><strong><?= $decimal($receipt['quantity'], 2) ?> <?= $e($metric['unit'] ?? '') ?></strong><small>Registro semanal histórico</small><small class="receipt-money"><?= $money($receipt['money']) ?></small><?php endif; ?></div><?php endforeach; ?></div></details><?php endforeach; ?><?php endif; ?></aside>
+          <aside class="receipts"><h3 class="receipts-title"><span>Registros por mes</span><i class="fa-regular fa-folder-open"></i></h3><?php if (!$item['has_records']): ?><div class="empty">No hay registros para <?= $e($metric['label'] ?? '') ?> en <?= $e($selectedYear) ?>.</div><?php else: ?><?php foreach ($annual['months'] as $monthNumber => $month): if ($month['records'] === []) continue; ?><details class="month-group" <?= $monthNumber === (int)$now->format('n') || $item['months_with_records'] === 1 ? 'open' : '' ?>><summary><span class="month-name"><?= $e($monthNames[$monthNumber]) ?></span><span class="month-total">Total <?= $month['has_quantity'] ? $decimal($month['quantity'], 2) . ' ' . $e($metric['unit'] ?? '') : '—' ?></span></summary><div class="receipt-list"><?php foreach ($month['records'] as $receipt): ?><div class="receipt-row"><?php if (($receipt['source'] ?? '') === 'receipt'): ?><span><?= $e($receipt['company'] ?? 'Progel') ?> · <?= $e($receipt['date']->format('d/m')) ?></span><strong><?= $decimal($receipt['quantity'], 2) ?> <?= $e($metric['unit'] ?? '') ?></strong><small><?= $e($receipt['period_start']) ?> al <?= $e($receipt['period_end']) ?></small><small class="receipt-money"><?= $money($receipt['money']) ?><?= ($receipt['cost_source'] ?? '') === 'api' ? ' · API' : '' ?></small><?php elseif (($receipt['source'] ?? '') === 'monthly'): ?><span>Captura mensual · <?= $e($receipt['date']->format('m/Y')) ?></span><strong><?= $decimal($receipt['quantity'], 2) ?> <?= $e($metric['unit'] ?? '') ?></strong><small>Registro operativo mensual</small><small class="receipt-money"><?= $money($receipt['money']) ?></small><?php else: ?><span>Semana <?= $e($receipt['week']) ?> · <?= $e($receipt['date']->format('d/m')) ?></span><strong><?= $decimal($receipt['quantity'], 2) ?> <?= $e($metric['unit'] ?? '') ?></strong><small>Registro semanal histórico</small><small class="receipt-money"><?= $money($receipt['money']) ?></small><?php endif; ?></div><?php endforeach; ?></div></details><?php endforeach; ?><?php endif; ?></aside>
           <article class="chart-card"><h3>Comportamiento del consumo · <?= $e($metric['unit'] ?? '') ?></h3><div class="chart-wrap"><canvas id="energy-chart-<?= $e($key) ?>"></canvas></div></article>
           <div class="summary-grid">
             <article class="summary-card is-money is-consumption">
@@ -361,7 +368,7 @@ $money = static fn($value): string => is_numeric($value) ? '$' . number_format((
           </div>
           <?php endif; ?>
         </div>
-        <div class="capture-note"><?= ($metric['group'] ?? '') === 'Consumos' ? 'Los recibos se agrupan por su fecha de emisión; los registros anteriores permanecen como histórico semanal.' : 'Los registros operativos se agrupan por el mes en que inicia cada corte semanal.' ?></div>
+        <div class="capture-note"><?= ($metric['group'] ?? '') === 'Consumos' ? 'Los recibos se agrupan por su fecha de emisión; los registros anteriores permanecen como histórico semanal.' : 'La captura mensual sustituye las semanas del mismo mes; los meses anteriores conservan su histórico semanal.' ?></div>
       </section>
     <?php endforeach; ?>
   </div>

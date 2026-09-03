@@ -22,7 +22,7 @@ $corteSegundos = (int)$corteMatches[3];
 $corteSegundosTotales = ($corteHoras * 3600) + ($corteMinutos * 60) + $corteSegundos;
 $productosExcluidos = array_values(array_filter(array_map('intval', (array)($config['productos_excluidos'] ?? [])), static fn(int $id): bool => $id > 0));
 $productosExcluidosSql = !empty($productosExcluidos) ? 'AND t.pro_id NOT IN (' . implode(',', $productosExcluidos) . ')' : '';
-$calidadAsignadaSql = 'AND t.cal_id IS NOT NULL AND t.cal_id <> 0';
+$calidadAsignadaSql = '';
 
 $setHoraCorte = static function (DateTimeImmutable $date) use ($corteHoras, $corteMinutos, $corteSegundos): DateTimeImmutable {
   return $date->setTime($corteHoras, $corteMinutos, $corteSegundos);
@@ -183,6 +183,9 @@ $rangoVerdeLabel = static function (array $reglas): ?string {
 };
 
 $clasificarCalidad = static function (?string $descripcion, ?int $calId = null): string {
+  if ($calId === 0) {
+    return 'Por Definir';
+  }
   if (in_array($calId, [2, 4], true)) {
     return 'Dorada';
   }

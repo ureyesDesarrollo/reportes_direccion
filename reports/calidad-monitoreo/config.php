@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 $productionConfig = require __DIR__ . '/../avance-produccion-hora/config.php';
+$qualityProductionConfig = require __DIR__ . '/../calidad-produccion/config.php';
 
 return [
   'titulo' => 'Calidad Monitoreo',
@@ -11,4 +12,5 @@ return [
   'hora_corte' => 7,
   'intervalo_actualizacion_ms' => 120000,
   'database' => (array)($productionConfig['database'] ?? []),
+  'colores_calidad' => (array)($qualityProductionConfig['colores'] ?? []),
 ];

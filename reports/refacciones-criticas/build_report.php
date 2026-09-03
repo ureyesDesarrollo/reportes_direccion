@@ -54,11 +54,11 @@ if ($cached !== null) {
   return $cached;
 }
 
-$state = ReportEngine::createContext($config, $appConfig, $dbConfig);
-$pdoMovs             = $state['pdoMovs'];
-$pdoProd             = $state['pdoProd'];   // no se usa, pero createContext lo requiere
-$campoFechaMovsSql   = $state['campoFechaMovsSql'];
-$weekFields          = $state['weekFields'];
+// Refacciones depende únicamente de la fuente de movimientos. No debe dejar de
+// cargar por una conexión de producción que este reporte no utiliza.
+$pdoMovs = conectar($dbConfig['movs']);
+$campoFechaMovsSql = "m.`{$campoFechaMovs}`";
+$weekFields = buildWeekFields($campoFechaMovsSql);
 
 /*
 |--------------------------------------------------------------------------

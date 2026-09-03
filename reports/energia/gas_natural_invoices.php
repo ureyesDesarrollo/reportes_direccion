@@ -236,7 +236,7 @@ function energyLoadGasNaturalInvoices(array $sourceConfig, DateTimeZone $timezon
       $numbers = array_values(array_unique((array)($receipt['invoice_numbers'] ?? [])));
       $receipt['reference'] = $numbers !== [] ? 'Factura' . (count($numbers) > 1 ? 's ' : ' ') . implode(', ', $numbers) : 'Factura de gas natural';
       if (!empty($receipt['estimated_consumption']) && $calorificValue !== null) {
-        $receipt['reference'] .= ' · Consumo estimado con ' . rtrim(rtrim(number_format($calorificValue, 3, '.', ''), '0'), '.') . ' MJ/m³';
+        $receipt['reference'] .= ' · Consumo estimado con ' . rtrim(rtrim(number_format($calorificValue, 2, '.', ''), '0'), '.') . ' MJ/m³';
       }
     }
     unset($receipt);

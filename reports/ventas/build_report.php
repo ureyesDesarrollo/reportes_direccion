@@ -167,8 +167,12 @@ $normalizeSaleType = static function ($value): string {
 
 $pdo105 = null;
 $customerTypesByName = [];
+$facturasSaiFiltraInclusion = false;
 try {
   $pdo105 = $connectMysql((array)($config['mysql_105'] ?? []));
+  $facturasSaiFiltraInclusion = (bool)$pdo105
+    ->query("SHOW COLUMNS FROM `facturas_sai` LIKE 'incluir_en_ventas'")
+    ->fetch();
   foreach ($pdo105->query("
     SELECT cte_id, cte_nombre, cte_razon_social, cte_tipo
     FROM rev_clientes
@@ -186,10 +190,11 @@ try {
     }
   }
 
+  $filtroFacturasSai = $facturasSaiFiltraInclusion ? ' WHERE incluir_en_ventas = 1' : '';
   foreach ($pdo105->query("
     SELECT cliente_nombre, tipo_venta
     FROM (
-      SELECT cliente_nombre, tipo_venta, fecha_factura AS fecha FROM facturas_sai
+      SELECT cliente_nombre, tipo_venta, fecha_factura AS fecha FROM facturas_sai{$filtroFacturasSai}
       UNION ALL
       SELECT cliente_nombre, tipo_venta, fecha_remision AS fecha FROM remisiones
     ) ventas_tipo
@@ -538,6 +543,9 @@ try {
   $remisiones = $quoteIdentifier((string)($tables['remisiones'] ?? 'remisiones'));
   $remisionDetalle = $quoteIdentifier((string)($tables['remision_detalle'] ?? 'remision_detalle'));
   $notasCredito = $quoteIdentifier((string)($tables['notas_credito'] ?? 'notas_credito'));
+  $filtroFacturaIncluida = $facturasSaiFiltraInclusion ? ' AND incluir_en_ventas = 1' : '';
+  $filtroFacturaIncluidaF = $facturasSaiFiltraInclusion ? ' AND f.incluir_en_ventas = 1' : '';
+  $whereFacturaIncluidaF = $facturasSaiFiltraInclusion ? ' WHERE f.incluir_en_ventas = 1' : '';
 
   $sql = "
     WITH RECURSIVE meses AS (
@@ -553,7 +561,7 @@ try {
         SUM(COALESCE(total_real, 0)) AS monto_fiscal,
         COUNT(DISTINCT id) AS registros_facturas
       FROM {$facturas}
-      WHERE fecha_factura BETWEEN ? AND ?
+      WHERE fecha_factura BETWEEN ? AND ?{$filtroFacturaIncluida}
       GROUP BY DATE_FORMAT(fecha_factura, '%Y-%m-01')
     ),
     facturas_kilos AS (
@@ -562,7 +570,7 @@ try {
         SUM(COALESCE(d.cantidad, 0)) AS kilos_fiscal
       FROM {$facturas} f
       INNER JOIN {$facturaDetalle} d ON d.factura_id = f.id
-      WHERE f.fecha_factura BETWEEN ? AND ?
+      WHERE f.fecha_factura BETWEEN ? AND ?{$filtroFacturaIncluidaF}
       GROUP BY DATE_FORMAT(f.fecha_factura, '%Y-%m-01')
     ),
     remisiones_totales AS (
@@ -659,7 +667,7 @@ try {
         fecha_factura AS dia,
         SUM(COALESCE(total_real, 0)) AS monto_fiscal
       FROM {$facturas}
-      WHERE fecha_factura BETWEEN ? AND ?
+      WHERE fecha_factura BETWEEN ? AND ?{$filtroFacturaIncluida}
       GROUP BY fecha_factura
     ),
     facturas_kilos AS (
@@ -668,7 +676,7 @@ try {
         SUM(COALESCE(d.cantidad, 0)) AS kilos_fiscal
       FROM {$facturas} f
       INNER JOIN {$facturaDetalle} d ON d.factura_id = f.id
-      WHERE f.fecha_factura BETWEEN ? AND ?
+      WHERE f.fecha_factura BETWEEN ? AND ?{$filtroFacturaIncluidaF}
       GROUP BY f.fecha_factura
     ),
     remisiones_totales AS (
@@ -779,7 +787,7 @@ try {
         FROM {$facturaDetalle}
         GROUP BY factura_id
       ) fd ON fd.factura_id = f.id
-      WHERE f.fecha_factura BETWEEN ? AND ?
+      WHERE f.fecha_factura BETWEEN ? AND ?{$filtroFacturaIncluidaF}
       GROUP BY f.fecha_factura, {$tipoFactura}
     ),
     remisiones_por_tipo AS (
@@ -802,6 +810,7 @@ try {
     factura_tipos AS (
       SELECT factura, MAX({$tipoFactura}) AS tipo
       FROM {$facturas} f
+      {$whereFacturaIncluidaF}
       GROUP BY factura
     ),
     creditos AS (

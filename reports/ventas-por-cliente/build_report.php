@@ -128,6 +128,7 @@ $tablaAgentes = (string)($config['tabla_agentes'] ?? 'agentes');
 $tablaRemisiones = (string)($config['tabla_remisiones'] ?? 'remisiones');
 $tablaRemisionDetalle = (string)($config['tabla_remision_detalle'] ?? 'remision_detalle');
 $tablaRevClientes = (string)$config['tabla_rev_clientes'];
+$tablaFacturasInclusion = (string)($config['tabla_facturas_inclusion'] ?? 'facturas_sai');
 
 $campoNumeroFactura = (string)($config['campo_numero_factura'] ?? 'NO_FAC');
 $campoCreditoFactura = (string)($config['campo_credito_factura'] ?? $campoNumeroFactura);
@@ -156,6 +157,8 @@ $campoCantidadItems = (string)$config['campo_cantidad_items'];
 $campoUnidadDetalle = (string)($config['campo_unidad_detalle'] ?? 'UNIDAD');
 $campoNombreCliente = (string)$config['campo_nombre_cliente'];
 $campoDiasCredito = (string)($config['campo_dias_credito'] ?? 'DIA_CRE');
+$campoFacturaInclusion = (string)($config['campo_factura_inclusion'] ?? 'factura');
+$campoIncluirEnVentas = (string)($config['campo_incluir_en_ventas'] ?? 'incluir_en_ventas');
 
 $campoRevClienteNombre = (string)($config['campo_rev_cliente_nombre'] ?? 'cte_nombre');
 $campoRevClienteRazon = (string)($config['campo_rev_cliente_razon'] ?? 'cte_razon_social');
@@ -224,6 +227,7 @@ $tablaAgentesSql = $quoteIdentifier($tablaAgentes, 'tabla_agentes');
 $tablaRemisionesSql = $quoteIdentifier($tablaRemisiones, 'tabla_remisiones');
 $tablaRemisionDetalleSql = $quoteIdentifier($tablaRemisionDetalle, 'tabla_remision_detalle');
 $tablaRevClientesSql = $quoteIdentifier($tablaRevClientes, 'tabla_rev_clientes');
+$tablaFacturasInclusionSql = $quoteIdentifier($tablaFacturasInclusion, 'tabla_facturas_inclusion');
 
 $campoNumeroFacturaSql = $quoteIdentifier($campoNumeroFactura, 'campo_numero_factura');
 $campoCreditoFacturaSql = $quoteIdentifier($campoCreditoFactura, 'campo_credito_factura');
@@ -254,6 +258,8 @@ $campoCantidadItemsSql = $quoteIdentifier($campoCantidadItems, 'campo_cantidad_i
 $campoUnidadDetalleSql = $quoteIdentifier($campoUnidadDetalle, 'campo_unidad_detalle');
 $campoNombreClienteSql = $quoteIdentifier($campoNombreCliente, 'campo_nombre_cliente');
 $campoDiasCreditoSql = $quoteIdentifier($campoDiasCredito, 'campo_dias_credito');
+$campoFacturaInclusionSql = $quoteIdentifier($campoFacturaInclusion, 'campo_factura_inclusion');
+$campoIncluirEnVentasSql = $quoteIdentifier($campoIncluirEnVentas, 'campo_incluir_en_ventas');
 
 $campoRevClienteNombreSql = $quoteIdentifier($campoRevClienteNombre, 'campo_rev_cliente_nombre');
 $campoRevClienteRazonSql = $quoteIdentifier($campoRevClienteRazon, 'campo_rev_cliente_razon');
@@ -274,6 +280,28 @@ if ($cached !== null) {
 
 $pdoVentas = conectar($dbConfig['movs']);
 $pdoProd = conectar($dbConfig['prod']);
+
+$facturasIncluidas = null;
+try {
+  $campoInclusionDisponible = (bool)$pdoProd
+    ->query("SHOW COLUMNS FROM {$tablaFacturasInclusionSql} LIKE " . $pdoProd->quote($campoIncluirEnVentas))
+    ->fetch();
+
+  if ($campoInclusionDisponible) {
+    $sqlFacturasIncluidas = "
+      SELECT DISTINCT TRIM(CAST({$campoFacturaInclusionSql} AS CHAR)) AS factura
+      FROM {$tablaFacturasInclusionSql}
+      WHERE {$campoIncluirEnVentasSql} = 1
+        AND TRIM(CAST({$campoFacturaInclusionSql} AS CHAR)) <> ''
+    ";
+    $facturasIncluidas = array_values(array_filter(array_map(
+      'strval',
+      $pdoProd->query($sqlFacturasIncluidas)->fetchAll(PDO::FETCH_COLUMN) ?: []
+    )));
+  }
+} catch (Throwable $e) {
+  error_log('Error consultando la bandera incluir_en_ventas: ' . $e->getMessage());
+}
 
 /*
 |--------------------------------------------------------------------------
@@ -321,6 +349,15 @@ $where = [
   "CAST(fc.{$campoMontoSql} AS DECIMAL(18,2)) > 0",
 ];
 $params = [$anioAnterior, $anioActual, $fechaDesde];
+
+if (is_array($facturasIncluidas)) {
+  if ($facturasIncluidas === []) {
+    $where[] = '1 = 0';
+  } else {
+    $where[] = 'TRIM(CAST(fc.' . $campoNumeroFacturaSql . ' AS CHAR)) IN (' . createPlaceholders($facturasIncluidas) . ')';
+    $params = array_merge($params, $facturasIncluidas);
+  }
+}
 
 if (!empty($statusCanceladoSql)) {
   $where[] = 'UPPER(TRIM(COALESCE(fc.' . $campoStatusFacturaSql . ", ''))) NOT IN (" . createPlaceholders($statusCanceladoSql) . ')';
@@ -491,6 +528,15 @@ $whereCartera = [
   "CAST(fc.{$campoMontoSql} AS DECIMAL(18,2)) > 0",
 ];
 $paramsCartera = [];
+
+if (is_array($facturasIncluidas)) {
+  if ($facturasIncluidas === []) {
+    $whereCartera[] = '1 = 0';
+  } else {
+    $whereCartera[] = 'TRIM(CAST(fc.' . $campoNumeroFacturaSql . ' AS CHAR)) IN (' . createPlaceholders($facturasIncluidas) . ')';
+    $paramsCartera = array_merge($paramsCartera, $facturasIncluidas);
+  }
+}
 
 if (!empty($statusCanceladoSql)) {
   $whereCartera[] = 'UPPER(TRIM(COALESCE(fc.' . $campoStatusFacturaSql . ", ''))) NOT IN (" . createPlaceholders($statusCanceladoSql) . ')';

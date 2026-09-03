@@ -13,10 +13,12 @@ extract($report, EXTR_SKIP);
 $e = static fn($value): string => htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
 $fmt = static function ($value, int $decimals = 2): string {
   if (!is_numeric($value)) return '—';
+  $decimals = max(0, min(2, $decimals));
   return number_format((float)$value, $decimals, '.', ',');
 };
 $fmtMoney = static function ($value, int $decimals = 2): string {
   if (!is_numeric($value)) return '—';
+  $decimals = max(0, min(2, $decimals));
   return '$' . number_format((float)$value, $decimals, '.', ',');
 };
 $fmtPct = static function ($value): string {
@@ -128,6 +130,7 @@ $fmtPct = static function ($value): string {
     @media (max-width: 1250px) { .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
     @media (max-width: 1050px) { body { min-width: 0; } .quadrant-grid { grid-template-columns: 1fr; } .purchases-shell { width: min(760px, calc(100vw - 16px)); } }
   </style>
+  <script src="../../assets/js/display-mode.js?v=<?= urlencode((string)(@filemtime(__DIR__ . '/../../assets/js/display-mode.js') ?: time())) ?>"></script>
 </head>
 <body>
   <main class="purchases-shell">
@@ -191,15 +194,15 @@ $fmtPct = static function ($value): string {
                 <article class="dryer-metric-card" style="--dryer-status: <?= $e($dryerStatusColor) ?>" data-role="metric-card">
                   <div class="dryer-metric-status<?= $statusIsYellow ? ' is-yellow' : '' ?>" data-role="metric-status">
                     <div class="dryer-metric-label" data-role="metric-label"><?= $e($initialSummary['etiqueta'] ?? '') ?></div>
-                    <div class="dryer-metric-value" data-role="metric-value"><?= $e($initialIsMoney ? $fmtMoney($initialSummary['actual'] ?? null, 3) : $fmt($initialSummary['actual'] ?? null, 3)) ?></div>
-                    <div class="dryer-metric-base"><span data-role="metric-base-year">Base <?= $e($quadrant['anio_anterior'] ?? '') ?></span><strong data-role="metric-base-value"><?= $e($initialIsMoney ? $fmtMoney($metricBase, 3) : $fmt($metricBase, 3)) ?></strong></div>
+                    <div class="dryer-metric-value" data-role="metric-value"><?= $e($initialIsMoney ? $fmtMoney($initialSummary['actual'] ?? null, 2) : $fmt($initialSummary['actual'] ?? null, 2)) ?></div>
+                    <div class="dryer-metric-base"><span data-role="metric-base-year">Base <?= $e($quadrant['anio_anterior'] ?? '') ?></span><strong data-role="metric-base-value"><?= $e($initialIsMoney ? $fmtMoney($metricBase, 2) : $fmt($metricBase, 2)) ?></strong></div>
                     <div class="dryer-metric-change" data-role="metric-change"><?= $e($fmtPct($initialSummary['variacion'] ?? null)) ?> vs base</div>
                   </div>
                   <div class="dryer-metric-ranges">
                     <ul class="dryer-range-list" aria-label="Rangos del semáforo">
-                      <li class="dryer-range-item"><span class="dryer-range-dot green"></span><span class="dryer-range-name">Verde (objetivo)</span><span class="dryer-range-value" data-role="range-green">≤ <?= $e($initialIsMoney ? $fmtMoney($metricBase, 3) : $fmt($metricBase, 3)) ?></span></li>
-                      <li class="dryer-range-item"><span class="dryer-range-dot yellow"></span><span class="dryer-range-name">Amarillo</span><span class="dryer-range-value" data-role="range-yellow">&gt; <?= $e($initialIsMoney ? $fmtMoney($metricBase, 3) : $fmt($metricBase, 3)) ?> – ≤ <?= $e($initialIsMoney ? $fmtMoney($metricYellow, 3) : $fmt($metricYellow, 3)) ?></span></li>
-                      <li class="dryer-range-item"><span class="dryer-range-dot red"></span><span class="dryer-range-name">Rojo</span><span class="dryer-range-value" data-role="range-red">&gt; <?= $e($initialIsMoney ? $fmtMoney($metricYellow, 3) : $fmt($metricYellow, 3)) ?></span></li>
+                      <li class="dryer-range-item"><span class="dryer-range-dot green"></span><span class="dryer-range-name">Verde (objetivo)</span><span class="dryer-range-value" data-role="range-green">≤ <?= $e($initialIsMoney ? $fmtMoney($metricBase, 2) : $fmt($metricBase, 2)) ?></span></li>
+                      <li class="dryer-range-item"><span class="dryer-range-dot yellow"></span><span class="dryer-range-name">Amarillo</span><span class="dryer-range-value" data-role="range-yellow">&gt; <?= $e($initialIsMoney ? $fmtMoney($metricBase, 2) : $fmt($metricBase, 2)) ?> – ≤ <?= $e($initialIsMoney ? $fmtMoney($metricYellow, 2) : $fmt($metricYellow, 2)) ?></span></li>
+                      <li class="dryer-range-item"><span class="dryer-range-dot red"></span><span class="dryer-range-name">Rojo</span><span class="dryer-range-value" data-role="range-red">&gt; <?= $e($initialIsMoney ? $fmtMoney($metricYellow, 2) : $fmt($metricYellow, 2)) ?></span></li>
                     </ul>
                   </div>
                 </article>
@@ -265,7 +268,7 @@ $fmtPct = static function ($value): string {
                         <li class="price-row" title="<?= $e($item['label'] ?? '') ?>">
                           <span class="price-name"><?= $e($item['label'] ?? $item['key'] ?? '') ?></span>
                           <span class="price-values">
-                            <?= $e($isConsumption ? $fmt($item['previous'] ?? null, 3) : $fmtMoney($item['previous'] ?? null, 3)) ?> → <?= $e($isConsumption ? $fmt($item['current'] ?? null, 3) : $fmtMoney($item['current'] ?? null, 3)) ?>
+                            <?= $e($isConsumption ? $fmt($item['previous'] ?? null, 2) : $fmtMoney($item['previous'] ?? null, 2)) ?> → <?= $e($isConsumption ? $fmt($item['current'] ?? null, 2) : $fmtMoney($item['current'] ?? null, 2)) ?>
                             <strong class="price-change"><?= $e($fmtPct($item['variation'] ?? null)) ?></strong>
                           </span>
                         </li>
@@ -303,12 +306,13 @@ $fmtPct = static function ($value): string {
     const charts = {};
 
     function moneyTick(value) {
-      return '$' + Number(value || 0).toLocaleString('es-MX', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+      return '$' + Number(value || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
 
     function numberValue(value, decimals = 2) {
       if (value === null || value === undefined || !Number.isFinite(Number(value))) return '—';
-      return Number(value).toLocaleString('es-MX', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+      const precision = Math.max(0, Math.min(2, Math.trunc(Number(decimals) || 0)));
+      return Number(value).toLocaleString('es-MX', { minimumFractionDigits: precision, maximumFractionDigits: precision });
     }
 
     function percentValue(value) {
@@ -320,7 +324,7 @@ $fmtPct = static function ($value): string {
     function updateMetricCard(panel, source, mode) {
       const summary = mode === 'costo_produccion' ? (source.resumen_costo || {}) : (source.resumen_consumo || {});
       const money = Boolean(summary.es_dinero);
-      const format = value => money ? moneyTick(value) : numberValue(value, 3);
+      const format = value => money ? moneyTick(value) : numberValue(value, 2);
       const dryerPalette = { verde: '#2e8b57', amarillo: '#facc15', rojo: '#c94436' };
       const statusColor = dryerPalette[String(summary.color || '').toLowerCase()] || '#94a3b8';
       const statusPanel = panel.querySelector('[data-role="metric-status"]');
@@ -444,11 +448,11 @@ $fmtPct = static function ($value): string {
           interaction: { mode: 'index', intersect: false },
           plugins: {
             legend: { display: datasets.length > 1, position: 'top', labels: { boxWidth: 10, font: { size: 8, weight: '700' } } },
-            tooltip: { callbacks: { label: context => (context.dataset.label || '') + ': ' + (isMoney ? moneyTick(context.parsed.y) : Number(context.parsed.y).toLocaleString('es-MX', { minimumFractionDigits: 3, maximumFractionDigits: 3 })) } }
+            tooltip: { callbacks: { label: context => (context.dataset.label || '') + ': ' + (isMoney ? moneyTick(context.parsed.y) : Number(context.parsed.y).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })) } }
           },
           scales: {
             x: { grid: { display: false }, ticks: { maxTicksLimit: 9, font: { size: 8, weight: '700' } } },
-            y: { beginAtZero: true, ticks: { maxTicksLimit: 4, font: { size: 8 }, callback: value => isMoney ? moneyTick(value) : Number(value).toLocaleString('es-MX', { minimumFractionDigits: 3, maximumFractionDigits: 3 }) }, grid: { color: '#e8edf3' } }
+            y: { beginAtZero: true, ticks: { maxTicksLimit: 4, font: { size: 8 }, callback: value => isMoney ? moneyTick(value) : Number(value).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }, grid: { color: '#e8edf3' } }
           }
         }
       });

@@ -89,6 +89,11 @@ La fuente maestra de objetivos y rangos reutilizados es `config/parameter_catalo
 ## Convenciones visuales
 
 - Mantener el lenguaje visual de `secadores`: tarjetas con bordes redondeados, valor destacado y semáforo claramente visible.
+- Todas las vistas principales cargan `assets/js/display-mode.js`. El modo pantalla se
+  conserva en el navegador y usa `assets/css/display-mode.css` para ajustes comunes
+  destinados a pantallas de 43 pulgadas con referencia Full HD (1920 × 1080).
+- Los estilos de modo pantalla sólo se aplican en pantalla; no deben modificar los
+  modos de captura ni la impresión.
 - Las capturas deben ser compactas, legibles al hacer zoom y, cuando sea posible, caber en una sola imagen/página.
 - Evitar tarjetas excesivamente anchas o con aire innecesario.
 - En rangos compactos, mostrar primero el nombre del color y debajo el valor del rango.
@@ -241,7 +246,7 @@ El proyecto combina varias fuentes. No documentar ni imprimir sus credenciales.
 
 ### Energía
 
-- La captura se divide en recibos de consumo por periodo y registro operativo semanal.
+- La captura se divide en recibos de consumo por periodo, indicadores mensuales y registro operativo semanal.
 - Electricidad, gas y agua se registran como recibos con fecha de emisión, inicio y fin
   del periodo, consumo e importe. La producción del mismo periodo se consulta
   automáticamente desde `rev_tarimas.tar_kilos`, conservando el filtro de etiquetado
@@ -250,6 +255,9 @@ El proyecto combina varias fuentes. No documentar ni imprimir sus credenciales.
   agrupan por año y mes en el reporte.
 - La captura operativa propone la semana cerrada anterior. Su producción se suma de
   lunes 07:00 a lunes 07:00.
+- Panel solar, cogenerador, recuperación de grasa, ollas y polímeros se capturan por mes. La
+  captura mensual sustituye los valores semanales históricos de la misma métrica y
+  mes para evitar duplicados.
 - Agua y gas se expresan en metros cúbicos según la métrica mostrada.
 - Recuperación de grasa, ollas y polímeros, así como panel solar y cogenerador,
   permanecen como registros semanales.

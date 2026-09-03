@@ -293,9 +293,10 @@ document.addEventListener('DOMContentLoaded', function() {
           callbacks: {
             label: function(context) {
               const metric = datasetsByMetric[activeMetric];
+              const precision = Math.max(0, Math.min(2, Number(metric.decimals) || 0));
               const value = Number(context.parsed.y || 0).toLocaleString('es-MX', {
-                minimumFractionDigits: metric.decimals,
-                maximumFractionDigits: metric.decimals
+                minimumFractionDigits: precision,
+                maximumFractionDigits: precision
               });
               return context.dataset.label + ': ' + metric.prefix + value + metric.suffix;
             }
@@ -308,9 +309,10 @@ document.addEventListener('DOMContentLoaded', function() {
           ticks: {
             callback: function(value) {
               const metric = datasetsByMetric[activeMetric];
+              const precision = Math.max(0, Math.min(2, Number(metric.decimals) || 0));
               const formatted = Number(value || 0).toLocaleString('es-MX', {
                 minimumFractionDigits: 0,
-                maximumFractionDigits: metric.decimals
+                maximumFractionDigits: precision
               });
               return metric.prefix + formatted + metric.suffix;
             }

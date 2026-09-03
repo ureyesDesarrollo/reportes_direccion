@@ -11,6 +11,9 @@ return [
   'tabla_remisiones'          => 'remisiones',  // Tabla de ventas remisionadas
   'tabla_remision_detalle'    => 'remision_detalle', // Detalle de ventas remisionadas
   'tabla_rev_clientes'        => 'rev_clientes', // Tabla de clientes en producción
+  'tabla_facturas_inclusion'  => 'facturas_sai', // Folios habilitados para los reportes de ventas
+  'campo_factura_inclusion'   => 'factura',
+  'campo_incluir_en_ventas'   => 'incluir_en_ventas',
   'campo_numero_factura'      => 'NO_FAC',      // Folio de factura para unir cabecera/detalle
   'campo_credito_factura'     => 'NO_FAC',      // Folio para descontar creditos
   'campo_credito_monto'       => 'TOT_NOTA',    // Importe de la nota/credito

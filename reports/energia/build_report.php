@@ -50,7 +50,7 @@ function energyMetricRecord(array $record, array $metric): array
   ];
 }
 
-function energyBuildAnnualMetric(array $records, array $metric, int $selectedYear, DateTimeZone $timezone, array $receipts = []): array
+function energyBuildAnnualMetric(array $records, array $metric, int $selectedYear, DateTimeZone $timezone, array $receipts = [], array $monthlyRecords = []): array
 {
   $months = [];
   for ($month = 1; $month <= 12; $month++) {
@@ -93,6 +93,39 @@ function energyBuildAnnualMetric(array $records, array $metric, int $selectedYea
     }
   }
 
+  $monthlyMetricMonths = [];
+  if ((string)($metric['group'] ?? '') !== 'Consumos') {
+    foreach ($monthlyRecords as $recordKey => $record) {
+      if (!is_array($record) || preg_match('/^(\d{4})-(\d{2})$/', (string)$recordKey, $matches) !== 1) continue;
+      $year = (int)$matches[1];
+      $month = (int)$matches[2];
+      if ($year !== $selectedYear || $month < 1 || $month > 12) continue;
+
+      $metricRecord = energyMetricRecord($record, $metric);
+      if ($metricRecord['quantity'] === null && $metricRecord['money'] === null) continue;
+      $production = is_numeric($record['produccion']['kg'] ?? null) ? (float)$record['produccion']['kg'] : null;
+      if ($metricRecord['quantity'] !== null) {
+        $months[$month]['quantity'] += $metricRecord['quantity'];
+        $months[$month]['has_quantity'] = true;
+        if ($production !== null && $production > 0) $months[$month]['production'] += $production;
+      }
+      if ($metricRecord['money'] !== null) {
+        $months[$month]['money'] += $metricRecord['money'];
+        $months[$month]['has_money'] = true;
+      }
+      $months[$month]['records'][] = [
+        'source' => 'monthly',
+        'key' => (string)$recordKey,
+        'month' => $month,
+        'date' => (new DateTimeImmutable('now', $timezone))->setDate($year, $month, 1)->setTime(7, 0),
+        'quantity' => $metricRecord['quantity'],
+        'money' => $metricRecord['money'],
+        'production' => $production,
+      ];
+      $monthlyMetricMonths[$month] = true;
+    }
+  }
+
   foreach ($records as $recordKey => $record) {
     if (!is_array($record) || preg_match('/^(\d{4})-W(\d{2})$/', (string)$recordKey, $matches) !== 1) continue;
     $isoYear = (int)$matches[1];
@@ -103,6 +136,7 @@ function energyBuildAnnualMetric(array $records, array $metric, int $selectedYea
 
     $month = (int)$weekStart->format('n');
     $metricRecord = energyMetricRecord($record, $metric);
+    if (isset($monthlyMetricMonths[$month])) continue;
     $production = is_numeric($record['produccion']['kg'] ?? null) ? (float)$record['produccion']['kg'] : null;
     if ($metricRecord['quantity'] === null && $metricRecord['money'] === null) continue;
 

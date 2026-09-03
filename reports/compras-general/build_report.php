@@ -236,6 +236,10 @@ foreach ((array)($config['fuentes'] ?? []) as $key => $definition) {
 
   try {
     $sourceReport = $loadSource((string)$definition['directorio']);
+    $sourceWarning = trim((string)($sourceReport['sourceWarning'] ?? ($sourceReport['meta']['sourceWarning'] ?? '')));
+    if ($sourceWarning !== '') {
+      $warnings[] = (string)($definition['titulo'] ?? $key) . ': ' . $sourceWarning;
+    }
     $fixedMode = (string)($definition['modo_fijo'] ?? '');
     $impactPrevious = array_sum(array_map('floatval', (array)($sourceReport[$keys['impact_previous']] ?? [])));
     $impactCurrent = array_sum(array_map('floatval', (array)($sourceReport[$keys['impact_current']] ?? [])));

@@ -10,6 +10,7 @@ $quimicosEtiquetas = $meta['quimicosEtiquetas'] ?? [];
 $matrizRatioQuimicos = $meta['matrizRatioQuimicos'] ?? [];
 $matrizImpactoEconomicoQuimicos = $meta['matrizImpactoEconomicoQuimicos'] ?? [];
 $ratioBasePorQuimico = $meta['ratioBasePorQuimico'] ?? [];
+$produccionPivotPorSemana = $meta['produccionPivotPorSemana'] ?? [];
 $consumoQuimicoAnioAnterior = $meta['consumoEnzimaAnioAnterior'] ?? [];
 $consumoQuimicoAnioActual = $meta['consumoEnzimaAnioActual'] ?? [];
 $variacionConsumoQuimico = $meta['variacionConsumoEnzima'] ?? [];
@@ -170,9 +171,26 @@ $startIndex = max(0, $totalSemanas - $windowSize);
                 </span>
               </div>
             </td>
+            <?php foreach ($semanasCatalogo as $index => $semana): ?>
+              <?php $ratioSemana = $matrizRatioQuimicos[$grupoKey][$semana] ?? null; ?>
+              <td class="week-col" data-week-index="<?= $index ?>">
+                <strong><?= is_numeric($ratioSemana) ? n((float)$ratioSemana, 2) : '-' ?></strong>
+              </td>
+            <?php endforeach; ?>
           </tr>
 
         <?php endforeach; ?>
+
+        <tr class="row-total summary-row">
+          <td class="sticky-col pivot-summary-col"><strong>PRODUCCIÓN</strong></td>
+          <td class="sticky-col" style="background:#f8fafc;"></td>
+          <td class="sticky-col" style="background:#f8fafc;"></td>
+          <?php foreach ($semanasCatalogo as $index => $semana): ?>
+            <td class="week-col" data-week-index="<?= $index ?>">
+              <strong><?= n((float)($produccionPivotPorSemana[$semana] ?? 0), 2) ?></strong>
+            </td>
+          <?php endforeach; ?>
+        </tr>
 
       <?php endif; ?>
     </tbody>
