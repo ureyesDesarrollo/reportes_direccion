@@ -18,6 +18,10 @@
   let fitValuesTimer = null;
 
   function ensureNavigationLoader() {
+    if (isCaptureView()) {
+      return null;
+    }
+
     let loader = document.getElementById(navigationLoaderId);
     if (loader || !document.body) {
       return loader;
@@ -87,6 +91,11 @@
   }
 
   function enableNavigationLoader() {
+    if (isCaptureView()) {
+      hideNavigationLoader();
+      return;
+    }
+
     ensureNavigationLoader();
 
     document.addEventListener('click', function (event) {
@@ -188,10 +197,15 @@
       return;
     }
 
+    const stylesheetUrl = new URL('../css/display-mode.css', currentScript.src);
+    const scriptVersion = new URL(currentScript.src).searchParams.get('v');
+    if (scriptVersion) {
+      stylesheetUrl.searchParams.set('v', scriptVersion);
+    }
     const stylesheet = document.createElement('link');
     stylesheet.id = 'reportDisplayModeStyles';
     stylesheet.rel = 'stylesheet';
-    stylesheet.href = new URL('../css/display-mode.css', currentScript.src).href;
+    stylesheet.href = stylesheetUrl.href;
     document.head.appendChild(stylesheet);
   }
 

@@ -214,13 +214,26 @@ $pedidosApiConfig = (array)($config['pedidos_api'] ?? []);
 $pedidosApiUrl = trim((string)($pedidosApiConfig['url'] ?? ''));
 $pedidosDetalleApiUrl = trim((string)($pedidosApiConfig['detalle_url'] ?? ''));
 $pedidosApiKey = trim((string)($pedidosApiConfig['api_key'] ?? ''));
+$backorderDesde = sprintf('%04d-01-01', $anio);
+$backorderHastaExclusivo = sprintf('%04d-01-01', $anio + 1);
+$fechaEntregaEnPeriodo = static function (array $pedido) use ($backorderDesde, $backorderHastaExclusivo): bool {
+  $fechaEntrega = substr(trim((string)($pedido['fecha_entrega'] ?? '')), 0, 10);
+  if (preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $fechaEntrega, $matches) !== 1) {
+    return false;
+  }
+
+  if (!checkdate((int)$matches[2], (int)$matches[3], (int)$matches[1])) {
+    return false;
+  }
+
+  return $fechaEntrega >= $backorderDesde && $fechaEntrega < $backorderHastaExclusivo;
+};
 if ($pedidosApiUrl !== '' && $pedidosApiKey !== '') {
   try {
     $query = http_build_query([
-      'desde' => sprintf('%04d-01-01', $anio),
-      'hasta' => sprintf('%04d-12-31', $anio),
       'status' => (string)($pedidosApiConfig['status'] ?? 'Por Surtir,Parcial'),
       'status2' => (string)($pedidosApiConfig['status2'] ?? 'Confirmado'),
+      'limit' => 200,
     ]);
     $context = stream_context_create([
       'http' => [
@@ -235,8 +248,12 @@ if ($pedidosApiUrl !== '' && $pedidosApiKey !== '') {
 
     $payload = json_decode($response, true, 512, JSON_THROW_ON_ERROR);
     $pedidos = (array)($payload['data']['pedidos'] ?? []);
-    $pedidosCantidad = (int)($payload['data']['cantidad'] ?? count($pedidos));
     foreach ($pedidos as $pedido) {
+      if (!$fechaEntregaEnPeriodo((array)$pedido)) {
+        continue;
+      }
+
+      $pedidosCantidad++;
       $saldo = $pedido['saldo_total'] ?? 0;
       if (is_numeric($saldo)) {
         $pedidosSaldoTotal += (float)$saldo;
@@ -250,8 +267,6 @@ if ($pedidosApiUrl !== '' && $pedidosApiKey !== '') {
 if ($pedidosDetalleApiUrl !== '' && $pedidosApiKey !== '') {
   try {
     $query = http_build_query([
-      'desde' => sprintf('%04d-01-01', $anio),
-      'hasta' => sprintf('%04d-12-31', $anio),
       'status' => (string)($pedidosApiConfig['status'] ?? 'Por Surtir,Parcial'),
       'status2' => (string)($pedidosApiConfig['status2'] ?? 'Confirmado'),
     ]);
@@ -268,8 +283,18 @@ if ($pedidosDetalleApiUrl !== '' && $pedidosApiKey !== '') {
 
     $payload = json_decode($response, true, 512, JSON_THROW_ON_ERROR);
     $pedidosDetalle = (array)($payload['data']['pedidos'] ?? []);
+    $pedidosSaldoDetalle = 0.0;
+    $pedidosCantidadDetalle = 0;
     foreach ($pedidosDetalle as $pedidoDetalle) {
       $pedidoData = is_array($pedidoDetalle['pedido'] ?? null) ? (array)$pedidoDetalle['pedido'] : [];
+      if (!$fechaEntregaEnPeriodo($pedidoData)) {
+        continue;
+      }
+
+      $pedidosCantidadDetalle++;
+      if (is_numeric($pedidoData['saldo_total'] ?? null)) {
+        $pedidosSaldoDetalle += (float)$pedidoData['saldo_total'];
+      }
       $pedidoIdentificador = is_array($pedidoData['identificador'] ?? null)
         ? (array)$pedidoData['identificador']
         : [];
@@ -350,6 +375,8 @@ if ($pedidosDetalleApiUrl !== '' && $pedidosApiKey !== '') {
         $calidadPorProducir[$grupo]['pedidos']++;
       }
     }
+    $pedidosSaldoTotal = $pedidosSaldoDetalle;
+    $pedidosCantidad = $pedidosCantidadDetalle;
   } catch (Throwable $e) {
     $warnings[] = 'No se pudo consultar el detalle de pedidos: ' . $e->getMessage();
   }

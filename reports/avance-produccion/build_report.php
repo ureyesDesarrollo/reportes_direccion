@@ -261,6 +261,27 @@ $processStmt = $pdo->prepare("
     AND d.pro_id_2 <> d.pro_id
   WHERE d.op_dia >= ?
     AND d.op_dia < ?
+    AND EXISTS (
+      SELECT 1
+      FROM procesos_agrupados pa_cerrado_1
+      INNER JOIN lotes_anio lote_cerrado_1
+        ON lote_cerrado_1.lote_id = pa_cerrado_1.lote_id
+       AND lote_cerrado_1.lote_estatus = 3
+      WHERE pa_cerrado_1.pro_id = d.pro_id
+    )
+    AND (
+      d.pro_id_2 IS NULL
+      OR d.pro_id_2 = 0
+      OR d.pro_id_2 = d.pro_id
+      OR EXISTS (
+        SELECT 1
+        FROM procesos_agrupados pa_cerrado_2
+        INNER JOIN lotes_anio lote_cerrado_2
+          ON lote_cerrado_2.lote_id = pa_cerrado_2.lote_id
+         AND lote_cerrado_2.lote_estatus = 3
+        WHERE pa_cerrado_2.pro_id = d.pro_id_2
+      )
+    )
   GROUP BY d.pro_id, d.pro_id_2
   ORDER BY toneladas DESC, d.pro_id ASC, d.pro_id_2 ASC
 ");
@@ -276,21 +297,118 @@ $totalProcessKilos = 0.0;
 $totalProcessToneladas = 0.0;
 $totalProcessTarimas = 0;
 $totalProcessFinos = 0;
-$mpByProcessId = [];
-$registerMp = static function (?int $processId, float $mpKilos) use (&$mpByProcessId): void {
-  if ($processId === null || $processId <= 0 || $mpKilos <= 0) {
-    return;
+$totalMpKilos = 0.0;
+$processDataRows = $processStmt->fetchAll() ?: [];
+$candidateProcessIds = [];
+$candidateProcessPairs = [];
+$processPairKey = static function (?int $processId1, ?int $processId2): string {
+  $processId1 = $processId1 !== null && $processId1 > 0 ? $processId1 : 0;
+  $processId2 = $processId2 !== null && $processId2 > 0 && $processId2 !== $processId1 ? $processId2 : 0;
+  return $processId1 . '|' . $processId2;
+};
+foreach ($processDataRows as $row) {
+  $processId1 = isset($row['pro_id']) ? (int)$row['pro_id'] : 0;
+  $processId2 = isset($row['pro_id_2']) ? (int)$row['pro_id_2'] : 0;
+  $candidateProcessPairs[$processPairKey($processId1, $processId2)] = true;
+  foreach (['pro_id', 'pro_id_2'] as $processField) {
+    $processId = isset($row[$processField]) ? (int)$row[$processField] : 0;
+    if ($processId > 0) {
+      $candidateProcessIds[$processId] = $processId;
+    }
+  }
+}
+
+$productionByPair = [];
+if ($candidateProcessIds !== []) {
+  $candidateProcessIds = array_values($candidateProcessIds);
+  $processPlaceholders = implode(',', array_fill(0, count($candidateProcessIds), '?'));
+  $productionByPairStmt = $pdo->prepare("
+    SELECT
+      d.pro_id,
+      d.pro_id_2,
+      d.op_dia,
+      COUNT(*) AS tarimas,
+      SUM(d.tar_kilos) AS kilos,
+      SUM(CASE WHEN d.tar_fino = 'F' THEN 1 ELSE 0 END) AS tarimas_finos
+    FROM (
+      SELECT t.*, {$operationDateSql} AS op_dia
+      FROM rev_tarimas t
+      WHERE t.tar_count_etiquetado > 0
+        AND (t.pro_id IN ({$processPlaceholders}) OR t.pro_id_2 IN ({$processPlaceholders}))
+    ) d
+    GROUP BY d.pro_id, d.pro_id_2, d.op_dia
+    ORDER BY d.op_dia
+  ");
+  $productionByPairStmt->execute(array_merge($candidateProcessIds, $candidateProcessIds));
+  foreach ($productionByPairStmt->fetchAll() ?: [] as $productionRow) {
+    $processId1 = isset($productionRow['pro_id']) ? (int)$productionRow['pro_id'] : 0;
+    $processId2 = isset($productionRow['pro_id_2']) ? (int)$productionRow['pro_id_2'] : 0;
+    $pairKey = $processPairKey($processId1, $processId2);
+    if (!isset($candidateProcessPairs[$pairKey])) {
+      continue;
+    }
+
+    $operationDay = (string)($productionRow['op_dia'] ?? '');
+    $periodKey = substr($operationDay, 0, 7);
+    if (!isset($productionByPair[$pairKey])) {
+      $productionByPair[$pairKey] = [
+        'tarimas' => 0,
+        'kilos' => 0.0,
+        'tarimas_finos' => 0,
+        'periodos' => [],
+      ];
+    }
+    if (!isset($productionByPair[$pairKey]['periodos'][$periodKey])) {
+      $productionByPair[$pairKey]['periodos'][$periodKey] = ['tarimas' => 0, 'kilos' => 0.0];
+    }
+
+    $tarimasDia = (int)($productionRow['tarimas'] ?? 0);
+    $kilosDia = (float)($productionRow['kilos'] ?? 0);
+    $productionByPair[$pairKey]['tarimas'] += $tarimasDia;
+    $productionByPair[$pairKey]['kilos'] += $kilosDia;
+    $productionByPair[$pairKey]['tarimas_finos'] += (int)($productionRow['tarimas_finos'] ?? 0);
+    $productionByPair[$pairKey]['periodos'][$periodKey]['tarimas'] += $tarimasDia;
+    $productionByPair[$pairKey]['periodos'][$periodKey]['kilos'] += $kilosDia;
   }
 
-  $mpByProcessId[$processId] = $mpKilos;
-};
-foreach ($processStmt->fetchAll() ?: [] as $row) {
+  foreach ($productionByPair as &$pairProduction) {
+    $dominantPeriod = null;
+    $dominantValues = ['tarimas' => -1, 'kilos' => -1.0];
+    foreach ($pairProduction['periodos'] as $periodKey => $periodValues) {
+      $isDominant = (int)$periodValues['tarimas'] > (int)$dominantValues['tarimas']
+        || (
+          (int)$periodValues['tarimas'] === (int)$dominantValues['tarimas']
+          && (float)$periodValues['kilos'] > (float)$dominantValues['kilos']
+        )
+        || (
+          (int)$periodValues['tarimas'] === (int)$dominantValues['tarimas']
+          && (float)$periodValues['kilos'] === (float)$dominantValues['kilos']
+          && ($dominantPeriod === null || strcmp((string)$periodKey, $dominantPeriod) < 0)
+        );
+      if ($isDominant) {
+        $dominantPeriod = (string)$periodKey;
+        $dominantValues = $periodValues;
+      }
+    }
+    $pairProduction['periodo_dominante'] = $dominantPeriod;
+  }
+  unset($pairProduction);
+}
+
+$selectedYieldPeriod = sprintf('%04d-%02d', $selectedYear, $selectedMonth);
+foreach ($processDataRows as $row) {
   $proId1 = isset($row['pro_id']) ? (int)$row['pro_id'] : null;
   $proId2 = isset($row['pro_id_2']) ? (int)$row['pro_id_2'] : null;
-  $kilos = (float)($row['kilos'] ?? 0);
-  $toneladas = (float)($row['toneladas'] ?? 0);
-  $tarimas = (int)($row['tarimas'] ?? 0);
-  $tarimasFinos = (int)($row['tarimas_finos'] ?? 0);
+  $pairKey = $processPairKey($proId1, $proId2);
+  $pairProduction = (array)($productionByPair[$pairKey] ?? []);
+  if (($pairProduction['periodo_dominante'] ?? null) !== $selectedYieldPeriod) {
+    continue;
+  }
+
+  $kilos = (float)($pairProduction['kilos'] ?? 0);
+  $toneladas = $kilos / 1000;
+  $tarimas = (int)($pairProduction['tarimas'] ?? 0);
+  $tarimasFinos = (int)($pairProduction['tarimas_finos'] ?? 0);
   $mp1 = is_numeric($row['mp_1'] ?? null) ? (float)$row['mp_1'] : 0.0;
   $hasSecondProcess = $proId2 !== null && $proId2 > 0 && $proId2 !== $proId1;
   $mp2 = $hasSecondProcess && is_numeric($row['mp_2'] ?? null) ? (float)$row['mp_2'] : 0.0;
@@ -301,10 +419,7 @@ foreach ($processStmt->fetchAll() ?: [] as $row) {
   $totalProcessToneladas += $toneladas;
   $totalProcessTarimas += $tarimas;
   $totalProcessFinos += $tarimasFinos;
-  $registerMp($proId1, $mp1);
-  if ($hasSecondProcess) {
-    $registerMp($proId2, $mp2);
-  }
+  $totalMpKilos += $mpKilos;
 
   $processRows[] = [
     'proc_1' => $proId1,
@@ -313,6 +428,7 @@ foreach ($processStmt->fetchAll() ?: [] as $row) {
     'kilos' => $kilos,
     'toneladas' => $toneladas,
     'mp_kilos' => $mpKilos > 0 ? $mpKilos : null,
+    'mp_kilos_proceso_completo' => $mpKilos > 0 ? $mpKilos : null,
     'tarimas_finos' => $tarimasFinos,
     'rendimiento' => $rendimiento,
   ];
@@ -330,9 +446,8 @@ $totalToneladasCerradas = array_sum(array_map(
     : 0.0,
   $dailySeries
 ));
-$totalMpKilos = array_sum($mpByProcessId);
 $porcentajeFinos = $totalTarimas > 0 ? ($totalTarimasFinos / $totalTarimas) * 100 : 0.0;
-$rendimientoGlobal = $totalMpKilos > 0 ? ($totalKilosTarimas / $totalMpKilos) * 100 : 0.0;
+$rendimientoGlobal = $totalMpKilos > 0 ? ($totalProcessKilos / $totalMpKilos) * 100 : 0.0;
 
 $daysInRange = max(1, (int)$periodStart->diff($periodEnd)->days);
 $objetivoTarimasPeriodo = $objetivoDiarioTarimas * $daysInRange;
@@ -413,6 +528,7 @@ return [
     'tarimas' => $totalTarimas,
     'barredura_toneladas' => $totalBarreduraTon,
     'kilos_tarimas' => $totalKilosTarimas,
+    'kilos_tarimas_rendimiento' => $totalProcessKilos,
     'mp_kilos' => $totalMpKilos,
   ],
   'series' => [
@@ -436,6 +552,8 @@ return [
     'hora_corte' => $horaCorte,
     'intervaloActualizacion' => $intervaloActualizacion,
     'actualizado' => (new DateTimeImmutable('now', $tz))->format('d/m/Y H:i'),
+    'rendimiento_solo_procesos_cerrados' => true,
+    'rendimiento_asignado_periodo_mayor_tarimas' => true,
   ],
   'version' => max(
     @filemtime(__FILE__) ?: time(),

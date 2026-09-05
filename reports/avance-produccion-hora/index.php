@@ -66,7 +66,7 @@ $metricRangeRows = static function (array $metric) use ($formatRangeNumber): arr
       $rows[] = [
         $status,
         $status === 'verde' ? 'Verde (Objetivo)' : ucfirst($status),
-        implode(' / ', $rangesByStatus[$status]),
+        implode("\n", $rangesByStatus[$status]),
       ];
     }
     return $rows;
@@ -109,6 +109,14 @@ $renderCard = static function (array $metric) use ($e, $formatValue, $metricRang
   $sourceHtml = isset($sourceConfig[$source])
     ? '<span class="hour-source-icon" title="' . $e($sourceConfig[$source]['title']) . '"><i class="fa-solid ' . $e($sourceConfig[$source]['icon']) . '"></i></span>'
     : '';
+  $formattedValue = $formatValue($metric);
+  $integerDigits = is_numeric($metric['value'] ?? null)
+    ? strlen((string)(int)floor(abs((float)$metric['value'])))
+    : 0;
+  $valueSizeClass = $integerDigits >= 6
+    ? 'value-xwide'
+    : ($integerDigits >= 4 ? 'value-wide' : '');
+  $cardValueClass = $valueSizeClass !== '' ? ' has-' . $valueSizeClass : '';
   $rangeRows = $metricRangeRows($metric);
   $rangesHtml = $rangeRows !== []
     ? '<div class="hour-card-ranges">' . implode('', array_map(
@@ -117,12 +125,14 @@ $renderCard = static function (array $metric) use ($e, $formatValue, $metricRang
     )) . '</div>'
     : '';
   return sprintf(
-    '<article class="hour-card status-%s%s"><div class="hour-card-main"><div class="hour-card-label"><span>%s</span>%s</div><div class="hour-card-value"><strong>%s</strong>%s</div></div>%s</article>',
+    '<article class="hour-card status-%s%s%s"><div class="hour-card-main"><div class="hour-card-label"><span>%s</span>%s</div><div class="hour-card-value"><strong class="%s">%s</strong>%s</div></div>%s</article>',
     $e($status),
     $rangeRows !== [] ? ' has-ranges' : '',
+    $e($cardValueClass),
     $e($metric['label'] ?? 'Parámetro'),
     $sourceHtml,
-    $e($formatValue($metric)),
+    $e($valueSizeClass),
+    $e($formattedValue),
     $unit !== '' ? '<small>' . $e($unit) . '</small>' : '',
     $rangesHtml
   );
@@ -178,13 +188,23 @@ $renderCard = static function (array $metric) use ($e, $formatValue, $metricRang
     .hour-card.status-neutral { background: #64748b; border-color: #475569; }
     .hour-card-label { display: inline-flex; align-items: center; justify-content: center; gap: 5px; font-size: clamp(18px, 3vw, 27px); font-weight: 900; text-transform: uppercase; }
     .hour-source-icon { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; width: 13px; height: 13px; border-radius: 999px; color: #475569; background: #e2e8f0; font-size: 7px; }
-    .hour-card-value { display: flex; align-items: baseline; justify-content: center; gap: 5px; margin-top: 4px; white-space: nowrap; }
-    .hour-card-value strong { font-size: clamp(31px, 5vw, 48px); line-height: 1; }
+    .hour-card-value { display: flex; max-width: 100%; min-width: 0; align-items: baseline; justify-content: center; gap: 3px; margin-top: 4px; white-space: nowrap; }
+    .hour-card-value strong { max-width: 100%; font-size: clamp(31px, 5vw, 48px); font-variant-numeric: tabular-nums; line-height: 1; }
     .hour-card-value small { font-size: clamp(14px, 2vw, 22px); font-weight: 900; }
+    .hour-card-value strong.value-wide { font-size: clamp(24px, 3.5vw, 36px); letter-spacing: -.02em; }
+    .hour-card-value strong.value-xwide { font-size: clamp(19px, 2.8vw, 29px); letter-spacing: -.035em; }
+    .hour-card.has-ranges .hour-card-value strong.value-wide { font-size: clamp(23px, 3vw, 32px); }
+    .hour-card.has-ranges .hour-card-value strong.value-xwide { font-size: clamp(18px, 2.4vw, 26px); }
+    .hour-card.has-value-wide .hour-card-value small,
+    .hour-card.has-value-xwide .hour-card-value small { font-size: clamp(10px, 1.3vw, 15px); }
     .hour-grid.flows .hour-card-value strong { font-size: clamp(27px, 4vw, 39px); }
     .hour-grid.flows .hour-card-value small { font-size: clamp(12px, 1.5vw, 17px); }
     .hour-grid.flows .hour-card.has-ranges .hour-card-value { gap: 2px; }
     .hour-grid.flows .hour-card.has-ranges .hour-card-value strong { font-size: 25px; }
+    .hour-grid.flows .hour-card-value strong.value-wide { font-size: 22px; }
+    .hour-grid.flows .hour-card-value strong.value-xwide { font-size: 18px; }
+    .hour-grid.flows .hour-card.has-ranges .hour-card-value strong.value-wide { font-size: 21px; }
+    .hour-grid.flows .hour-card.has-ranges .hour-card-value strong.value-xwide { font-size: 17px; }
     .hour-grid.flows .hour-card.has-ranges .hour-card-value small { font-size: 9px; }
     .hour-grid.flows .hour-card-ranges { padding: 6px 4px; gap: 5px; }
     .hour-grid.flows .hour-range-row { grid-template-columns: 7px minmax(42px, auto) minmax(0, 1fr); gap: 3px; font-size: 8px; }
@@ -193,7 +213,7 @@ $renderCard = static function (array $metric) use ($e, $formatValue, $metricRang
     .hour-card-status { margin-top: 6px; font-size: 12px; font-weight: 900; text-transform: uppercase; }
     .hour-card-ranges { width: 100%; margin: 0; padding: 10px; color: #111827; background: #fff; display: grid; align-content: center; gap: 7px; }
     .hour-range-row { display: grid; grid-template-columns: 9px minmax(78px, auto) minmax(0, 1fr); gap: 6px; align-items: center; font-size: 10px; font-weight: 800; text-align: left; }
-    .hour-range-row strong { color: #111827; font-size: 10px; text-align: right; overflow-wrap: anywhere; }
+    .hour-range-row strong { color: #111827; font-size: 10px; line-height: 1.15; text-align: right; white-space: pre-line; }
     .hour-range-dot { width: 9px; height: 9px; border: 1px solid rgba(255,255,255,.7); border-radius: 50%; }
     .hour-range-dot.is-verde { background: #22c55e; }
     .hour-range-dot.is-amarillo { background: #facc15; }
@@ -223,6 +243,10 @@ $renderCard = static function (array $metric) use ($e, $formatValue, $metricRang
     body.capture-mode .hour-section { margin-top: 5px; }
     body.capture-mode .hour-section h2 { margin-bottom: 2px; font-size: 16px; }
     body.capture-mode .frozen-shift { padding: 4px; border-radius: 9px; }
+    body.capture-mode .frozen-shift .hour-card.has-ranges { grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr); }
+    body.capture-mode .frozen-shift .hour-range-row { grid-template-columns: 8px minmax(70px, auto) minmax(0, 1fr); }
+    body.capture-mode .frozen-shift .hour-range-row,
+    body.capture-mode .frozen-shift .hour-range-row strong { font-size: 8.5px; }
     body.capture-mode .hour-grid { gap: 4px; }
     body.capture-mode .hour-card { min-height: 88px; padding: 6px; border-radius: 9px; }
     body.capture-mode .hour-card.has-ranges { min-height: 124px; grid-template-columns: minmax(0, .95fr) minmax(0, 1.05fr); }
@@ -233,23 +257,45 @@ $renderCard = static function (array $metric) use ($e, $formatValue, $metricRang
     body.capture-mode .hour-card-value { margin-top: 2px; }
     body.capture-mode .hour-card-value strong { font-size: 30px; }
     body.capture-mode .hour-card-value small { font-size: 13px; }
+    body.capture-mode .hour-card-value strong.value-wide { font-size: 23px; }
+    body.capture-mode .hour-card-value strong.value-xwide { font-size: 18px; }
+    body.capture-mode .hour-card.has-value-wide .hour-card-value small,
+    body.capture-mode .hour-card.has-value-xwide .hour-card-value small { font-size: 10px; }
     body.capture-mode .hour-grid.flows .hour-card-value strong { font-size: 26px; }
+    body.capture-mode .hour-grid.flows .hour-card-value strong.value-wide { font-size: 22px; }
+    body.capture-mode .hour-grid.flows .hour-card-value strong.value-xwide { font-size: 18px; }
     body.capture-mode .hour-grid.flows .hour-card-value small { font-size: 11px; }
-    body.capture-mode .hour-grid.flows .hour-card.has-ranges .hour-card-value strong { font-size: 24px; }
-    body.capture-mode .hour-grid.flows .hour-card.has-ranges .hour-card-value small { font-size: 8px; }
-    body.capture-mode .hour-grid.flows .hour-card.has-ranges { min-height: 106px; }
-    body.capture-mode .hour-grid.flows .hour-card-ranges { padding: 3px; gap: 2px; }
-    body.capture-mode .hour-grid.flows .hour-range-row {
-      grid-template-columns: 6px minmax(36px, auto) minmax(0, 1fr);
-      gap: 2px;
-      font-size: 7px;
-      line-height: 1.05;
+    body.capture-mode .hour-grid.flows .hour-card.has-ranges {
+      min-height: 126px;
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-rows: 43px minmax(0, 1fr);
     }
-    body.capture-mode .hour-grid.flows .hour-range-row strong { font-size: 7px; line-height: 1.05; }
+    body.capture-mode .hour-grid.flows .hour-card.has-ranges .hour-card-main {
+      min-width: 0;
+      padding: 5px 8px;
+      flex-direction: row;
+      justify-content: space-between;
+      gap: 5px;
+    }
+    body.capture-mode .hour-grid.flows .hour-card.has-ranges .hour-card-label { font-size: 12px; }
+    body.capture-mode .hour-grid.flows .hour-card.has-ranges .hour-card-value { margin-top: 0; }
+    body.capture-mode .hour-grid.flows .hour-card.has-ranges .hour-card-value strong { font-size: 22px; }
+    body.capture-mode .hour-grid.flows .hour-card.has-ranges .hour-card-value strong.value-wide { font-size: 19px; }
+    body.capture-mode .hour-grid.flows .hour-card.has-ranges .hour-card-value strong.value-xwide { font-size: 16px; }
+    body.capture-mode .hour-grid.flows .hour-card.has-ranges .hour-card-value small { font-size: 8px; }
+    body.capture-mode .hour-grid.flows .hour-card-ranges { padding: 5px 7px; gap: 3px; }
+    body.capture-mode .hour-grid.flows .hour-range-row {
+      grid-template-columns: 6px minmax(54px, auto) minmax(0, 1fr);
+      gap: 4px;
+      font-size: 7.5px;
+      line-height: 1.1;
+    }
+    body.capture-mode .hour-grid.flows .hour-range-row strong { font-size: 7.5px; line-height: 1.1; }
     body.capture-mode .hour-grid.flows .hour-range-dot { width: 6px; height: 6px; }
     body.capture-mode .hour-card-status { margin-top: 3px; font-size: 10px; }
-    body.capture-mode .hour-card-ranges { padding: 5px; gap: 4px; }
-    body.capture-mode .hour-range-row, body.capture-mode .hour-range-row strong { font-size: 9px; }
+    body.capture-mode .hour-card-ranges { padding: 6px 8px; gap: 5px; }
+    body.capture-mode .hour-range-row { grid-template-columns: 8px minmax(78px, auto) minmax(0, 1fr); gap: 5px; }
+    body.capture-mode .hour-range-row, body.capture-mode .hour-range-row strong { font-size: 9px; line-height: 1.15; }
     body.capture-mode .shift-summary { gap: 7px; margin-top: 7px; }
     body.capture-mode .shift-card { min-height: 170px; padding: 12px; border-radius: 12px; }
     body.capture-mode .shift-card-value { font-size: 68px; }

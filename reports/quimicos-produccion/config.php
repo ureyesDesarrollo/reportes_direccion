@@ -34,7 +34,7 @@ return [
   'grupo_estructura' => [
     'enzimas_preparacion' => [
       'titulo' => 'ENZIMA Preparación / Producción',
-      'productos' => ['DETERZYME1', 'COROLASE'],
+      'productos' => ['DETERZYME1', 'COROLASE', 'QUI0000001'],
     ],
     'enzimas_pelambre' => [
       'titulo' => 'ENZIMA Pelambre / Producción',

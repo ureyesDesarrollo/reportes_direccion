@@ -443,6 +443,49 @@ if ($acumuladoHorasEvaluadas > 0) {
   $metricConfig['acumulado']['usa_valor_anterior'] = $acumuladoUsaAnterior;
 }
 
+// En la vista hora por hora, las tarimas se comparan contra el avance esperado
+// del turno y no contra las 12 tarimas del cierre desde la primera hora.
+// La meta es una tarima por hora; amarillo representa una tarima de atraso.
+$tarimasHorasEvaluadas = $elapsedShiftSeconds > 0
+  ? min(12, max(1, (int)ceil($elapsedShiftSeconds / 3600)))
+  : 0;
+if ($tarimasHorasEvaluadas > 0) {
+  $tarimasVerdeMin = $tarimasHorasEvaluadas;
+  $tarimasAmarilloMin = max(1, $tarimasVerdeMin - 1);
+  $metricConfig['tarimas']['amarillo_min'] = $tarimasAmarilloMin;
+  $metricConfig['tarimas']['verde_min'] = $tarimasVerdeMin;
+  $tarimasBands = [
+    [
+      'max' => $tarimasAmarilloMin - 0.000001,
+      'estado' => 'rojo',
+      'leyenda' => '< ' . number_format($tarimasAmarilloMin, 0, '.', ','),
+    ],
+  ];
+  if ($tarimasAmarilloMin < $tarimasVerdeMin) {
+    $tarimasBands[] = [
+      'min' => $tarimasAmarilloMin,
+      'max' => $tarimasVerdeMin - 0.000001,
+      'estado' => 'amarillo',
+      'leyenda' => number_format($tarimasAmarilloMin, 0, '.', ','),
+    ];
+  }
+  $tarimasBands[] = [
+    'min' => $tarimasVerdeMin,
+    'estado' => 'verde',
+    'leyenda' => '≥ ' . number_format($tarimasVerdeMin, 0, '.', ','),
+  ];
+  $metricConfig['tarimas']['semaforo'] = [
+    'modo' => 'bandas',
+    'bandas' => $tarimasBands,
+  ];
+  $metricConfig['tarimas']['horas_transcurridas'] = $tarimasHorasEvaluadas;
+} else {
+  $metricConfig['tarimas']['amarillo_min'] = null;
+  $metricConfig['tarimas']['verde_min'] = null;
+  $metricConfig['tarimas']['semaforo'] = [];
+  $metricConfig['tarimas']['horas_transcurridas'] = 0;
+}
+
 $statusFor = static function ($value, array $metric): string {
   if (!is_numeric($value)) {
     return 'neutral';

@@ -14,6 +14,10 @@ html.report-is-loading .report-global-loader {
   display: grid;
 }
 
+body.capture-mode .report-global-loader {
+  display: none !important;
+}
+
 .report-global-loader-card {
   display: grid;
   justify-items: center;
