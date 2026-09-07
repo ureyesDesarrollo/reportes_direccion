@@ -1134,8 +1134,9 @@ $normalizeVotators = static function (
       $history = [];
       $weekHistory = [];
       $monthHistory = [];
+      $historyEnabled = !array_key_exists('history', $field) || $field['history'] !== false;
 
-      if ($source === 'sqlserver' && $sourceField !== '') {
+      if ($historyEnabled && $source === 'sqlserver' && $sourceField !== '') {
         foreach ($metricHistoryRows as $historyRow) {
           $historyValue = $historyRow[$sourceField] ?? null;
           $historyNumericValue = is_numeric($historyValue) ? (float)$historyValue : null;

@@ -97,7 +97,7 @@ $reglaSolidosVotator = (array)($masterVotatorRules['solidos'] ?? []);
 
 $camposBaseVotator = [
   'flujo' => $crearCampoBase('Flujo'),
-  'presion_cuajado' => $crearCampoBase('Presión de cuajado', 'kg/cm2', [
+  'presion_cuajado' => $crearCampoBase('Presión cuajado', 'kg/cm2', [
     'rule' => [
       'verde_min' => 24,
       'verde_max' => 26,
@@ -141,18 +141,30 @@ $camposSqlVotator = [
     'votator_1' => $crearEquipoVotator('', [
       'amperaje_bomba' => $crearSensorVotator('amperaje_bomba', 'CORRIENTE_DE_EXTRUSOR_V1_SA'),
       'solidos' => $sensorSolidosVotator,
+      'tiempo_fuera' => $crearSensor('Tiempo fuera', 'TIEMPO_FUERA_VOTATOR_1', '', [
+        'history' => false,
+      ]),
     ]),
     'votator_2' => $crearEquipoVotator('', [
       'amperaje_bomba' => $crearSensorVotator('amperaje_bomba', 'CORRIENTE_DE_EXTRUSOR'),
       'solidos' => $sensorSolidosVotator,
+      'tiempo_fuera' => $crearSensor('Tiempo fuera', 'TIEMPO_FUERA_VOTATOR_2', '', [
+        'history' => false,
+      ]),
     ]),
   ],
   'tunel_2' => [
     'votator_3' => $crearEquipoVotator('', [
       'solidos' => $sensorSolidosVotator,
+      'corriente_votator' => $crearSensor('Corriente', 'CORRIENTE_VOTATOR_3', 'A', [
+        'history' => false,
+      ]),
     ]),
     'votator_4' => $crearEquipoVotator('', [
       'solidos' => $sensorSolidosVotator,
+      'corriente_votator' => $crearSensor('Corriente', 'CORRIENTE_VOTATOR_4', 'A', [
+        'history' => false,
+      ]),
     ]),
     'votator_5' => $crearEquipoVotator('Votator 5', [
       'flujo' => $crearSensorVotator('flujo', 'flujo_votator_3', [
@@ -353,7 +365,7 @@ $configuracionSecadores = [
   'temperaturas_limite' => 0,
   'tuneles_placeholder' => [],
   'metricas' => $camposSecadores,
-  'votator_campos' => array_keys($camposBaseVotator),
+  'votator_campos' => array_merge(array_keys($camposBaseVotator), ['tiempo_fuera', 'corriente_votator']),
   'votators_placeholder' => [
     'votator_5' => 'Votator 5',
     'votator_6' => 'Votator 6',

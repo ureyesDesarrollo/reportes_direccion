@@ -109,30 +109,157 @@ $secondaryProductionKilosSql = "t.tar_kilos * CASE
   WHEN {$primaryProcessIsCarnazaSql} AND NOT {$secondaryProcessIsCarnazaSql} THEN 0.30
   ELSE 0.50
 END";
-$periodProcessSql = "
-  SELECT DISTINCT process_id AS pro_id
-  FROM (
-    SELECT t.pro_id AS process_id, {$operationDateSql} AS op_dia
-    FROM rev_tarimas t
-    WHERE t.tar_fecha >= ?
-      AND t.tar_fecha < ?
-      AND t.tar_count_etiquetado > 0
-    UNION ALL
-    SELECT t.pro_id_2 AS process_id, {$operationDateSql} AS op_dia
-    FROM rev_tarimas t
-    WHERE t.tar_fecha >= ?
-      AND t.tar_fecha < ?
-      AND t.tar_count_etiquetado > 0
-      AND t.pro_id_2 IS NOT NULL
-      AND t.pro_id_2 <> 0
-      AND t.pro_id_2 <> t.pro_id
-  ) period_process_source
-  WHERE op_dia >= ?
-    AND op_dia < ?
-    AND process_id IS NOT NULL
-    AND process_id <> 0
-";
-$periodProcessParams = [$startDateTime, $endDateTime, $startDateTime, $endDateTime, $startDate, $endDate];
+$selectedYieldMonth = sprintf('%04d-%02d', $selectedYear, $selectedMonth);
+$closedProcessProductionStmt = $pdo->query("
+  SELECT
+    t.pro_id,
+    t.pro_id_2,
+    DATE_FORMAT({$operationDateSql}, '%Y-%m') AS operation_month,
+    COUNT(*) AS tarimas,
+    SUM(t.tar_kilos) AS kilos,
+    SUM({$primaryProductionKilosSql}) AS kilos_primario,
+    SUM(CASE
+      WHEN t.pro_id_2 IS NOT NULL AND t.pro_id_2 <> 0 AND t.pro_id_2 <> t.pro_id
+        THEN {$secondaryProductionKilosSql}
+      ELSE 0
+    END) AS kilos_secundario
+  FROM rev_tarimas t
+  WHERE t.tar_count_etiquetado > 0
+    AND t.pro_id IS NOT NULL
+    AND t.pro_id <> 0
+    AND EXISTS (
+      SELECT 1
+      FROM procesos_agrupados pa_cerrado_1
+      INNER JOIN lotes_anio lote_cerrado_1
+        ON lote_cerrado_1.lote_id = pa_cerrado_1.lote_id
+       AND lote_cerrado_1.lote_estatus = 3
+      WHERE pa_cerrado_1.pro_id = t.pro_id
+    )
+    AND (
+      t.pro_id_2 IS NULL
+      OR t.pro_id_2 = 0
+      OR t.pro_id_2 = t.pro_id
+      OR EXISTS (
+        SELECT 1
+        FROM procesos_agrupados pa_cerrado_2
+        INNER JOIN lotes_anio lote_cerrado_2
+          ON lote_cerrado_2.lote_id = pa_cerrado_2.lote_id
+         AND lote_cerrado_2.lote_estatus = 3
+        WHERE pa_cerrado_2.pro_id = t.pro_id_2
+      )
+    )
+  GROUP BY t.pro_id, t.pro_id_2, operation_month
+  ORDER BY t.pro_id, t.pro_id_2, operation_month
+");
+$processPairKey = static function (int $processId1, int $processId2): string {
+  $processId2 = $processId2 > 0 && $processId2 !== $processId1 ? $processId2 : 0;
+  return $processId1 . '|' . $processId2;
+};
+$closedPairProduction = [];
+foreach ($closedProcessProductionStmt->fetchAll() ?: [] as $productionRow) {
+  $processId1 = (int)($productionRow['pro_id'] ?? 0);
+  $processId2 = (int)($productionRow['pro_id_2'] ?? 0);
+  $operationMonth = (string)($productionRow['operation_month'] ?? '');
+  if ($processId1 <= 0 || $operationMonth === '') {
+    continue;
+  }
+
+  $pairKey = $processPairKey($processId1, $processId2);
+  if (!isset($closedPairProduction[$pairKey])) {
+    $closedPairProduction[$pairKey] = [
+      'pro_id' => $processId1,
+      'pro_id_2' => $processId2 > 0 && $processId2 !== $processId1 ? $processId2 : 0,
+      'kilos' => 0.0,
+      'kilos_primario' => 0.0,
+      'kilos_secundario' => 0.0,
+      'tarimas' => 0,
+      'periodos' => [],
+      'periodo_dominante' => null,
+    ];
+  }
+  $closedPairProduction[$pairKey]['kilos'] += (float)($productionRow['kilos'] ?? 0);
+  $closedPairProduction[$pairKey]['kilos_primario'] += (float)($productionRow['kilos_primario'] ?? 0);
+  $closedPairProduction[$pairKey]['kilos_secundario'] += (float)($productionRow['kilos_secundario'] ?? 0);
+  $closedPairProduction[$pairKey]['tarimas'] += (int)($productionRow['tarimas'] ?? 0);
+  $closedPairProduction[$pairKey]['periodos'][$operationMonth] = [
+    'tarimas' => (int)($productionRow['tarimas'] ?? 0),
+    'kilos' => (float)($productionRow['kilos'] ?? 0),
+  ];
+}
+
+foreach ($closedPairProduction as &$processProduction) {
+  $dominantMonth = null;
+  $dominantValues = ['tarimas' => -1, 'kilos' => -1.0];
+  foreach ($processProduction['periodos'] as $operationMonth => $periodValues) {
+    $isDominant = (int)$periodValues['tarimas'] > (int)$dominantValues['tarimas']
+      || (
+        (int)$periodValues['tarimas'] === (int)$dominantValues['tarimas']
+        && (float)$periodValues['kilos'] > (float)$dominantValues['kilos']
+      )
+      || (
+        (int)$periodValues['tarimas'] === (int)$dominantValues['tarimas']
+        && (float)$periodValues['kilos'] === (float)$dominantValues['kilos']
+        && ($dominantMonth === null || strcmp((string)$operationMonth, $dominantMonth) < 0)
+      );
+    if ($isDominant) {
+      $dominantMonth = (string)$operationMonth;
+      $dominantValues = $periodValues;
+    }
+  }
+  $processProduction['periodo_dominante'] = $dominantMonth;
+}
+unset($processProduction);
+
+$selectedProcessProduction = [];
+foreach ($closedPairProduction as $pairProduction) {
+  if (($pairProduction['periodo_dominante'] ?? null) !== $selectedYieldMonth) {
+    continue;
+  }
+
+  $processId1 = (int)($pairProduction['pro_id'] ?? 0);
+  $processId2 = (int)($pairProduction['pro_id_2'] ?? 0);
+  if (!isset($selectedProcessProduction[$processId1])) {
+    $selectedProcessProduction[$processId1] = ['kilos' => 0.0, 'tarimas' => 0];
+  }
+  $selectedProcessProduction[$processId1]['kilos'] += (float)($pairProduction['kilos_primario'] ?? 0);
+  $selectedProcessProduction[$processId1]['tarimas'] += (int)($pairProduction['tarimas'] ?? 0);
+
+  if ($processId2 > 0) {
+    if (!isset($selectedProcessProduction[$processId2])) {
+      $selectedProcessProduction[$processId2] = ['kilos' => 0.0, 'tarimas' => 0];
+    }
+    $selectedProcessProduction[$processId2]['kilos'] += (float)($pairProduction['kilos_secundario'] ?? 0);
+  }
+}
+
+$pdo->exec("
+  CREATE TEMPORARY TABLE tmp_materia_prima_rendimiento (
+    pro_id INT NOT NULL PRIMARY KEY,
+    kilos_producidos DECIMAL(18,4) NOT NULL,
+    tarimas INT NOT NULL
+  ) ENGINE=MEMORY
+");
+$insertYieldProcessStmt = $pdo->prepare("
+  INSERT INTO tmp_materia_prima_rendimiento (pro_id, kilos_producidos, tarimas)
+  VALUES (?, ?, ?)
+");
+$selectedYieldProcessIds = [];
+foreach ($selectedProcessProduction as $processId => $processProduction) {
+  $selectedYieldProcessIds[] = (int)$processId;
+  $insertYieldProcessStmt->execute([
+    (int)$processId,
+    (float)($processProduction['kilos'] ?? 0),
+    (int)($processProduction['tarimas'] ?? 0),
+  ]);
+}
+
+$periodProcessSql = $selectedYieldProcessIds === []
+  ? 'SELECT NULL AS pro_id WHERE 1 = 0'
+  : implode(' UNION ALL ', array_map(
+    static fn(int $processId): string => 'SELECT ' . $processId . ' AS pro_id',
+    $selectedYieldProcessIds
+  ));
+$periodProcessParams = [];
 
 $materialTypeSql = '';
 $materialParams = [];
@@ -200,21 +327,12 @@ $purchaseSummaryStmt = $pdo->prepare("
 $purchaseSummaryStmt->execute($purchaseParams);
 $purchaseSummary = $purchaseSummaryStmt->fetch() ?: [];
 
-$productionStmt = $pdo->prepare("
+$productionStmt = $pdo->query("
   SELECT
-    SUM(tar_kilos) AS kilos_producidos,
-    COUNT(*) AS tarimas
-  FROM (
-    SELECT t.*, {$operationDateSql} AS op_dia
-    FROM rev_tarimas t
-    WHERE t.tar_fecha >= ?
-      AND t.tar_fecha < ?
-      AND t.tar_count_etiquetado > 0
-  ) p
-  WHERE p.op_dia >= ?
-    AND p.op_dia < ?
+    SUM(kilos_producidos) AS kilos_producidos,
+    SUM(tarimas) AS tarimas
+  FROM tmp_materia_prima_rendimiento
 ");
-$productionStmt->execute([$startDateTime, $endDateTime, $startDate, $endDate]);
 $production = $productionStmt->fetch() ?: [];
 
 $dailyStmt = $pdo->prepare("
@@ -429,28 +547,7 @@ $materialYieldStmt = $pdo->prepare("
       INNER JOIN inventario i_total ON i_total.inv_id = pm_total.inv_id
       GROUP BY pm_total.pro_id
     ) pt ON pt.pro_id = pm.pro_id
-    LEFT JOIN (
-      SELECT process_id AS pro_id, SUM(kilos) AS kilos_producidos
-      FROM (
-        SELECT t.pro_id AS process_id, {$primaryProductionKilosSql} AS kilos, {$operationDateSql} AS op_dia
-        FROM rev_tarimas t
-        WHERE t.tar_fecha >= ?
-          AND t.tar_fecha < ?
-          AND t.tar_count_etiquetado > 0
-        UNION ALL
-        SELECT t.pro_id_2 AS process_id, {$secondaryProductionKilosSql} AS kilos, {$operationDateSql} AS op_dia
-        FROM rev_tarimas t
-        WHERE t.tar_fecha >= ?
-          AND t.tar_fecha < ?
-          AND t.tar_count_etiquetado > 0
-          AND t.pro_id_2 IS NOT NULL
-          AND t.pro_id_2 <> 0
-          AND t.pro_id_2 <> t.pro_id
-      ) production_by_process
-      WHERE op_dia >= ?
-        AND op_dia < ?
-      GROUP BY process_id
-    ) po ON po.pro_id = pm.pro_id
+    LEFT JOIN tmp_materia_prima_rendimiento po ON po.pro_id = pm.pro_id
     WHERE 1 = 1
       {$materialTypeSql}
     GROUP BY grupo, pm.pro_id, m.mat_id, po.kilos_producidos, pt.kilos_proceso
@@ -460,7 +557,6 @@ $materialYieldStmt = $pdo->prepare("
 ");
 $yieldParams = array_merge(
   $periodProcessParams,
-  [$startDateTime, $endDateTime, $startDateTime, $endDateTime, $startDate, $endDate],
   $materialParams
 );
 $materialYields = array_map(static function (array $row): array {
@@ -544,28 +640,7 @@ $providerStmt = $pdo->prepare("
       INNER JOIN inventario i_total ON i_total.inv_id = pm_total.inv_id
       GROUP BY pm_total.pro_id
     ) pt ON pt.pro_id = pm.pro_id
-    LEFT JOIN (
-      SELECT process_id AS pro_id, SUM(kilos) AS kilos_producidos
-      FROM (
-        SELECT t.pro_id AS process_id, {$primaryProductionKilosSql} AS kilos, {$operationDateSql} AS op_dia
-        FROM rev_tarimas t
-        WHERE t.tar_fecha >= ?
-          AND t.tar_fecha < ?
-          AND t.tar_count_etiquetado > 0
-        UNION ALL
-        SELECT t.pro_id_2 AS process_id, {$secondaryProductionKilosSql} AS kilos, {$operationDateSql} AS op_dia
-        FROM rev_tarimas t
-        WHERE t.tar_fecha >= ?
-          AND t.tar_fecha < ?
-          AND t.tar_count_etiquetado > 0
-          AND t.pro_id_2 IS NOT NULL
-          AND t.pro_id_2 <> 0
-          AND t.pro_id_2 <> t.pro_id
-      ) production_by_process
-      WHERE op_dia >= ?
-        AND op_dia < ?
-      GROUP BY process_id
-    ) po ON po.pro_id = pm.pro_id
+    LEFT JOIN tmp_materia_prima_rendimiento po ON po.pro_id = pm.pro_id
     WHERE 1 = 1
       {$materialTypeSql}
     GROUP BY prv_id, proveedor, pm.pro_id, m.mat_id, po.kilos_producidos, pt.kilos_proceso
@@ -576,7 +651,6 @@ $providerStmt = $pdo->prepare("
 ");
 $providerParams = array_merge(
   $periodProcessParams,
-  [$startDateTime, $endDateTime, $startDateTime, $endDateTime, $startDate, $endDate],
   $materialParams
 );
 $providerStmt->execute($providerParams);
@@ -626,28 +700,7 @@ $providerMaterialStmt = $pdo->prepare("
       INNER JOIN inventario i_total ON i_total.inv_id = pm_total.inv_id
       GROUP BY pm_total.pro_id
     ) pt ON pt.pro_id = pm.pro_id
-    LEFT JOIN (
-      SELECT process_id AS pro_id, SUM(kilos) AS kilos_producidos
-      FROM (
-        SELECT t.pro_id AS process_id, {$primaryProductionKilosSql} AS kilos, {$operationDateSql} AS op_dia
-        FROM rev_tarimas t
-        WHERE t.tar_fecha >= ?
-          AND t.tar_fecha < ?
-          AND t.tar_count_etiquetado > 0
-        UNION ALL
-        SELECT t.pro_id_2 AS process_id, {$secondaryProductionKilosSql} AS kilos, {$operationDateSql} AS op_dia
-        FROM rev_tarimas t
-        WHERE t.tar_fecha >= ?
-          AND t.tar_fecha < ?
-          AND t.tar_count_etiquetado > 0
-          AND t.pro_id_2 IS NOT NULL
-          AND t.pro_id_2 <> 0
-          AND t.pro_id_2 <> t.pro_id
-      ) production_by_process
-      WHERE op_dia >= ?
-        AND op_dia < ?
-      GROUP BY process_id
-    ) po ON po.pro_id = pm.pro_id
+    LEFT JOIN tmp_materia_prima_rendimiento po ON po.pro_id = pm.pro_id
     WHERE 1 = 1
       {$materialTypeSql}
     GROUP BY prv_id, proveedor, grupo, pm.pro_id, m.mat_id, po.kilos_producidos, pt.kilos_proceso
@@ -657,7 +710,6 @@ $providerMaterialStmt = $pdo->prepare("
 ");
 $providerMaterialParams = array_merge(
   $periodProcessParams,
-  [$startDateTime, $endDateTime, $startDateTime, $endDateTime, $startDate, $endDate],
   $materialParams
 );
 $providerMaterialStmt->execute($providerMaterialParams);
@@ -732,7 +784,9 @@ return [
     'periodo_fin' => $periodEnd->modify('-1 day')->format('Y-m-d'),
     'intervaloActualizacion' => (int)($config['intervalo_actualizacion_ms'] ?? ($appConfig['intervalo_actualizacion'] ?? 300000)),
     'agrupador_materiales' => (string)($config['agrupador_materiales'] ?? 'tipo'),
-    'nota_rendimiento' => 'Rendimiento = kilos producidos etiquetados / kilos secos de compra en inventario (inv_kilos).',
+    'nota_rendimiento' => 'Rendimiento = producción total de procesos cerrados / materia prima total. Cada proceso se asigna al mes operativo con más tarimas.',
+    'rendimiento_solo_procesos_cerrados' => true,
+    'rendimiento_asignado_mes_mayor_tarimas' => true,
   ],
   'version' => max(
     @filemtime(__FILE__) ?: time(),
