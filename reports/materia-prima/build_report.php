@@ -37,6 +37,7 @@ $safeInt = static function ($value, int $fallback, int $min, int $max): int {
 };
 
 $horaCorte = (string)($config['hora_corte'] ?? '07:00:00');
+$barreduraProId = (int)($config['barredura_pro_id'] ?? 2);
 if (preg_match('/^(\d{2}):(\d{2}):(\d{2})$/', $horaCorte) !== 1) {
   $horaCorte = '07:00:00';
 }
@@ -127,6 +128,8 @@ $closedProcessProductionStmt = $pdo->query("
   WHERE t.tar_count_etiquetado > 0
     AND t.pro_id IS NOT NULL
     AND t.pro_id <> 0
+    AND t.pro_id <> {$barreduraProId}
+    AND (t.pro_id_2 IS NULL OR t.pro_id_2 = 0 OR t.pro_id_2 <> {$barreduraProId})
     AND EXISTS (
       SELECT 1
       FROM procesos_agrupados pa_cerrado_1
@@ -334,6 +337,31 @@ $productionStmt = $pdo->query("
   FROM tmp_materia_prima_rendimiento
 ");
 $production = $productionStmt->fetch() ?: [];
+
+$barreduraStmt = $pdo->prepare("
+  SELECT
+    COALESCE(SUM(d.tar_kilos), 0) AS kilos,
+    COUNT(*) AS tarimas
+  FROM (
+    SELECT t.*, {$operationDateSql} AS op_dia
+    FROM rev_tarimas t
+    WHERE t.tar_fecha >= ?
+      AND t.tar_fecha < ?
+      AND t.tar_count_etiquetado > 0
+  ) d
+  WHERE d.op_dia >= ?
+    AND d.op_dia < ?
+    AND (d.pro_id = ? OR d.pro_id_2 = ?)
+");
+$barreduraStmt->execute([
+  $startDateTime,
+  $endDateTime,
+  $startDate,
+  $endDate,
+  $barreduraProId,
+  $barreduraProId,
+]);
+$barredura = $barreduraStmt->fetch() ?: [];
 
 $dailyStmt = $pdo->prepare("
   SELECT
@@ -731,7 +759,9 @@ $providerMaterials = array_map(static function (array $row): array {
 }, $providerMaterialStmt->fetchAll() ?: []);
 
 $kilosConsumidos = (float)($summary['kilos_consumidos'] ?? 0);
-$kilosProducidos = (float)($production['kilos_producidos'] ?? 0);
+$kilosProcesosCerrados = (float)($production['kilos_producidos'] ?? 0);
+$kilosBarredura = (float)($barredura['kilos'] ?? 0);
+$kilosProducidos = $kilosProcesosCerrados + $kilosBarredura;
 $rendimiento = $kilosConsumidos > 0 ? ($kilosProducidos / $kilosConsumidos) * 100 : null;
 $precioPromedioTotal = is_numeric($purchaseSummary['precio_promedio'] ?? null) ? (float)$purchaseSummary['precio_promedio'] : null;
 $precioMaquilaTotal = is_numeric($purchaseSummary['precio_maquila'] ?? null) ? (float)$purchaseSummary['precio_maquila'] : null;
@@ -753,6 +783,8 @@ return [
     'toneladas_consumidas' => $kilosConsumidos / 1000,
     'kilos_producidos' => $kilosProducidos,
     'toneladas_producidas' => $kilosProducidos / 1000,
+    'kilos_procesos_cerrados' => $kilosProcesosCerrados,
+    'kilos_barredura_rendimiento' => $kilosBarredura,
     'rendimiento' => $rendimiento,
     'procesos' => (int)($summary['procesos'] ?? 0),
     'partidas' => (int)($summary['partidas'] ?? 0),
@@ -784,9 +816,11 @@ return [
     'periodo_fin' => $periodEnd->modify('-1 day')->format('Y-m-d'),
     'intervaloActualizacion' => (int)($config['intervalo_actualizacion_ms'] ?? ($appConfig['intervalo_actualizacion'] ?? 300000)),
     'agrupador_materiales' => (string)($config['agrupador_materiales'] ?? 'tipo'),
-    'nota_rendimiento' => 'Rendimiento = producción total de procesos cerrados / materia prima total. Cada proceso se asigna al mes operativo con más tarimas.',
-    'rendimiento_solo_procesos_cerrados' => true,
+    'nota_rendimiento' => 'Rendimiento general = producción total de procesos cerrados más barredura / materia prima total. Cada proceso cerrado se asigna al mes operativo con más tarimas.',
+    'rendimiento_solo_procesos_cerrados' => false,
+    'rendimiento_procesos_solo_cerrados' => true,
     'rendimiento_asignado_mes_mayor_tarimas' => true,
+    'rendimiento_general_incluye_barredura' => true,
   ],
   'version' => max(
     @filemtime(__FILE__) ?: time(),

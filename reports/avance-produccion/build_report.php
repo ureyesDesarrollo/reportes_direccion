@@ -261,6 +261,8 @@ $processStmt = $pdo->prepare("
     AND d.pro_id_2 <> d.pro_id
   WHERE d.op_dia >= ?
     AND d.op_dia < ?
+    AND d.pro_id <> ?
+    AND (d.pro_id_2 IS NULL OR d.pro_id_2 = 0 OR d.pro_id_2 <> ?)
     AND EXISTS (
       SELECT 1
       FROM procesos_agrupados pa_cerrado_1
@@ -290,6 +292,8 @@ $processStmt->execute([
   $periodQueryEnd->format('Y-m-d H:i:s'),
   $periodStart->format('Y-m-d'),
   $periodEnd->format('Y-m-d'),
+  $barreduraProId,
+  $barreduraProId,
 ]);
 
 $processRows = [];
@@ -438,6 +442,7 @@ $totalToneladas = array_sum(array_map(static fn(array $row): float => (float)$ro
 $totalTarimas = array_sum(array_map(static fn(array $row): int => (int)$row['tarimas'], $dailySeries));
 $totalTarimasFinos = array_sum(array_map(static fn(array $row): int => (int)$row['tarimas_finos'], $dailySeries));
 $totalBarreduraTon = array_sum(array_map(static fn(array $row): float => (float)$row['barredura_ton'], $dailySeries));
+$totalBarreduraKilos = $totalBarreduraTon * 1000;
 $totalKilosTarimas = array_sum(array_map(static fn(array $row): float => (float)$row['kilos'], $dailySeries));
 $currentProductionDateKey = $currentProductionDate->format('Y-m-d');
 $totalToneladasCerradas = array_sum(array_map(
@@ -447,7 +452,9 @@ $totalToneladasCerradas = array_sum(array_map(
   $dailySeries
 ));
 $porcentajeFinos = $totalTarimas > 0 ? ($totalTarimasFinos / $totalTarimas) * 100 : 0.0;
-$rendimientoGlobal = $totalMpKilos > 0 ? ($totalProcessKilos / $totalMpKilos) * 100 : 0.0;
+$totalRendimientoKilos = $totalProcessKilos + $totalBarreduraKilos;
+$rendimientoProcesos = $totalMpKilos > 0 ? ($totalProcessKilos / $totalMpKilos) * 100 : 0.0;
+$rendimientoGlobal = $totalMpKilos > 0 ? ($totalRendimientoKilos / $totalMpKilos) * 100 : 0.0;
 
 $daysInRange = max(1, (int)$periodStart->diff($periodEnd)->days);
 $objetivoTarimasPeriodo = $objetivoDiarioTarimas * $daysInRange;
@@ -528,7 +535,8 @@ return [
     'tarimas' => $totalTarimas,
     'barredura_toneladas' => $totalBarreduraTon,
     'kilos_tarimas' => $totalKilosTarimas,
-    'kilos_tarimas_rendimiento' => $totalProcessKilos,
+    'kilos_tarimas_rendimiento' => $totalRendimientoKilos,
+    'kilos_barredura_rendimiento' => $totalBarreduraKilos,
     'mp_kilos' => $totalMpKilos,
   ],
   'series' => [
@@ -544,7 +552,7 @@ return [
       'toneladas' => $totalProcessToneladas,
       'mp_kilos' => $totalMpKilos,
       'tarimas_finos' => $totalProcessFinos,
-      'rendimiento' => $rendimientoGlobal,
+      'rendimiento' => $rendimientoProcesos,
     ],
   ],
   'meta' => [
@@ -552,8 +560,10 @@ return [
     'hora_corte' => $horaCorte,
     'intervaloActualizacion' => $intervaloActualizacion,
     'actualizado' => (new DateTimeImmutable('now', $tz))->format('d/m/Y H:i'),
-    'rendimiento_solo_procesos_cerrados' => true,
+    'rendimiento_solo_procesos_cerrados' => false,
+    'rendimiento_procesos_solo_cerrados' => true,
     'rendimiento_asignado_periodo_mayor_tarimas' => true,
+    'rendimiento_general_incluye_barredura' => true,
   ],
   'version' => max(
     @filemtime(__FILE__) ?: time(),
