@@ -228,7 +228,7 @@ $invertidoMetricGroups = [
     .concentradores-exec-metrics {
       display: grid;
       grid-template-columns: repeat(6, minmax(0, 1fr));
-      grid-auto-rows: minmax(132px, 1fr);
+      grid-auto-rows: minmax(142px, 1fr);
       gap: 8px;
       flex: 1;
     }
@@ -239,7 +239,7 @@ $invertidoMetricGroups = [
       align-items: flex-start;
       gap: 10px;
       min-width: 0;
-      min-height: 132px;
+      min-height: 142px;
       padding: 10px 11px;
       border: 1px solid #0284c7;
       border-radius: 12px;
@@ -334,7 +334,7 @@ $invertidoMetricGroups = [
 
     .concentradores-exec-panel[data-concentrator="invertido"] .concentradores-exec-metric {
       grid-column: auto;
-      min-height: 92px;
+      min-height: 112px;
       padding: 9px;
     }
 
@@ -353,6 +353,10 @@ $invertidoMetricGroups = [
       opacity: 0.95;
     }
 
+    .concentradores-exec-metric > i {
+      display: none;
+    }
+
     .concentradores-exec-metric-body {
       display: flex;
       flex-direction: column;
@@ -363,14 +367,28 @@ $invertidoMetricGroups = [
 
     .concentradores-exec-metric-label {
       display: flex;
-      align-items: center;
+      align-items: flex-start;
+      justify-content: space-between;
       gap: 6px;
-      min-height: 24px;
-      font-size: 10px;
+      min-height: 40px;
+      font-size: 11px;
       font-weight: 900;
+      line-height: 1.15;
       letter-spacing: 0;
       text-transform: uppercase;
       opacity: 0.9;
+    }
+
+    .concentradores-exec-metric-label > [data-field="label"] {
+      display: block;
+      flex: 1 1 auto;
+      min-width: 0;
+      max-width: calc(100% - 22px);
+      white-space: normal;
+      overflow: visible;
+      overflow-wrap: break-word;
+      word-break: normal;
+      text-overflow: clip;
     }
 
     .concentradores-exec-source {

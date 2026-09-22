@@ -5,6 +5,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../shared/helpers.php';
 require_once __DIR__ . '/../../shared/ReportHelpers.php';
 require_once __DIR__ . '/../../shared/ReportEngine.php';
+require_once __DIR__ . '/../../shared/ChemicalMovementsApi.php';
 
 /** @var array $appConfig */
 /** @var array $dbConfig */
@@ -55,32 +56,24 @@ if ($cached !== null) {
   return $cached;
 }
 
-$state = ReportEngine::createContext($config, $appConfig, $dbConfig);
-$pdoMovs = $state['pdoMovs'];
-$pdoProd = $state['pdoProd'];
-$campoFechaMovsSql = $state['campoFechaMovsSql'];
-$weekFields = $state['weekFields'];
-$campoCostoSql = "m.`{$campoCosto}`";
-
-// Detectar el lugar real para el producto seleccionado
-// SOLO buscar en EMPAQUES
-$sqlDetectarLugar = "
-    SELECT m.LUGAR
-    FROM movs m
-    WHERE TRIM(m.CVE_PROD) = ?
-    AND m.LUGAR = 'EMPAQUES'
-    LIMIT 1
-";
-$stmtLugar = $pdoMovs->prepare($sqlDetectarLugar);
-$stmtLugar->execute([$productoSeleccionado]);
-$lugarRow = $stmtLugar->fetch();
-$lugarReal = $lugarRow ? $lugarRow['LUGAR'] : 'EMPAQUES';
-
-// Usar EMPAQUES siempre
-$lugar = 'EMPAQUES';
-
-$consumoExpr = getConsumoExpression();
-$costoPromedioExpr = getCostoExpression($campoCosto);
+$sourceWarnings = [];
+$pdoProd = null;
+try {
+  $pdoProd = conectar($dbConfig['prod']);
+} catch (Throwable $exception) {
+  $sourceWarnings[] = 'La producción no está disponible; el consumo y costo del empaque continúan visibles.';
+}
+$timezone = new DateTimeZone((string)($config['timezone'] ?? 'America/Mexico_City'));
+$apiConfig = (array)($config['movimientos_api'] ?? []);
+$apiConfig['productos_a_ignorar'] = (array)($config['productos_a_ignorar'] ?? []);
+$apiResult = loadChemicalMovementsApi($apiConfig, [$anioAnterior, $anioActual], [], $timezone);
+$movimientosEmpaque = array_values(array_filter((array)($apiResult['movements'] ?? []), static function ($movement) use ($fechaDesde, $productoSeleccionado): bool {
+  return is_array($movement)
+    && (string)($movement['semana_fin'] ?? '') >= $fechaDesde
+    && trim((string)($movement['cve_prod'] ?? '')) === $productoSeleccionado;
+}));
+$sourceWarnings = array_merge($sourceWarnings, (array)($apiResult['warnings'] ?? []));
+$sourceWarning = implode(' ', array_values(array_unique($sourceWarnings)));
 
 /*
 |--------------------------------------------------------------------------
@@ -109,89 +102,11 @@ if ($modo === 'costo') {
 | 1) DETALLE SEMANAL DEL EMPAQUE
 |--------------------------------------------------------------------------
 */
-if ($modo === 'consumo') {
-  $sqlDetalle = "
-        SELECT
-            " . $weekFields . ",
-            TRIM(m.CVE_PROD) AS cve_prod,
-            $consumoExpr AS consumo_kg
-        FROM movs m
-        WHERE $campoFechaMovsSql >= ?
-          AND TRIM(m.TIPO_MOV) = 'S'
-          AND m.LUGAR = ?
-          AND TRIM(m.CVE_PROD) = ?
-    ";
-} elseif ($modo === 'costo') {
-  $sqlDetalle = "
-        SELECT
-            " . $weekFields . ",
-            TRIM(m.CVE_PROD) AS cve_prod,
-            $costoPromedioExpr AS costo_promedio
-        FROM movs m
-        WHERE $campoFechaMovsSql >= ?
-          AND TRIM(m.TIPO_MOV) = 'S'
-          AND m.LUGAR = ?
-          AND TRIM(m.CVE_PROD) = ?
-    ";
-} else {
-  // impacto
-  $sqlDetalle = "
-        SELECT
-            " . $weekFields . ",
-            TRIM(m.CVE_PROD) AS cve_prod,
-            $consumoExpr AS consumo_kg,
-            $costoPromedioExpr AS costo_promedio
-        FROM movs m
-        WHERE $campoFechaMovsSql >= ?
-          AND TRIM(m.TIPO_MOV) = 'S'
-          AND m.LUGAR = ?
-          AND TRIM(m.CVE_PROD) = ?
-    ";
-}
-
-$paramsDetalle = [$fechaDesde, $lugar, $productoSeleccionado];
-
-if ($cveMov !== null && $cveMov !== '') {
-  $sqlDetalle .= " AND m.CVE_MOV = ? ";
-  $paramsDetalle[] = $cveMov;
-}
-
-$sqlDetalle .= "
-    GROUP BY" . buildWeekGroupBy($campoFechaMovsSql) . ",
-        TRIM(m.CVE_PROD)
-    ORDER BY periodo
-";
-
-$stmtDetalle = $pdoMovs->prepare($sqlDetalle);
-$stmtDetalle->execute($paramsDetalle);
-
 $detallePorPeriodo = [];
-$rowCount = 0;
-while ($row = $stmtDetalle->fetch()) {
-  $rowCount++;
+$rowsDetalle = aggregateChemicalMovementsWeekly($movimientosEmpaque, [$productoSeleccionado]);
+foreach ($rowsDetalle as $row) {
   $periodo = (int)$row['periodo'];
   $detallePorPeriodo[$periodo] = $row;
-
-  // Debug: Log detallePorPeriodo
-  if ($_GET['debug'] ?? false) {
-    error_log("DETAIL ROW {$rowCount}: periodo={$periodo}, semana_iso={$row['semana_iso']}, consumo_kg=" . ($row['consumo_kg'] ?? 'null'));
-  }
-}
-
-// Si no hay datos con CVE_MOV, intentar sin ese filtro
-if ($rowCount === 0 && $cveMov !== null && $cveMov !== '') {
-  $sqlDetalleSinCve = str_replace(" AND m.CVE_MOV = ? ", "", $sqlDetalle);
-  // Remover el parámetro CVE_MOV
-  $paramsDetalleSinCve = array_slice($paramsDetalle, 0, -1);
-
-  $stmtDetalleSinCve = $pdoMovs->prepare($sqlDetalleSinCve);
-  $stmtDetalleSinCve->execute($paramsDetalleSinCve);
-
-  while ($row = $stmtDetalleSinCve->fetch()) {
-    $rowCount++;
-    $periodo = (int)$row['periodo'];
-    $detallePorPeriodo[$periodo] = $row;
-  }
 }
 
 /*
@@ -199,7 +114,7 @@ if ($rowCount === 0 && $cveMov !== null && $cveMov !== '') {
 | 2) PRODUCCIÓN POR SEMANA
 |--------------------------------------------------------------------------
 */
-$produccionPorPeriodo = ReportEngine::fetchProductionSeries($pdoProd, $fechaDesde);
+$produccionPorPeriodo = $pdoProd instanceof PDO ? ReportEngine::fetchProductionSeries($pdoProd, $fechaDesde) : [];
 
 /*
 |--------------------------------------------------------------------------
@@ -210,34 +125,18 @@ $costoBase = null;
 $costoPromedioActual = null;
 
 if ($modo === 'costo' || $modo === 'impacto') {
-  $sqlCostoBase = "
-        SELECT
-            AVG(CASE WHEN CAST(DATE_FORMAT($campoFechaMovsSql, '%x') AS UNSIGNED) = ? THEN $campoCostoSql END) AS promedio_anio_anterior,
-            AVG(CASE WHEN CAST(DATE_FORMAT($campoFechaMovsSql, '%x') AS UNSIGNED) = ? THEN $campoCostoSql END) AS promedio_anio_actual
-        FROM movs m
-        WHERE $campoFechaMovsSql >= ?
-          AND TRIM(m.TIPO_MOV) = 'S'
-          AND m.LUGAR = ?
-          AND TRIM(m.CVE_PROD) = ?
-    ";
-
-  $paramsCostoBase = [$anioAnterior, $anioActual, $fechaDesde, $lugar, $productoSeleccionado];
-
-  if ($cveMov !== null && $cveMov !== '') {
-    $sqlCostoBase .= " AND m.CVE_MOV = ? ";
-    $paramsCostoBase[] = $cveMov;
+  $costByYear = [];
+  foreach ($movimientosEmpaque as $movement) {
+    $year = (int)substr((string)($movement['semana_iso'] ?? ''), 0, 4);
+    if (!isset($costByYear[$year])) $costByYear[$year] = ['cantidad' => 0.0, 'impacto' => 0.0];
+    $costByYear[$year]['cantidad'] += (float)($movement['consumo_kg'] ?? 0.0);
+    $costByYear[$year]['impacto'] += (float)($movement['impacto_economico'] ?? 0.0);
   }
-
-  $stmtCostoBase = $pdoMovs->prepare($sqlCostoBase);
-  $stmtCostoBase->execute($paramsCostoBase);
-  $rowCostoBase = $stmtCostoBase->fetch();
-
-  $costoBase = isset($rowCostoBase['promedio_anio_anterior']) && $rowCostoBase['promedio_anio_anterior'] !== null
-    ? (float)$rowCostoBase['promedio_anio_anterior']
+  $costoBase = !empty($costByYear[$anioAnterior]['cantidad'])
+    ? $costByYear[$anioAnterior]['impacto'] / $costByYear[$anioAnterior]['cantidad']
     : null;
-
-  $costoPromedioActual = isset($rowCostoBase['promedio_anio_actual']) && $rowCostoBase['promedio_anio_actual'] !== null
-    ? (float)$rowCostoBase['promedio_anio_actual']
+  $costoPromedioActual = !empty($costByYear[$anioActual]['cantidad'])
+    ? $costByYear[$anioActual]['impacto'] / $costByYear[$anioActual]['cantidad']
     : null;
 }
 
@@ -453,6 +352,7 @@ $result = [
 
   'maxRatio' => $maxRatio,
   'version' => $version,
+  'sourceWarning' => $sourceWarning,
 
   'meta' => [
     'fechaDesde' => $fechaDesde,
@@ -469,6 +369,8 @@ $result = [
     'metricaTitulo' => $metricaTitulo,
     'metricaUnidad' => $metricaUnidad,
     'badgeRatio' => $badgeRatio,
+    'sourceWarning' => $sourceWarning,
+    'fuenteMovimientos' => 'API movimientos-salida',
   ],
 ];
 

@@ -132,9 +132,10 @@ return [
     ],
     'tarimas' => [
       'label' => 'Tarimas',
-      'unit' => '',
+      'unit' => 't',
       'source' => 'mysql_105',
       'value' => null,
+      'decimals' => 2,
       'amarillo_min' => (float)($productionRules['tarimas_amarillo_min_turno'] ?? 11),
       'verde_min' => (float)($productionRules['objetivo_turno_tarimas'] ?? 12),
     ],

@@ -138,6 +138,34 @@ $renderSourceIcons = static function (array $sources) use ($e): string {
 
   return $html;
 };
+$renderRangeLabel = static function ($rangeLabel) use ($e): string {
+  $rangeLabel = trim((string)$rangeLabel);
+  if ($rangeLabel === '') {
+    return '';
+  }
+
+  $groups = ['rojo' => [], 'amarillo' => [], 'verde' => []];
+  foreach (preg_split('/\s*\|\s*/u', $rangeLabel) ?: [] as $segment) {
+    if (preg_match('/^(Rojo|Amarillo|Verde(?:\s*\(Objetivo\))?)\s+(.+)$/ui', trim($segment), $matches) !== 1) {
+      return '<small title="' . $e($rangeLabel) . '">' . $e($rangeLabel) . '</small>';
+    }
+
+    $color = mb_strtolower((string)$matches[1], 'UTF-8');
+    $color = mb_strpos($color, 'verde', 0, 'UTF-8') === 0 ? 'verde' : $color;
+    $groups[$color][] = trim((string)$matches[2]);
+  }
+
+  $labels = ['rojo' => 'Rojo', 'amarillo' => 'Amarillo', 'verde' => 'Verde (Objetivo)'];
+  $html = '<div class="monitor-range-summary" title="' . $e($rangeLabel) . '">';
+  foreach (['rojo', 'amarillo', 'verde'] as $color) {
+    if ($groups[$color] === []) {
+      continue;
+    }
+    $html .= '<span class="monitor-range-line is-' . $color . '"><i aria-hidden="true"></i><b>'
+      . $e($labels[$color]) . '</b><span>' . $e(implode(' o ', $groups[$color])) . '</span></span>';
+  }
+  return $html . '</div>';
+};
 $invertidoMetricGroups = [
   'General' => ['flujo_entrada_evaporador', 'flujo_salida_evaporador', 'temperatura_precalentamiento', 'nivel_tanque_alimentacion'],
   'Etapa 1' => ['flujo_etapa_1_2', 'temperatura_etapa_1', 'vacio_etapa_1', 'presion_etapa_1', 'nivel_etapa_1', 'valvula_control_temperatura_etapa_1', 'valvula_control_nivel_etapa_1'],
@@ -498,17 +526,11 @@ $invertidoMetricGroups = [
 
     .monitor-param {
       display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
+      flex-direction: column;
+      align-items: stretch;
+      justify-content: center;
+      gap: 2px;
       min-width: 0;
-    }
-
-    .monitor-param span {
-      overflow: hidden;
-      min-width: 0;
-      text-overflow: ellipsis;
-      white-space: nowrap;
     }
 
     .monitor-param-label {
@@ -519,8 +541,10 @@ $invertidoMetricGroups = [
     }
 
     .monitor-param-button {
-      display: inline-flex;
-      align-items: center;
+      display: flex;
+      width: 100%;
+      align-items: flex-start;
+      justify-content: flex-start;
       gap: 5px;
       min-width: 0;
       border: 0;
@@ -531,6 +555,12 @@ $invertidoMetricGroups = [
       font-weight: 900;
       cursor: pointer;
       text-align: left;
+    }
+
+    .monitor-param-button > span:first-child {
+      min-width: 0;
+      overflow-wrap: anywhere;
+      white-space: normal;
     }
 
     .monitor-param-button:hover span:first-child {
@@ -558,15 +588,62 @@ $invertidoMetricGroups = [
     }
 
     .monitor-param small {
-      flex: 0 0 auto;
-      max-width: 48%;
-      overflow: hidden;
+      display: block;
+      width: 100%;
       color: #64748b;
       font-size: 9px;
       font-weight: 900;
-      line-height: 1;
-      text-overflow: ellipsis;
+      line-height: 1.15;
+      overflow-wrap: anywhere;
+      white-space: normal;
+    }
+
+    .monitor-range-summary {
+      display: grid;
+      gap: 1px;
+      width: 100%;
+      color: #475569;
+      font-size: 8px;
+      font-weight: 700;
+      line-height: 1.12;
+    }
+
+    .monitor-range-line {
+      display: grid;
+      grid-template-columns: 6px auto minmax(0, 1fr);
+      align-items: baseline;
+      gap: 3px;
+      min-width: 0;
+    }
+
+    .monitor-range-line i {
+      width: 6px;
+      height: 6px;
+      border-radius: 999px;
+      background: #94a3b8;
+    }
+
+    .monitor-range-line.is-rojo i {
+      background: #c94436;
+    }
+
+    .monitor-range-line.is-amarillo i {
+      background: #facc15;
+    }
+
+    .monitor-range-line.is-verde i {
+      background: #2e8b57;
+    }
+
+    .monitor-range-line b {
+      color: #263244;
+      font-weight: 900;
       white-space: nowrap;
+    }
+
+    .monitor-range-line > span {
+      min-width: 0;
+      overflow-wrap: anywhere;
     }
 
     .monitor-table th:not(:first-child),
@@ -1007,7 +1084,7 @@ $invertidoMetricGroups = [
               <table class="monitor-table">
                 <?php
                 $tunnelCount = max(1, count((array)($card['tuneles'] ?? [])));
-                $paramWidth = $tunnelCount >= 7 ? 18 : ($tunnelCount >= 5 ? 20 : 30);
+                $paramWidth = 30;
                 $valueWidth = (100 - $paramWidth) / $tunnelCount;
                 ?>
                 <colgroup>
@@ -1033,9 +1110,7 @@ $invertidoMetricGroups = [
                             <span><?= $e($row['label'] ?? '') ?></span>
                             <span class="monitor-source-icons"><?= $renderSourceIcons((array)($row['sources'] ?? [])) ?></span>
                           </button>
-                          <?php if (!empty($row['rangeLabel'])): ?>
-                            <small title="<?= $e($row['rangeLabel']) ?>"><?= $e($row['rangeLabel']) ?></small>
-                          <?php endif; ?>
+                          <?= $renderRangeLabel($row['rangeLabel'] ?? '') ?>
                         </div>
                       </td>
                       <?php foreach ((array)($card['tuneles'] ?? []) as $tunnelKey => $tunnel): ?>
@@ -1077,7 +1152,7 @@ $invertidoMetricGroups = [
             <table class="monitor-table">
               <?php
               $tunnelCount = max(1, count((array)($card['tuneles'] ?? [])));
-              $paramWidth = $tunnelCount >= 7 ? 18 : ($tunnelCount >= 5 ? 20 : 30);
+              $paramWidth = 30;
               $valueWidth = (100 - $paramWidth) / $tunnelCount;
               ?>
               <colgroup>
@@ -1103,9 +1178,7 @@ $invertidoMetricGroups = [
                           <span><?= $e($row['label'] ?? '') ?></span>
                           <span class="monitor-source-icons"><?= $renderSourceIcons((array)($row['sources'] ?? [])) ?></span>
                         </button>
-                        <?php if (!empty($row['rangeLabel'])): ?>
-                          <small title="<?= $e($row['rangeLabel']) ?>"><?= $e($row['rangeLabel']) ?></small>
-                        <?php endif; ?>
+                        <?= $renderRangeLabel($row['rangeLabel'] ?? '') ?>
                       </div>
                     </td>
                       <?php foreach ((array)($card['tuneles'] ?? []) as $tunnelKey => $tunnel): ?>
@@ -1146,7 +1219,7 @@ $invertidoMetricGroups = [
                     unset($visibleTuneles['invertido']);
                   }
                   $tunnelCount = max(1, count($visibleTuneles));
-                  $paramWidth = $tunnelCount >= 7 ? 18 : ($tunnelCount >= 5 ? 20 : 30);
+                  $paramWidth = 30;
                   $valueWidth = (100 - $paramWidth) / $tunnelCount;
                   ?>
                   <colgroup>
@@ -1186,9 +1259,7 @@ $invertidoMetricGroups = [
                               <span><?= $e($row['label'] ?? '') ?></span>
                               <span class="monitor-source-icons"><?= $renderSourceIcons((array)($row['sources'] ?? [])) ?></span>
                             </button>
-                            <?php if (!empty($row['rangeLabel'])): ?>
-                              <small title="<?= $e($row['rangeLabel']) ?>"><?= $e($row['rangeLabel']) ?></small>
-                            <?php endif; ?>
+                            <?= $renderRangeLabel($row['rangeLabel'] ?? '') ?>
                           </div>
                         </td>
                         <?php foreach ($visibleTuneles as $tunnelKey => $tunnel): ?>
@@ -1373,6 +1444,35 @@ $invertidoMetricGroups = [
       `;
     }
 
+    function renderRangeLabel(rangeLabel) {
+      const text = String(rangeLabel || '').trim();
+      if (!text) return '';
+
+      const groups = { rojo: [], amarillo: [], verde: [] };
+      const segments = text.split(/\s*\|\s*/u);
+      for (const segment of segments) {
+        const match = segment.trim().match(/^(Rojo|Amarillo|Verde(?:\s*\(Objetivo\))?)\s+(.+)$/iu);
+        if (!match) {
+          return `<small title="${escapeHtml(text)}">${escapeHtml(text)}</small>`;
+        }
+
+        let color = match[1].toLocaleLowerCase('es-MX');
+        if (color.startsWith('verde')) color = 'verde';
+        groups[color].push(match[2].trim());
+      }
+
+      const labels = { rojo: 'Rojo', amarillo: 'Amarillo', verde: 'Verde (Objetivo)' };
+      const lines = ['rojo', 'amarillo', 'verde']
+        .filter((color) => groups[color].length > 0)
+        .map((color) => `
+          <span class="monitor-range-line is-${color}">
+            <i aria-hidden="true"></i><b>${labels[color]}</b><span>${escapeHtml(groups[color].join(' o '))}</span>
+          </span>
+        `).join('');
+
+      return `<div class="monitor-range-summary" title="${escapeHtml(text)}">${lines}</div>`;
+    }
+
     function parseNumericValue(value) {
       if (value === null || value === undefined) return null;
       const number = Number(String(value).replace(/[^0-9.-]/g, ''));
@@ -1547,7 +1647,7 @@ $invertidoMetricGroups = [
 
       const tunnels = Object.entries(card.tuneles || {});
       const tunnelCount = Math.max(1, tunnels.length);
-      const paramWidth = tunnelCount >= 7 ? 18 : (tunnelCount >= 5 ? 20 : 30);
+      const paramWidth = 30;
       const valueWidth = (100 - paramWidth) / tunnelCount;
       return `
         <div class="monitor-table-wrap">
@@ -1574,7 +1674,7 @@ $invertidoMetricGroups = [
                         <span>${escapeHtml(row.label || '')}</span>
                         <span class="monitor-source-icons">${renderSourceIcons(row.sources || [])}</span>
                       </button>
-                      ${row.rangeLabel ? `<small title="${escapeHtml(row.rangeLabel)}">${escapeHtml(row.rangeLabel)}</small>` : ''}
+                      ${renderRangeLabel(row.rangeLabel)}
                     </div>
                   </td>
                   ${tunnels.map(([tunnelKey]) => `<td>${renderValueBox(row.values?.[tunnelKey], row.label || '')}</td>`).join('')}
@@ -1589,7 +1689,7 @@ $invertidoMetricGroups = [
     function renderConcentradoresTable(card) {
       const tunnels = Object.entries(card.tuneles || {}).filter(([tunnelKey]) => tunnelKey !== 'invertido');
       const tunnelCount = Math.max(1, tunnels.length);
-      const paramWidth = tunnelCount >= 7 ? 18 : (tunnelCount >= 5 ? 20 : 30);
+      const paramWidth = 30;
       const valueWidth = (100 - paramWidth) / tunnelCount;
       const rows = card.tabla || [];
       const visibleRows = rows.filter((row) => tunnels.some(([tunnelKey]) => String(row.values?.[tunnelKey]?.value || '-') !== '-'));
@@ -1620,7 +1720,7 @@ $invertidoMetricGroups = [
                         <span>${escapeHtml(row.label || '')}</span>
                         <span class="monitor-source-icons">${renderSourceIcons(row.sources || [])}</span>
                       </button>
-                      ${row.rangeLabel ? `<small title="${escapeHtml(row.rangeLabel)}">${escapeHtml(row.rangeLabel)}</small>` : ''}
+                      ${renderRangeLabel(row.rangeLabel)}
                     </div>
                   </td>
                   ${tunnels.map(([tunnelKey]) => `<td>${renderValueBox(row.values?.[tunnelKey], row.label || '')}</td>`).join('')}

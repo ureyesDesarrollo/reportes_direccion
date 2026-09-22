@@ -338,6 +338,28 @@ $productionStmt = $pdo->query("
 ");
 $production = $productionStmt->fetch() ?: [];
 
+$periodProductionStmt = $pdo->prepare("
+  SELECT
+    COUNT(*) AS tarimas,
+    COALESCE(SUM(d.tar_kilos), 0) AS kilos
+  FROM (
+    SELECT t.tar_kilos, {$operationDateSql} AS op_dia
+    FROM rev_tarimas t
+    WHERE t.tar_fecha >= ?
+      AND t.tar_fecha < ?
+      AND t.tar_count_etiquetado > 0
+  ) d
+  WHERE d.op_dia >= ?
+    AND d.op_dia < ?
+");
+$periodProductionStmt->execute([
+  $startDateTime,
+  $endDateTime,
+  $startDate,
+  $endDate,
+]);
+$periodProduction = $periodProductionStmt->fetch() ?: [];
+
 $barreduraStmt = $pdo->prepare("
   SELECT
     COALESCE(SUM(d.tar_kilos), 0) AS kilos,
@@ -758,11 +780,103 @@ $providerMaterials = array_map(static function (array $row): array {
   ];
 }, $providerMaterialStmt->fetchAll() ?: []);
 
+$enzymeProcessStmt = $pdo->prepare("
+  SELECT
+    p.pro_id,
+    p.pt_id,
+    p.pro_fe_carga,
+    CASE p.pt_id
+      WHEN 10 THEN 'Enzima Plus'
+      WHEN 11 THEN 'Enzima Alpha'
+      ELSE 'Sin tipo'
+    END AS preparacion,
+    material_data.materiales,
+    material_data.kilos_material,
+    fase_enzima.pfg2_hr_totales AS horas_enzima,
+    fase_enzima.pfg2_enzima AS litros_enzima,
+    (
+      SELECT liberacion_b.prol_solides
+      FROM procesos_liberacion_b liberacion_b
+      WHERE liberacion_b.pro_id = p.pro_id
+        AND liberacion_b.prol_solides IS NOT NULL
+      ORDER BY liberacion_b.prol_fecha DESC, liberacion_b.prol_hora DESC, liberacion_b.prol_id DESC
+      LIMIT 1
+    ) AS solidos,
+    (
+      SELECT liberacion.extractibilidad
+      FROM procesos_liberacion liberacion
+      WHERE liberacion.pro_id = p.pro_id
+        AND liberacion.extractibilidad IS NOT NULL
+      ORDER BY liberacion.prol_fecha DESC, liberacion.prol_id DESC
+      LIMIT 1
+    ) AS extractibilidad
+  FROM procesos p
+  INNER JOIN procesos_fase_2b_g fase_enzima
+    ON fase_enzima.pfg2_id = (
+      SELECT MAX(fase_enzima_ultima.pfg2_id)
+      FROM procesos_fase_2b_g fase_enzima_ultima
+      WHERE fase_enzima_ultima.pro_id = p.pro_id
+        AND fase_enzima_ultima.pe_id = 3
+    )
+  INNER JOIN (
+    SELECT
+      materiales_proceso.pro_id,
+      SUM(materiales_proceso.kilos) AS kilos_material,
+      GROUP_CONCAT(
+        CONCAT(
+          materiales_proceso.mat_nombre,
+          ' (',
+          ROUND(materiales_proceso.kilos / 1000, 2),
+          ' t)'
+        )
+        ORDER BY materiales_proceso.mat_nombre
+        SEPARATOR ' + '
+      ) AS materiales
+    FROM (
+      SELECT
+        pm.pro_id,
+        pm.mat_id,
+        m.mat_nombre,
+        SUM(pm.pma_kg) AS kilos
+      FROM procesos_materiales pm
+      INNER JOIN materiales m ON m.mat_id = pm.mat_id
+      GROUP BY pm.pro_id, pm.mat_id, m.mat_nombre
+    ) materiales_proceso
+    GROUP BY materiales_proceso.pro_id
+  ) material_data ON material_data.pro_id = p.pro_id
+  WHERE p.pt_id IN (10, 11)
+    AND p.pro_fe_carga >= ?
+    AND p.pro_fe_carga < ?
+  ORDER BY p.pro_fe_carga DESC, p.pro_id DESC
+");
+$enzymeProcessStmt->execute([$startDate, $endDate]);
+$enzymeProcesses = array_map(static function (array $row): array {
+  $materialKilos = (float)($row['kilos_material'] ?? 0);
+  $enzymeLiters = is_numeric($row['litros_enzima'] ?? null) ? (float)$row['litros_enzima'] : null;
+
+  return [
+    'pro_id' => (int)($row['pro_id'] ?? 0),
+    'pt_id' => (int)($row['pt_id'] ?? 0),
+    'fecha' => (string)($row['pro_fe_carga'] ?? ''),
+    'preparacion' => (string)($row['preparacion'] ?? ''),
+    'material' => (string)($row['materiales'] ?? 'Sin material'),
+    'kilos_material' => $materialKilos,
+    'horas_enzima' => is_numeric($row['horas_enzima'] ?? null) ? (float)$row['horas_enzima'] : null,
+    'litros_enzima' => $enzymeLiters,
+    'litros_tonelada' => $enzymeLiters !== null && $materialKilos > 0
+      ? $enzymeLiters / ($materialKilos / 1000)
+      : null,
+    'solidos' => is_numeric($row['solidos'] ?? null) ? (float)$row['solidos'] : null,
+    'extractibilidad' => is_numeric($row['extractibilidad'] ?? null) ? (float)$row['extractibilidad'] : null,
+  ];
+}, $enzymeProcessStmt->fetchAll() ?: []);
+
 $kilosConsumidos = (float)($summary['kilos_consumidos'] ?? 0);
 $kilosProcesosCerrados = (float)($production['kilos_producidos'] ?? 0);
 $kilosBarredura = (float)($barredura['kilos'] ?? 0);
-$kilosProducidos = $kilosProcesosCerrados + $kilosBarredura;
-$rendimiento = $kilosConsumidos > 0 ? ($kilosProducidos / $kilosConsumidos) * 100 : null;
+$kilosProduccionRendimiento = $kilosProcesosCerrados + $kilosBarredura;
+$kilosProduccionPeriodo = (float)($periodProduction['kilos'] ?? 0);
+$rendimiento = $kilosConsumidos > 0 ? ($kilosProduccionRendimiento / $kilosConsumidos) * 100 : null;
 $precioPromedioTotal = is_numeric($purchaseSummary['precio_promedio'] ?? null) ? (float)$purchaseSummary['precio_promedio'] : null;
 $precioMaquilaTotal = is_numeric($purchaseSummary['precio_maquila'] ?? null) ? (float)$purchaseSummary['precio_maquila'] : null;
 $precioTotalPromedio = is_numeric($purchaseSummary['precio_total'] ?? null) ? (float)$purchaseSummary['precio_total'] : null;
@@ -781,8 +895,10 @@ return [
   'kpis' => [
     'kilos_consumidos' => $kilosConsumidos,
     'toneladas_consumidas' => $kilosConsumidos / 1000,
-    'kilos_producidos' => $kilosProducidos,
-    'toneladas_producidas' => $kilosProducidos / 1000,
+    'kilos_producidos' => $kilosProduccionPeriodo,
+    'toneladas_producidas' => $kilosProduccionPeriodo / 1000,
+    'kilos_producidos_rendimiento' => $kilosProduccionRendimiento,
+    'toneladas_producidas_rendimiento' => $kilosProduccionRendimiento / 1000,
     'kilos_procesos_cerrados' => $kilosProcesosCerrados,
     'kilos_barredura_rendimiento' => $kilosBarredura,
     'rendimiento' => $rendimiento,
@@ -790,7 +906,7 @@ return [
     'partidas' => (int)($summary['partidas'] ?? 0),
     'proveedores' => (int)($summary['proveedores'] ?? 0),
     'materiales' => (int)($summary['materiales'] ?? 0),
-    'tarimas' => (int)($production['tarimas'] ?? 0),
+    'tarimas' => (int)($periodProduction['tarimas'] ?? 0),
     'kilos_comprados' => (float)($purchaseSummary['kilos_comprados'] ?? 0),
     'toneladas_compradas' => ((float)($purchaseSummary['kilos_comprados'] ?? 0)) / 1000,
     'valor_compra' => (float)($purchaseSummary['valor_compra'] ?? 0),
@@ -810,13 +926,14 @@ return [
     'materiales' => $materials,
     'proveedores' => $providers,
     'proveedores_material' => $providerMaterials,
+    'enzima_procesos' => $enzymeProcesses,
   ],
   'meta' => [
     'periodo_inicio' => $startDate,
     'periodo_fin' => $periodEnd->modify('-1 day')->format('Y-m-d'),
     'intervaloActualizacion' => (int)($config['intervalo_actualizacion_ms'] ?? ($appConfig['intervalo_actualizacion'] ?? 300000)),
     'agrupador_materiales' => (string)($config['agrupador_materiales'] ?? 'tipo'),
-    'nota_rendimiento' => 'Rendimiento general = producción total de procesos cerrados más barredura / materia prima total. Cada proceso cerrado se asigna al mes operativo con más tarimas.',
+    'nota_rendimiento' => 'La producción visible incluye todas las tarimas etiquetadas del mes operativo. El rendimiento usa procesos cerrados asignados al mes con más tarimas, más barredura.',
     'rendimiento_solo_procesos_cerrados' => false,
     'rendimiento_procesos_solo_cerrados' => true,
     'rendimiento_asignado_mes_mayor_tarimas' => true,

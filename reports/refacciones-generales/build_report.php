@@ -5,6 +5,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../shared/helpers.php';
 require_once __DIR__ . '/../../shared/ReportHelpers.php';
 require_once __DIR__ . '/../../shared/ReportEngine.php';
+require_once __DIR__ . '/../../shared/ChemicalMovementsApi.php';
 
 /*
 |--------------------------------------------------------------------------
@@ -51,56 +52,25 @@ if ($cached !== null) {
   return $cached;
 }
 
-$state = ReportEngine::createContext($config, $appConfig, $dbConfig);
-$pdoMovs           = $state['pdoMovs'];
-$pdoProd           = $state['pdoProd'];
-$campoFechaMovsSql = $state['campoFechaMovsSql'];
-$weekFields        = $state['weekFields'];
+$timezone = new DateTimeZone((string)($config['timezone'] ?? 'America/Mexico_City'));
+$apiConfig = (array)($config['movimientos_api'] ?? []);
+$apiConfig['productos_a_ignorar'] = $productosIgnorar;
+$apiResult = loadChemicalMovementsApi($apiConfig, [$anioAnterior, $anioActual], [], $timezone);
+$movimientosRefacciones = array_values(array_filter((array)($apiResult['movements'] ?? []), static function ($movement) use ($fechaDesde): bool {
+  return is_array($movement) && (string)($movement['semana_fin'] ?? '') >= $fechaDesde;
+}));
+$sourceWarning = implode(' ', array_values(array_unique((array)($apiResult['warnings'] ?? []))));
 
 /*
 |--------------------------------------------------------------------------
 | 1) DETALLE POR REFACCIÓN Y SEMANA
 |--------------------------------------------------------------------------
 */
-$sqlPivot = "
-    SELECT
-        " . $weekFields . ",
-        TRIM(m.CVE_PROD) AS cve_prod,
-        COALESCE(TRIM(p.DESC_PROD), '') AS desc_prod,
-        SUM(m.CANT_PROD) AS refaccion_cantidad,
-        AVG(m.COSTO_ENT) AS costo_promedio
-    FROM movs m
-    LEFT JOIN producto p
-        ON TRIM(p.CVE_PROD) = TRIM(m.CVE_PROD)
-    WHERE $campoFechaMovsSql >= ?
-      AND TRIM(m.TIPO_MOV) = 'S'
-      AND TRIM(m.LUGAR) = ?
-";
-
-$paramsPivot = [$fechaDesde, $lugar];
-
-if (!$usarTodosLosProductos && !empty($productosConfig)) {
-  $ph = createPlaceholders($productosConfig);
-  $sqlPivot .= " AND TRIM(m.CVE_PROD) IN ($ph) ";
-  $paramsPivot = array_merge($paramsPivot, $productosConfig);
-}
-
-if (!empty($productosIgnorar)) {
-  $ph = createPlaceholders($productosIgnorar);
-  $sqlPivot .= " AND TRIM(m.CVE_PROD) NOT IN ($ph) ";
-  $paramsPivot = array_merge($paramsPivot, $productosIgnorar);
-}
-
-$sqlPivot .= "
-    GROUP BY" . buildWeekGroupBy($campoFechaMovsSql) . ",
-        TRIM(m.CVE_PROD),
-        p.DESC_PROD
-    ORDER BY semana_iso, cve_prod
-";
-
-$stmtPivot = $pdoMovs->prepare($sqlPivot);
-$stmtPivot->execute($paramsPivot);
-$rowsPivot = $stmtPivot->fetchAll();
+$rowsPivot = aggregateMovementsApiWeekly(
+  $movimientosRefacciones,
+  !$usarTodosLosProductos ? (array)$productosConfig : [],
+  false
+);
 
 /*
 |--------------------------------------------------------------------------
@@ -366,59 +336,33 @@ $costoPromedioAnioActual      = [];
 $impactoEconomicoAnioAnterior = [];
 $impactoEconomicoAnioActual   = [];
 
-$sqlAnual = "
-    SELECT
-        CAST(DATE_FORMAT($campoFechaMovsSql, '%x') AS UNSIGNED) AS anio_iso,
-        TRIM(m.CVE_PROD) AS cve_prod,
-        SUM(m.CANT_PROD) AS consumo_cantidad,
-        CASE
-            WHEN SUM(m.CANT_PROD) > 0
-            THEN SUM(m.COSTO_ENT * m.CANT_PROD) / SUM(m.CANT_PROD)
-            ELSE 0
-        END AS costo_ponderado
-    FROM movs m
-    WHERE CAST(DATE_FORMAT($campoFechaMovsSql, '%x') AS UNSIGNED) IN (?, ?)
-      AND TRIM(m.TIPO_MOV) = 'S'
-      AND TRIM(m.LUGAR) = ?
-";
-
-$paramsAnual = [$anioAnterior, $anioActual, $lugar];
-
-if (!$usarTodosLosProductos && !empty($productosConfig)) {
-  $ph = createPlaceholders($productosConfig);
-  $sqlAnual .= " AND TRIM(m.CVE_PROD) IN ($ph) ";
-  $paramsAnual = array_merge($paramsAnual, $productosConfig);
+$annualRefacciones = [];
+foreach ($rowsPivot as $row) {
+  $anio = (int)substr((string)($row['semana_iso'] ?? ''), 0, 4);
+  if (!in_array($anio, [$anioAnterior, $anioActual], true)) continue;
+  $key = trim((string)$row['cve_prod']);
+  if (!isset($annualRefacciones[$anio][$key])) {
+    $annualRefacciones[$anio][$key] = ['cantidad' => 0.0, 'impacto' => 0.0];
+  }
+  $annualRefacciones[$anio][$key]['cantidad'] += (float)$row['refaccion_cantidad'];
+  $annualRefacciones[$anio][$key]['impacto'] += (float)($row['impacto_economico'] ?? 0.0);
 }
 
-if (!empty($productosIgnorar)) {
-  $ph = createPlaceholders($productosIgnorar);
-  $sqlAnual .= " AND TRIM(m.CVE_PROD) NOT IN ($ph) ";
-  $paramsAnual = array_merge($paramsAnual, $productosIgnorar);
-}
+foreach ($annualRefacciones as $anio => $products) {
+  foreach ($products as $key => $annualRow) {
+    $consumo = (float)$annualRow['cantidad'];
+    $impacto = (float)$annualRow['impacto'];
+    $costo = $consumo != 0.0 ? $impacto / $consumo : 0.0;
 
-$sqlAnual .= "
-    GROUP BY
-        CAST(DATE_FORMAT($campoFechaMovsSql, '%x') AS UNSIGNED),
-        TRIM(m.CVE_PROD)
-";
-
-$stmtAnual = $pdoMovs->prepare($sqlAnual);
-$stmtAnual->execute($paramsAnual);
-
-while ($row = $stmtAnual->fetch()) {
-  $key     = $row['cve_prod'];
-  $anio    = (int)$row['anio_iso'];
-  $consumo = (float)$row['consumo_cantidad'];
-  $costo   = (float)$row['costo_ponderado'];
-
-  if ($anio === $anioAnterior) {
-    $consumoRefaccionAnioAnterior[$key]  = $consumo;
-    $costoPromedioAnioAnterior[$key]     = $costo;
-    $impactoEconomicoAnioAnterior[$key]  = $consumo * $costo;
-  } else {
-    $consumoRefaccionAnioActual[$key]    = $consumo;
-    $costoPromedioAnioActual[$key]       = $costo;
-    $impactoEconomicoAnioActual[$key]    = $consumo * $costo;
+    if ((int)$anio === $anioAnterior) {
+      $consumoRefaccionAnioAnterior[$key] = $consumo;
+      $costoPromedioAnioAnterior[$key] = $costo;
+      $impactoEconomicoAnioAnterior[$key] = $impacto;
+    } else {
+      $consumoRefaccionAnioActual[$key] = $consumo;
+      $costoPromedioAnioActual[$key] = $costo;
+      $impactoEconomicoAnioActual[$key] = $impacto;
+    }
   }
 }
 
@@ -549,6 +493,7 @@ $result = [
 
   'maxRatio' => $maxRatio,
   'version'  => $version,
+  'sourceWarning' => $sourceWarning,
 
   'meta' => [
     'fechaDesde'            => $fechaDesde,
@@ -564,6 +509,8 @@ $result = [
     'metricaUnidad'         => '',
     'badgeRatio'            => 'Consumo de refacciones generales',
     'mostrarProduccion'     => false,
+    'sourceWarning'         => $sourceWarning,
+    'fuenteMovimientos'     => 'API movimientos-salida',
   ],
 ];
 

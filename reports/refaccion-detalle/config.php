@@ -34,6 +34,14 @@ return [
   'tolerancia_pct'  => 10,
   'cve_mov'         => null,
   'lugar'           => 'CRITICOS',
+  'movimientos_api' => [
+    'url' => 'http://192.168.1.104:5000/api/movimientos-salida',
+    'query' => ['lugar' => 'CRITICOS'],
+    'lugar' => 'CRITICOS',
+    'cve_mov' => ['17'],
+    'cache_ttl' => 3600,
+    'cache_version' => 1,
+  ],
 
   // Modos disponibles: consumo, costo, impacto (ahorro/pérdida por diferencia de precio)
   'modos_disponibles' => ['consumo', 'costo', 'impacto'],

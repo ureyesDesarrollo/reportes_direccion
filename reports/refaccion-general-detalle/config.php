@@ -34,6 +34,15 @@ return [
   'tolerancia_pct'    => 10,
   'cve_mov'           => null,
   'lugar'             => 'REFACCIONE',
+  'movimientos_api'   => [
+    'url' => 'http://192.168.1.104:5000/api/movimientos-salida',
+    'query' => ['lugar' => 'REFACCIONE'],
+    'lugar' => 'REFACCIONE',
+    'cve_mov' => ['17'],
+    'timeout' => 90,
+    'cache_ttl' => 3600,
+    'cache_version' => 1,
+  ],
 
   // Modos disponibles: consumo, costo, impacto (ahorro/pérdida por diferencia de precio)
   'modos_disponibles' => ['consumo', 'costo', 'impacto'],

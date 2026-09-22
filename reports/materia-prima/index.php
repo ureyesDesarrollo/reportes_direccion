@@ -46,6 +46,7 @@ $materialYieldRows = (array)($tablas['rendimiento_material'] ?? []);
 $materialRows = (array)($tablas['materiales'] ?? []);
 $providerRows = (array)($tablas['proveedores'] ?? []);
 $providerMaterialRows = (array)($tablas['proveedores_material'] ?? []);
+$enzymeProcessRows = (array)($tablas['enzima_procesos'] ?? []);
 usort($materialYieldRows, static function (array $a, array $b): int {
   $yieldCompare = ((float)($b['rendimiento'] ?? -1)) <=> ((float)($a['rendimiento'] ?? -1));
   if ($yieldCompare !== 0) {
@@ -507,6 +508,36 @@ if (is_numeric($producedTons)) {
     .mp-provider-chart-card {
       grid-column: 1 / -1;
       padding: 14px;
+    }
+
+    .mp-enzyme-card {
+      grid-column: 1 / -1;
+      padding: 14px;
+    }
+
+    .mp-enzyme-material strong {
+      display: block;
+      max-width: 620px;
+      line-height: 1.35;
+    }
+
+    .mp-enzyme-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px 10px;
+      margin-top: 4px;
+      color: #64748b;
+      font-size: .72rem;
+      font-weight: 700;
+    }
+
+    .mp-enzyme-type {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 7px;
+      border-radius: 999px;
+      background: #e0f2fe;
+      color: #075985;
     }
 
     .mp-provider-chart-wrap {
@@ -1174,7 +1205,8 @@ if (is_numeric($producedTons)) {
       .mp-chart-card,
       .mp-side-card,
       .mp-table-card,
-      .mp-material-price-card {
+      .mp-material-price-card,
+      .mp-enzyme-card {
         grid-column: 1 / -1;
       }
 
@@ -1269,7 +1301,7 @@ if (is_numeric($producedTons)) {
         <article class="mp-kpi <?= $e($rendClass) ?>">
           <span>Rendimiento</span>
           <strong><?= $fmtPct($kpis['rendimiento'] ?? null, 2) ?></strong>
-          <small>producción / materia prima</small>
+          <small>base <?= $fmt($kpis['toneladas_producidas_rendimiento'] ?? null, 1) ?> t cerradas + barredura</small>
         </article>
         <article class="mp-kpi">
           <span>Procesos</span>
@@ -1407,6 +1439,50 @@ if (is_numeric($producedTons)) {
               </div>
             </article>
           <?php endforeach; ?>
+        </div>
+      </section>
+
+      <section class="mp-card mp-enzyme-card">
+        <div class="mp-section-title">
+          <h2>Enzima por proceso y material</h2>
+          <span>Etapa 2B · última captura disponible por proceso</span>
+        </div>
+        <div class="mp-table-wrap">
+          <table class="mp-table">
+            <thead>
+              <tr>
+                <th>Material</th>
+                <th class="mp-num">Hr enzima</th>
+                <th class="mp-num">Lts / ton</th>
+                <th class="mp-num">Sólidos</th>
+                <th class="mp-num">Extractibilidad</th>
+              </tr>
+            </thead>
+            <tbody>
+              <?php if ($enzymeProcessRows === []): ?>
+                <tr>
+                  <td colspan="5" class="mp-empty">No hay procesos Enzima Plus o Enzima Alpha en el periodo.</td>
+                </tr>
+              <?php else: ?>
+                <?php foreach ($enzymeProcessRows as $row): ?>
+                  <tr>
+                    <td class="mp-enzyme-material">
+                      <strong><?= $e($row['material'] ?? 'Sin material') ?></strong>
+                      <div class="mp-enzyme-meta">
+                        <span>P<?= $fmtInt($row['pro_id'] ?? null) ?></span>
+                        <span><?= $e($row['fecha'] ?? '') ?></span>
+                        <span class="mp-enzyme-type"><?= $e($row['preparacion'] ?? '') ?></span>
+                      </div>
+                    </td>
+                    <td class="mp-num"><?= $fmt($row['horas_enzima'] ?? null, 2) ?></td>
+                    <td class="mp-num"><?= $fmt($row['litros_tonelada'] ?? null, 2) ?></td>
+                    <td class="mp-num"><?= $fmt($row['solidos'] ?? null, 2) ?></td>
+                    <td class="mp-num"><?= $fmtPct($row['extractibilidad'] ?? null, 2) ?></td>
+                  </tr>
+                <?php endforeach; ?>
+              <?php endif; ?>
+            </tbody>
+          </table>
         </div>
       </section>
     </main>

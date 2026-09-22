@@ -139,6 +139,9 @@ $sensorSolidosVotator = $crearSensorVotator('solidos', 'SOLIDOS_DE_VOTATORS', [
 $camposSqlVotator = [
   'tunel_1' => [
     'votator_1' => $crearEquipoVotator('', [
+      'temperatura_nariz' => $crearSensor('Temp. nariz', 'TEMPERATURA_NARIZ_VOTATOR_1', '°C', [
+        'history' => false,
+      ]),
       'amperaje_bomba' => $crearSensorVotator('amperaje_bomba', 'CORRIENTE_DE_EXTRUSOR_V1_SA'),
       'solidos' => $sensorSolidosVotator,
       'tiempo_fuera' => $crearSensor('Tiempo fuera', 'TIEMPO_FUERA_VOTATOR_1', '', [
@@ -146,6 +149,9 @@ $camposSqlVotator = [
       ]),
     ]),
     'votator_2' => $crearEquipoVotator('', [
+      'temperatura_nariz' => $crearSensor('Temp. nariz', 'TEMPERATURA_NARIZ_VOTATOR_2', '°C', [
+        'history' => false,
+      ]),
       'amperaje_bomba' => $crearSensorVotator('amperaje_bomba', 'CORRIENTE_DE_EXTRUSOR'),
       'solidos' => $sensorSolidosVotator,
       'tiempo_fuera' => $crearSensor('Tiempo fuera', 'TIEMPO_FUERA_VOTATOR_2', '', [
@@ -155,12 +161,18 @@ $camposSqlVotator = [
   ],
   'tunel_2' => [
     'votator_3' => $crearEquipoVotator('', [
+      'temperatura_nariz' => $crearSensor('Temp. nariz', 'TEMPERATURA_NARIZ_VOTATOR_3', '°C', [
+        'history' => false,
+      ]),
       'solidos' => $sensorSolidosVotator,
       'corriente_votator' => $crearSensor('Corriente', 'CORRIENTE_VOTATOR_3', 'A', [
         'history' => false,
       ]),
     ]),
     'votator_4' => $crearEquipoVotator('', [
+      'temperatura_nariz' => $crearSensor('Temp. nariz', 'TEMPERATURA_NARIZ_VOTATOR_4', '°C', [
+        'history' => false,
+      ]),
       'solidos' => $sensorSolidosVotator,
       'corriente_votator' => $crearSensor('Corriente', 'CORRIENTE_VOTATOR_4', 'A', [
         'history' => false,
@@ -365,7 +377,7 @@ $configuracionSecadores = [
   'temperaturas_limite' => 0,
   'tuneles_placeholder' => [],
   'metricas' => $camposSecadores,
-  'votator_campos' => array_merge(array_keys($camposBaseVotator), ['tiempo_fuera', 'corriente_votator']),
+  'votator_campos' => array_merge(array_keys($camposBaseVotator), ['temperatura_nariz', 'tiempo_fuera', 'corriente_votator']),
   'votators_placeholder' => [
     'votator_5' => 'Votator 5',
     'votator_6' => 'Votator 6',

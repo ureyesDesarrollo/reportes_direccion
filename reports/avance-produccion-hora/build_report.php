@@ -90,7 +90,7 @@ try {
   $reportDatabase = (array)($config['database'] ?? []);
   $pdo = conectar($reportDatabase !== [] ? $reportDatabase : (array)($dbConfig[$databaseKey] ?? $dbConfig['prod']));
   $tarimasStmt = $pdo->prepare("
-    SELECT COUNT(DISTINCT t.tar_id)
+    SELECT COALESCE(SUM(COALESCE(t.tar_kilos, 0)), 0) / 1000
     FROM rev_tarimas t
     WHERE t.tar_fecha >= ?
       AND t.tar_fecha < ?
@@ -100,13 +100,13 @@ try {
     $turnoInicio->format('Y-m-d H:i:s'),
     $turnoFin->format('Y-m-d H:i:s'),
   ]);
-  $metricConfig['tarimas']['value'] = (int)$tarimasStmt->fetchColumn();
+  $metricConfig['tarimas']['value'] = round((float)$tarimasStmt->fetchColumn(), 2);
 
   $tarimasResumenStmt = $pdo->prepare("
     SELECT
-      COUNT(DISTINCT CASE WHEN t.tar_fecha >= ? AND t.tar_fecha < ? THEN t.tar_id END) AS turno_1,
-      COUNT(DISTINCT CASE WHEN t.tar_fecha >= ? AND t.tar_fecha < ? THEN t.tar_id END) AS turno_2,
-      COUNT(DISTINCT t.tar_id) AS total
+      COALESCE(SUM(CASE WHEN t.tar_fecha >= ? AND t.tar_fecha < ? THEN COALESCE(t.tar_kilos, 0) ELSE 0 END), 0) / 1000 AS turno_1,
+      COALESCE(SUM(CASE WHEN t.tar_fecha >= ? AND t.tar_fecha < ? THEN COALESCE(t.tar_kilos, 0) ELSE 0 END), 0) / 1000 AS turno_2,
+      COALESCE(SUM(COALESCE(t.tar_kilos, 0)), 0) / 1000 AS total
     FROM rev_tarimas t
     WHERE t.tar_fecha >= ?
       AND t.tar_fecha < ?
@@ -121,12 +121,12 @@ try {
     $productionDayEnd->format('Y-m-d H:i:s'),
   ]);
   $tarimasResumenRow = $tarimasResumenStmt->fetch() ?: [];
-  $tarimasResumen['turno_1'] = (int)($tarimasResumenRow['turno_1'] ?? 0);
-  $tarimasResumen['turno_2'] = (int)($tarimasResumenRow['turno_2'] ?? 0);
-  $tarimasResumen['total'] = (int)($tarimasResumenRow['total'] ?? 0);
+  $tarimasResumen['turno_1'] = round((float)($tarimasResumenRow['turno_1'] ?? 0), 2);
+  $tarimasResumen['turno_2'] = round((float)($tarimasResumenRow['turno_2'] ?? 0), 2);
+  $tarimasResumen['total'] = round((float)($tarimasResumenRow['total'] ?? 0), 2);
 
   $previousShiftStmt = $pdo->prepare("
-    SELECT COUNT(DISTINCT t.tar_id)
+    SELECT COALESCE(SUM(COALESCE(t.tar_kilos, 0)), 0) / 1000
     FROM rev_tarimas t
     WHERE t.tar_fecha >= ?
       AND t.tar_fecha < ?
@@ -136,7 +136,7 @@ try {
     $previousShiftStart->format('Y-m-d H:i:s'),
     $previousShiftEnd->format('Y-m-d H:i:s'),
   ]);
-  $previousShiftSummary['tarimas'] = (int)$previousShiftStmt->fetchColumn();
+  $previousShiftSummary['tarimas'] = round((float)$previousShiftStmt->fetchColumn(), 2);
 
   $previousShiftSupervisorStmt = $pdo->prepare("
     SELECT u.usu_nombre
@@ -443,9 +443,9 @@ if ($acumuladoHorasEvaluadas > 0) {
   $metricConfig['acumulado']['usa_valor_anterior'] = $acumuladoUsaAnterior;
 }
 
-// En la vista hora por hora, las tarimas se comparan contra el avance esperado
-// del turno y no contra las 12 tarimas del cierre desde la primera hora.
-// La meta es una tarima por hora; amarillo representa una tarima de atraso.
+// En la vista hora por hora, las toneladas producidas se comparan contra el
+// avance esperado del turno. La meta es una tonelada por hora; amarillo
+// representa una tonelada de atraso.
 $tarimasHorasEvaluadas = $elapsedShiftSeconds > 0
   ? min(12, max(1, (int)ceil($elapsedShiftSeconds / 3600)))
   : 0;

@@ -28,10 +28,43 @@ function chemicalMovementsApiCostQuantity(float $quantity, string $product, stri
   return $quantity;
 }
 
+function movementsApiNormalizeUnit(string $unit): string
+{
+  $unit = strtoupper(trim($unit));
+  if (in_array($unit, ['KG', 'KGS', 'KILO', 'KILOS'], true)) return 'KG';
+  if (in_array($unit, ['G', 'GR', 'GRAMO', 'GRAMOS'], true)) return 'G';
+  if (in_array($unit, ['PZA', 'PIEZA', 'PIEZAS'], true)) return 'PZA';
+  if (in_array($unit, ['ROLLO', 'ROLLOS'], true)) return 'ROLLO';
+  if (in_array($unit, ['CAJA', 'CAJAS'], true)) return 'CAJA';
+  if (in_array($unit, ['MILLA', 'MILL', 'MILLES', 'MILLARES'], true)) return 'MILLA';
+  return $unit;
+}
+
+function movementsApiStringList($value): array
+{
+  $values = is_array($value) ? $value : [$value];
+  $result = [];
+  foreach ($values as $item) {
+    $item = strtoupper(trim((string)$item));
+    if ($item !== '' && !in_array($item, $result, true)) $result[] = $item;
+  }
+  return $result;
+}
+
 function chemicalMovementsApiFetchYear(array $apiConfig, int $year, array $conversions, DateTimeZone $timezone): array
 {
   $version = max(1, (int)($apiConfig['cache_version'] ?? 1));
-  $cacheKey = 'chemical_movements_api_' . md5(serialize([$apiConfig['url'] ?? '', $year, $version, $conversions]));
+  $cacheKey = 'chemical_movements_api_' . md5(serialize([
+    $apiConfig['url'] ?? '',
+    $apiConfig['query'] ?? [],
+    $apiConfig['tipo_mov'] ?? 'S',
+    $apiConfig['cve_mov'] ?? '17',
+    $apiConfig['lugares'] ?? ($apiConfig['lugar'] ?? null),
+    $apiConfig['productos_a_ignorar'] ?? ['DIES01'],
+    $year,
+    $version,
+    $conversions,
+  ]));
   $cached = getCache($cacheKey);
   if (is_array($cached) && is_array($cached['movements'] ?? null)) {
     $cached['cached'] = true;
@@ -41,14 +74,14 @@ function chemicalMovementsApiFetchYear(array $apiConfig, int $year, array $conve
   $result = ['movements' => [], 'warning' => '', 'cached' => false, 'year' => $year];
   $url = trim((string)($apiConfig['url'] ?? ''));
   if ($url === '' || !function_exists('curl_init')) {
-    $result['warning'] = 'La fuente API de movimientos químicos no está disponible.';
+    $result['warning'] = 'La fuente API de movimientos no está disponible.';
     return $result;
   }
 
   $salesConfig = require __DIR__ . '/../reports/ventas/config.php';
   $apiKey = trim((string)($salesConfig['pedidos_api']['api_key'] ?? ''));
   if ($apiKey === '') {
-    $result['warning'] = 'No está configurada la autorización del API de movimientos químicos.';
+    $result['warning'] = 'No está configurada la autorización del API de movimientos.';
     return $result;
   }
 
@@ -73,6 +106,14 @@ function chemicalMovementsApiFetchYear(array $apiConfig, int $year, array $conve
       throw new RuntimeException('El API devolvió una estructura inesperada.');
     }
 
+    $expectedTypes = movementsApiStringList($apiConfig['tipo_mov'] ?? 'S');
+    $expectedKeys = movementsApiStringList($apiConfig['cve_mov'] ?? '17');
+    $expectedLocations = movementsApiStringList(
+      $apiConfig['lugares']
+        ?? $apiConfig['lugar']
+        ?? ($apiConfig['query']['lugar'] ?? 'QUIMICOS')
+    );
+    $ignoredProducts = movementsApiStringList($apiConfig['productos_a_ignorar'] ?? ['DIES01']);
     $movements = [];
     foreach ($payload['data'] as $item) {
       if (!is_array($item)) continue;
@@ -83,7 +124,10 @@ function chemicalMovementsApiFetchYear(array $apiConfig, int $year, array $conve
       $dateText = substr((string)($item['fecha']['f_mov'] ?? ''), 0, 10);
       $date = DateTimeImmutable::createFromFormat('!Y-m-d', $dateText, $timezone);
       $rawQuantity = $item['consumo']['cantidad_movimiento'] ?? $item['consumo']['cantidad_consumida'] ?? null;
-      if ($type !== 'S' || $movementKey !== '17' || $location !== 'QUIMICOS' || $product === '' || $product === 'DIES01') continue;
+      if ($expectedTypes !== [] && !in_array($type, $expectedTypes, true)) continue;
+      if ($expectedKeys !== [] && !in_array(strtoupper($movementKey), $expectedKeys, true)) continue;
+      if ($expectedLocations !== [] && !in_array($location, $expectedLocations, true)) continue;
+      if ($product === '' || in_array(strtoupper($product), $ignoredProducts, true)) continue;
       if (!$date instanceof DateTimeImmutable || !is_numeric($rawQuantity)) continue;
 
       $unit = strtoupper(trim((string)($item['producto']['unidad_usuario'] ?? '')));
@@ -99,6 +143,7 @@ function chemicalMovementsApiFetchYear(array $apiConfig, int $year, array $conve
         'cve_prod' => $product,
         'desc_prod' => trim((string)($item['producto']['descripcion'] ?? $item['producto']['nombre'] ?? '')),
         'unidad' => $unit,
+        'unidad_normalizada' => movementsApiNormalizeUnit($unit),
         'cantidad_original' => $quantity,
         'consumo_kg' => chemicalMovementsApiQuantity($quantity, $product, $unit, $conversions),
         'costo_entrada' => $cost,
@@ -112,10 +157,56 @@ function chemicalMovementsApiFetchYear(array $apiConfig, int $year, array $conve
     $result['consulted_at'] = (new DateTimeImmutable('now', $timezone))->format('Y-m-d H:i:s');
     setCache($cacheKey, $result, max(300, (int)($apiConfig['cache_ttl'] ?? 3600)));
   } catch (Throwable $exception) {
-    $result['warning'] = 'No fue posible consultar los movimientos químicos desde el API.';
+    $result['warning'] = 'No fue posible consultar los movimientos desde el API.';
   }
 
   return $result;
+}
+
+function aggregateMovementsApiWeekly(array $movements, array $products = [], bool $groupByUnit = false): array
+{
+  $allowedProducts = array_fill_keys(array_map('strval', $products), true);
+  $groups = [];
+  foreach ($movements as $movement) {
+    if (!is_array($movement)) continue;
+    $product = trim((string)($movement['cve_prod'] ?? ''));
+    if ($product === '' || ($allowedProducts !== [] && !isset($allowedProducts[$product]))) continue;
+    $unit = (string)($movement['unidad_normalizada'] ?? movementsApiNormalizeUnit((string)($movement['unidad'] ?? '')));
+    $key = (string)($movement['periodo'] ?? '') . '|' . $product . ($groupByUnit ? '|' . $unit : '');
+    if (!isset($groups[$key])) {
+      $groups[$key] = [
+        'periodo' => (int)($movement['periodo'] ?? 0),
+        'semana_iso' => (string)($movement['semana_iso'] ?? ''),
+        'semana_inicio' => (string)($movement['semana_inicio'] ?? ''),
+        'semana_fin' => (string)($movement['semana_fin'] ?? ''),
+        'cve_prod' => $product,
+        'desc_prod' => (string)($movement['desc_prod'] ?? ''),
+        'unidad_original' => (string)($movement['unidad'] ?? ''),
+        'unidad_normalizada' => $unit,
+        'cantidad' => 0.0,
+        'refaccion_cantidad' => 0.0,
+        'impacto_economico' => 0.0,
+      ];
+    }
+    $quantity = (float)($movement['cantidad_original'] ?? 0.0);
+    $groups[$key]['cantidad'] += $quantity;
+    $groups[$key]['refaccion_cantidad'] += $quantity;
+    $groups[$key]['impacto_economico'] += (float)($movement['impacto_economico'] ?? 0.0);
+  }
+  foreach ($groups as &$group) {
+    $quantity = (float)$group['cantidad'];
+    $group['costo_promedio'] = $quantity != 0.0
+      ? (float)$group['impacto_economico'] / $quantity
+      : 0.0;
+  }
+  unset($group);
+  $rows = array_values($groups);
+  usort($rows, static fn(array $left, array $right): int => [
+    $left['periodo'], $left['cve_prod'], $left['unidad_normalizada']
+  ] <=> [
+    $right['periodo'], $right['cve_prod'], $right['unidad_normalizada']
+  ]);
+  return $rows;
 }
 
 function loadChemicalMovementsApi(array $apiConfig, array $years, array $conversions, DateTimeZone $timezone): array

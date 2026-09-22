@@ -5,6 +5,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../shared/helpers.php';
 require_once __DIR__ . '/../../shared/ReportHelpers.php';
 require_once __DIR__ . '/../../shared/ReportEngine.php';
+require_once __DIR__ . '/../../shared/ChemicalMovementsApi.php';
 
 /*
 |--------------------------------------------------------------------------
@@ -54,10 +55,16 @@ if ($cached !== null) {
   return $cached;
 }
 
-$state = ReportEngine::createContext($config, $appConfig, $dbConfig);
-$pdoMovs           = $state['pdoMovs'];
-$campoFechaMovsSql = $state['campoFechaMovsSql'];
-$weekFields        = $state['weekFields'];
+$timezone = new DateTimeZone((string)($config['timezone'] ?? 'America/Mexico_City'));
+$apiConfig = (array)($config['movimientos_api'] ?? []);
+$apiConfig['productos_a_ignorar'] = (array)($config['productos_a_ignorar'] ?? []);
+$apiResult = loadChemicalMovementsApi($apiConfig, [$anioAnterior, $anioActual], [], $timezone);
+$movimientosRefaccion = array_values(array_filter((array)($apiResult['movements'] ?? []), static function ($movement) use ($fechaDesde, $productoSeleccionado): bool {
+  return is_array($movement)
+    && (string)($movement['semana_fin'] ?? '') >= $fechaDesde
+    && trim((string)($movement['cve_prod'] ?? '')) === $productoSeleccionado;
+}));
+$sourceWarning = implode(' ', array_values(array_unique((array)($apiResult['warnings'] ?? []))));
 
 /*
 |--------------------------------------------------------------------------
@@ -90,57 +97,10 @@ if ($modo === 'costo') {
 | 1) DETALLE SEMANAL
 |--------------------------------------------------------------------------
 */
-if ($modo === 'costo') {
-  $sqlDetalle = "
-        SELECT
-            " . $weekFields . ",
-            TRIM(m.CVE_PROD) AS cve_prod,
-            AVG(m.COSTO_ENT) AS costo_promedio
-        FROM movs m
-        WHERE $campoFechaMovsSql >= ?
-          AND TRIM(m.TIPO_MOV) = 'S'
-          AND TRIM(m.CVE_PROD) = ?
-          AND TRIM(m.LUGAR) = ?
-        GROUP BY" . buildWeekGroupBy($campoFechaMovsSql) . ", TRIM(m.CVE_PROD)
-        ORDER BY periodo
-    ";
-} elseif ($modo === 'impacto') {
-  $sqlDetalle = "
-        SELECT
-            " . $weekFields . ",
-            TRIM(m.CVE_PROD) AS cve_prod,
-            SUM(m.CANT_PROD) AS consumo_cantidad,
-            AVG(m.COSTO_ENT) AS costo_promedio
-        FROM movs m
-        WHERE $campoFechaMovsSql >= ?
-          AND TRIM(m.TIPO_MOV) = 'S'
-          AND TRIM(m.CVE_PROD) = ?
-          AND TRIM(m.LUGAR) = ?
-        GROUP BY" . buildWeekGroupBy($campoFechaMovsSql) . ", TRIM(m.CVE_PROD)
-        ORDER BY periodo
-    ";
-} else {
-  $sqlDetalle = "
-        SELECT
-            " . $weekFields . ",
-            TRIM(m.CVE_PROD) AS cve_prod,
-            SUM(m.CANT_PROD) AS consumo_cantidad
-        FROM movs m
-        WHERE $campoFechaMovsSql >= ?
-          AND TRIM(m.TIPO_MOV) = 'S'
-          AND TRIM(m.CVE_PROD) = ?
-          AND TRIM(m.LUGAR) = ?
-        GROUP BY" . buildWeekGroupBy($campoFechaMovsSql) . ", TRIM(m.CVE_PROD)
-        ORDER BY periodo
-    ";
-}
-$paramsDetalle = [$fechaDesde, $productoSeleccionado, $lugar];
-
-$stmtDetalle = $pdoMovs->prepare($sqlDetalle);
-$stmtDetalle->execute($paramsDetalle);
-
 $detallePorPeriodo = [];
-while ($row = $stmtDetalle->fetch()) {
+$rowsDetalle = aggregateMovementsApiWeekly($movimientosRefaccion, [$productoSeleccionado], false);
+foreach ($rowsDetalle as $row) {
+  $row['consumo_cantidad'] = (float)($row['refaccion_cantidad'] ?? 0.0);
   $detallePorPeriodo[(int)$row['periodo']] = $row;
 }
 
@@ -153,23 +113,19 @@ $costoBase           = null;
 $costoPromedioActual = null;
 
 if ($modo === 'costo' || $modo === 'impacto') {
-  $sqlCostoBase = "
-        SELECT
-            AVG(CASE WHEN CAST(DATE_FORMAT($campoFechaMovsSql, '%x') AS UNSIGNED) = ? THEN m.COSTO_ENT END) AS promedio_anio_anterior,
-            AVG(CASE WHEN CAST(DATE_FORMAT($campoFechaMovsSql, '%x') AS UNSIGNED) = ? THEN m.COSTO_ENT END) AS promedio_anio_actual
-        FROM movs m
-        WHERE $campoFechaMovsSql >= ?
-          AND TRIM(m.TIPO_MOV) = 'S'
-          AND TRIM(m.CVE_PROD) = ?
-          AND TRIM(m.LUGAR) = ?
-    ";
-
-  $stmtCostoBase = $pdoMovs->prepare($sqlCostoBase);
-  $stmtCostoBase->execute([$anioAnterior, $anioActual, $fechaDesde, $productoSeleccionado, $lugar]);
-  $rowCostoBase = $stmtCostoBase->fetch();
-
-  $costoBase           = isset($rowCostoBase['promedio_anio_anterior']) ? (float)$rowCostoBase['promedio_anio_anterior'] : null;
-  $costoPromedioActual = isset($rowCostoBase['promedio_anio_actual'])   ? (float)$rowCostoBase['promedio_anio_actual']   : null;
+  $costByYear = [];
+  foreach ($movimientosRefaccion as $movement) {
+    $year = (int)substr((string)($movement['semana_iso'] ?? ''), 0, 4);
+    if (!isset($costByYear[$year])) $costByYear[$year] = ['cantidad' => 0.0, 'impacto' => 0.0];
+    $costByYear[$year]['cantidad'] += (float)($movement['cantidad_original'] ?? 0.0);
+    $costByYear[$year]['impacto'] += (float)($movement['impacto_economico'] ?? 0.0);
+  }
+  $costoBase = !empty($costByYear[$anioAnterior]['cantidad'])
+    ? $costByYear[$anioAnterior]['impacto'] / $costByYear[$anioAnterior]['cantidad']
+    : null;
+  $costoPromedioActual = !empty($costByYear[$anioActual]['cantidad'])
+    ? $costByYear[$anioActual]['impacto'] / $costByYear[$anioActual]['cantidad']
+    : null;
 }
 
 /*
@@ -372,6 +328,7 @@ $result = [
 
   'maxRatio' => $maxRatio,
   'version'  => $version,
+  'sourceWarning' => $sourceWarning,
 
   'meta' => [
     'fechaDesde'             => $fechaDesde,
@@ -390,6 +347,8 @@ $result = [
     'kpi3LabelImpacto'       => 'Impacto promedio semanal ' . $anioActual,
     'productoSeleccionado'   => $productoSeleccionado,
     'productoLabel'          => $config['productoLabel'] ?? $productoSeleccionado,
+    'sourceWarning'          => $sourceWarning,
+    'fuenteMovimientos'      => 'API movimientos-salida',
   ],
 ];
 

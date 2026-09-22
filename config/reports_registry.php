@@ -197,6 +197,16 @@ return [
       'enabled' => true,
     ],
     [
+      'slug' => 'rendimiento-procesos',
+      'title' => 'RENDIMIENTO POR PROCESO',
+      'description' => 'Análisis de materia prima, proveedor, condiciones de proceso, calidad y rendimiento de producto terminado por proceso.',
+      'icon' => 'fa-chart-column',
+      'color' => '#0f766e',
+      'groups' => ['produccion'],
+      'url' => './rendimiento-procesos/index.php',
+      'enabled' => true,
+    ],
+    [
       'slug' => 'secadores',
       'title' => 'SECADORES',
       'description' => 'Monitoreo del comportamiento de los secadores con semáforos configurables por variable y actualización automática.',

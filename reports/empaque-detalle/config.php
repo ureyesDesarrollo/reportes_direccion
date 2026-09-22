@@ -46,5 +46,13 @@ return [
 
   'campo_costo' => 'COSTO_ENT',
   'lugar' => 'EMPAQUES',
+  'movimientos_api' => [
+    'url' => 'http://192.168.1.104:5000/api/movimientos-salida',
+    'query' => ['lugar' => 'EMPAQUES'],
+    'lugar' => 'EMPAQUES',
+    'cve_mov' => ['17'],
+    'cache_ttl' => 3600,
+    'cache_version' => 1,
+  ],
   'productos_a_ignorar' => [],
 ];

@@ -5,6 +5,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../shared/helpers.php';
 require_once __DIR__ . '/../../shared/ReportHelpers.php';
 require_once __DIR__ . '/../../shared/ReportEngine.php';
+require_once __DIR__ . '/../../shared/ChemicalMovementsApi.php';
 
 /*
 |--------------------------------------------------------------------------
@@ -55,48 +56,20 @@ if ($cached !== null) {
 }
 
 $sourceWarnings = [];
-$pdoMovs = conectar($dbConfig['movs']);
 $pdoProd = null;
 try {
   $pdoProd = conectar($dbConfig['prod']);
 } catch (Throwable $exception) {
   $sourceWarnings[] = 'La producción no está disponible; el consumo y costo de empaques continúan visibles.';
 }
-$campoFechaMovsSql = "m.`{$campoFechaMovs}`";
-$weekFields = buildWeekFields($campoFechaMovsSql);
-
-// Detectar los lugares reales para los empaques
-// SOLO buscar en EMPAQUES
-$sqlDetectarLugares = "
-    SELECT m.LUGAR
-    FROM movs m
-    WHERE TRIM(m.TIPO_MOV) = 'S'
-    AND m.LUGAR = 'EMPAQUES'
-    AND $campoFechaMovsSql >= ?
-";
-$paramsDetectarLugares = [$fechaDesde];
-
-// Si hay productos específicos, filtrar por ellos
-if (!$usarTodosLosProductos && !empty($productosEmpaques)) {
-  $placeholdersProd = createPlaceholders($productosEmpaques);
-  $sqlDetectarLugares .= " AND TRIM(m.CVE_PROD) IN ($placeholdersProd) ";
-  $paramsDetectarLugares = array_merge($paramsDetectarLugares, $productosEmpaques);
-}
-
-if (!empty($productosAIgnorar)) {
-  $placeholdersIgn = createPlaceholders($productosAIgnorar);
-  $sqlDetectarLugares .= " AND m.CVE_PROD NOT IN ($placeholdersIgn) ";
-  $paramsDetectarLugares = array_merge($paramsDetectarLugares, $productosAIgnorar);
-}
-
-$sqlDetectarLugares .= " LIMIT 1";
-
-$stmtLugares = $pdoMovs->prepare($sqlDetectarLugares);
-$stmtLugares->execute($paramsDetectarLugares);
-$lugarRow = $stmtLugares->fetch();
-
-// Usar EMPAQUES siempre
-$lugarEmpaques = 'EMPAQUES';
+$timezone = new DateTimeZone((string)($config['timezone'] ?? 'America/Mexico_City'));
+$apiConfig = (array)($config['movimientos_api'] ?? []);
+$apiConfig['productos_a_ignorar'] = $productosAIgnorar;
+$apiResult = loadChemicalMovementsApi($apiConfig, [$anioAnterior, $anioActual], [], $timezone);
+$movimientosEmpaques = array_values(array_filter((array)($apiResult['movements'] ?? []), static function ($movement) use ($fechaDesde): bool {
+  return is_array($movement) && (string)($movement['semana_fin'] ?? '') >= $fechaDesde;
+}));
+$sourceWarnings = array_merge($sourceWarnings, (array)($apiResult['warnings'] ?? []));
 
 /*
 |--------------------------------------------------------------------------
@@ -107,142 +80,39 @@ $lugarEmpaques = 'EMPAQUES';
 | - base histórica por empaque y unidad
 |--------------------------------------------------------------------------
 */
-$sqlPivot = "
-    SELECT
-        " . $weekFields . ",
-        TRIM(m.CVE_PROD) AS cve_prod,
-        COALESCE(TRIM(p.DESC_PROD), '') AS desc_prod,
-        UPPER(TRIM(m.UNIUSU)) AS unidad_original,
-        CASE
-            WHEN UPPER(TRIM(m.UNIUSU)) IN ('KG','KGS','KILO','KILOS') THEN 'KG'
-            WHEN UPPER(TRIM(m.UNIUSU)) IN ('G','GR','GRAMO','GRAMOS') THEN 'G'
-            WHEN UPPER(TRIM(m.UNIUSU)) IN ('PZA','PIEZA','PIEZAS') THEN 'PZA'
-            WHEN UPPER(TRIM(m.UNIUSU)) IN ('ROLLO','ROLLOS') THEN 'ROLLO'
-            WHEN UPPER(TRIM(m.UNIUSU)) IN ('CAJA','CAJAS') THEN 'CAJA'
-            WHEN UPPER(TRIM(m.UNIUSU)) IN ('MILLA','MILL','MILLES','MILLARES') THEN 'MILLA'
-            ELSE UPPER(TRIM(m.UNIUSU))
-        END AS unidad_normalizada,
-        SUM(m.CANT_PROD) AS cantidad,
-        AVG(m.COSTO_ENT) AS costo_promedio
-    FROM movs m
-    LEFT JOIN producto p
-        ON TRIM(p.CVE_PROD) = TRIM(m.CVE_PROD)
-    WHERE $campoFechaMovsSql >= ?
-      AND TRIM(m.TIPO_MOV) = 'S'
-      AND m.LUGAR = ?
-";
-
-$paramsPivot = [$fechaDesde, $lugarEmpaques];
-
-// Agregar productos a ignorar
-if (!empty($productosAIgnorar)) {
-  $placeholdersIgnorar = createPlaceholders($productosAIgnorar);
-  $sqlPivot .= " AND m.CVE_PROD NOT IN ($placeholdersIgnorar) ";
-  $paramsPivot = array_merge($paramsPivot, $productosAIgnorar);
-}
-
-if (!$usarTodosLosProductos && !empty($productosEmpaques)) {
-  $placeholdersPivot = createPlaceholders($productosEmpaques);
-  $sqlPivot .= " AND TRIM(m.CVE_PROD) IN ($placeholdersPivot) ";
-  $paramsPivot = array_merge($paramsPivot, $productosEmpaques);
-}
-
-if ($cveMov !== null && $cveMov !== '') {
-  $sqlPivot .= " AND m.CVE_MOV = ? ";
-  $paramsPivot[] = $cveMov;
-}
-
-$sqlPivot .= "
-    GROUP BY" . buildWeekGroupBy($campoFechaMovsSql) . ",
-        TRIM(m.CVE_PROD),
-        p.DESC_PROD,
-        unidad_normalizada
-    ORDER BY semana_iso, cve_prod, unidad_normalizada
-";
-
-$stmtPivot = $pdoMovs->prepare($sqlPivot);
-$stmtPivot->execute($paramsPivot);
-$rowsPivot = $stmtPivot->fetchAll();
-
-// Si no hay datos con CVE_MOV, intentar sin ese filtro
-if (empty($rowsPivot) && $cveMov !== null && $cveMov !== '') {
-  $sqlPivotSinCve = str_replace(" AND m.CVE_MOV = ? ", "", $sqlPivot);
-  // Remover el parámetro CVE_MOV
-  $paramsPivotSinCve = array_slice($paramsPivot, 0, -1);
-
-  $stmtPivotSinCve = $pdoMovs->prepare($sqlPivotSinCve);
-  $stmtPivotSinCve->execute($paramsPivotSinCve);
-  $rowsPivot = $stmtPivotSinCve->fetchAll();
-}
+$rowsPivot = aggregateMovementsApiWeekly(
+  $movimientosEmpaques,
+  !$usarTodosLosProductos ? (array)$productosEmpaques : [],
+  true
+);
 
 /*
 |--------------------------------------------------------------------------
 | 2) TOTAL DE EMPAQUES POR SEMANA (kg normalizados + cantidad bruta, query unificada)
 |--------------------------------------------------------------------------
 */
-$sqlEmpaques = "
-    SELECT
-        " . $weekFields . ",
-        SUM(
-            CASE
-                WHEN UPPER(TRIM(m.UNIUSU)) IN ('KG','KGS','KILO','KILOS') THEN m.CANT_PROD
-                WHEN UPPER(TRIM(m.UNIUSU)) IN ('G','GR','GRAMO','GRAMOS') THEN m.CANT_PROD / 1000
-                ELSE m.CANT_PROD
-            END
-        ) AS empaques_kg,
-        SUM(m.CANT_PROD) AS empaques_cantidad
-    FROM movs m
-    WHERE $campoFechaMovsSql >= ?
-      AND TRIM(m.TIPO_MOV) = 'S'
-      AND m.LUGAR = ?
-";
-
-$paramsEmpaques = [$fechaDesde, $lugarEmpaques];
-
-// Agregar productos a ignorar
-if (!empty($productosAIgnorar)) {
-  $placeholdersIgnorar = createPlaceholders($productosAIgnorar);
-  $sqlEmpaques .= " AND m.CVE_PROD NOT IN ($placeholdersIgnorar) ";
-  $paramsEmpaques = array_merge($paramsEmpaques, $productosAIgnorar);
-}
-
-if (!$usarTodosLosProductos && !empty($productosEmpaques)) {
-  $placeholders = createPlaceholders($productosEmpaques);
-  $sqlEmpaques .= " AND TRIM(m.CVE_PROD) IN ($placeholders) ";
-  $paramsEmpaques = array_merge($paramsEmpaques, $productosEmpaques);
-}
-
-if ($cveMov !== null && $cveMov !== '') {
-  $sqlEmpaques .= " AND m.CVE_MOV = ? ";
-  $paramsEmpaques[] = $cveMov;
-}
-
-$sqlEmpaques .= "
-    GROUP BY YEARWEEK($campoFechaMovsSql, 3)
-    ORDER BY periodo
-";
-
-$stmtE = $pdoMovs->prepare($sqlEmpaques);
-$stmtE->execute($paramsEmpaques);
-
 $empaquesPorPeriodo = [];
 $empaquessPorPeriodo = [];
-while ($row = $stmtE->fetch()) {
-  $periodo = (int)$row['periodo'];
-  $empaquesPorPeriodo[$periodo] = [
-    'periodo' => $periodo,
-    'semana_iso' => $row['semana_iso'],
-    'semana_inicio' => $row['semana_inicio'],
-    'semana_fin' => $row['semana_fin'],
-    'empaques_kg' => (float)$row['empaques_kg'],
-  ];
-  $empaquessPorPeriodo[$periodo] = [
-    'periodo' => $periodo,
-    'semana_iso' => $row['semana_iso'],
-    'semana_inicio' => $row['semana_inicio'],
-    'semana_fin' => $row['semana_fin'],
-    'empaques_cantidad' => (float)$row['empaques_cantidad'],
-  ];
+foreach ($movimientosEmpaques as $movement) {
+  $periodo = (int)$movement['periodo'];
+  if (!isset($empaquesPorPeriodo[$periodo])) {
+    $empaquesPorPeriodo[$periodo] = [
+      'periodo' => $periodo,
+      'semana_iso' => $movement['semana_iso'],
+      'semana_inicio' => $movement['semana_inicio'],
+      'semana_fin' => $movement['semana_fin'],
+      'empaques_kg' => 0.0,
+    ];
+    $empaquessPorPeriodo[$periodo] = [
+      'periodo' => $periodo,
+      'semana_iso' => $movement['semana_iso'],
+      'semana_inicio' => $movement['semana_inicio'],
+      'semana_fin' => $movement['semana_fin'],
+      'empaques_cantidad' => 0.0,
+    ];
+  }
+  $empaquesPorPeriodo[$periodo]['empaques_kg'] += (float)($movement['consumo_kg'] ?? 0.0);
+  $empaquessPorPeriodo[$periodo]['empaques_cantidad'] += (float)($movement['cantidad_original'] ?? 0.0);
 }
 
 /*
@@ -638,60 +508,33 @@ $costoPromedioEmpaqueAnioActual   = [];
 $impactoEconomicoEmpaqueAnioAnterior = [];
 $impactoEconomicoEmpaqueAnioActual   = [];
 
-$sqlAnual = "
-    SELECT
-        CAST(DATE_FORMAT(" . $campoFechaMovsSql . ", '%x') AS UNSIGNED) AS anio_iso,
-        CONCAT(TRIM(m.CVE_PROD), '|', TRIM(m.UNIUSU)) AS clave_empaque,
-        SUM(m.CANT_PROD) AS cantidad,
-        CASE WHEN SUM(m.CANT_PROD) > 0
-             THEN SUM(m.COSTO_ENT * m.CANT_PROD) / SUM(m.CANT_PROD)
-             ELSE 0 END AS costo_ponderado
-    FROM movs m
-    WHERE CAST(DATE_FORMAT(" . $campoFechaMovsSql . ", '%x') AS UNSIGNED) IN (?, ?)
-      AND TRIM(m.TIPO_MOV) = 'S'
-      AND m.LUGAR = ?
-      AND TRIM(m.UNIUSU) <> ''
-";
-
-$paramsAnual = [$anioAnterior, $anioActual, $lugarEmpaques];
-
-if (!empty($productosAIgnorar)) {
-  $placeholdersIgn = createPlaceholders($productosAIgnorar);
-  $sqlAnual .= " AND m.CVE_PROD NOT IN ($placeholdersIgn) ";
-  $paramsAnual = array_merge($paramsAnual, $productosAIgnorar);
+$annualPackages = [];
+foreach ($rowsPivot as $row) {
+  $anio = (int)substr((string)($row['semana_iso'] ?? ''), 0, 4);
+  if (!in_array($anio, [$anioAnterior, $anioActual], true)) continue;
+  $clave = trim((string)$row['cve_prod']) . '|' . trim((string)$row['unidad_normalizada']);
+  if (!isset($annualPackages[$anio][$clave])) {
+    $annualPackages[$anio][$clave] = ['cantidad' => 0.0, 'impacto' => 0.0];
+  }
+  $annualPackages[$anio][$clave]['cantidad'] += (float)$row['cantidad'];
+  $annualPackages[$anio][$clave]['impacto'] += (float)($row['impacto_economico'] ?? 0.0);
 }
 
-if (!$usarTodosLosProductos && !empty($productosEmpaques)) {
-  $placeholders = createPlaceholders($productosEmpaques);
-  $sqlAnual .= " AND TRIM(m.CVE_PROD) IN ($placeholders) ";
-  $paramsAnual = array_merge($paramsAnual, $productosEmpaques);
-}
+foreach ($annualPackages as $anio => $packages) {
+  foreach ($packages as $clave => $annualRow) {
+    $cantidad = (float)$annualRow['cantidad'];
+    $impacto = (float)$annualRow['impacto'];
+    $costo = $cantidad != 0.0 ? $impacto / $cantidad : 0.0;
 
-if ($cveMov !== null && $cveMov !== '') {
-  $sqlAnual .= " AND m.CVE_MOV = ? ";
-  $paramsAnual[] = $cveMov;
-}
-
-$sqlAnual .= " GROUP BY CAST(DATE_FORMAT(" . $campoFechaMovsSql . ", '%x') AS UNSIGNED), TRIM(m.CVE_PROD), TRIM(m.UNIUSU) ";
-
-$stmtAnual = $pdoMovs->prepare($sqlAnual);
-$stmtAnual->execute($paramsAnual);
-
-while ($row = $stmtAnual->fetch()) {
-  $clave    = $row['clave_empaque'];
-  $anio     = (int)$row['anio_iso'];
-  $cantidad = (float)$row['cantidad'];
-  $costo    = (float)$row['costo_ponderado'];
-  $impacto  = $cantidad * $costo;
-
-  if ($anio === $anioAnterior) {
-    $cantidadEmpaqueAnioAnterior[$clave]        = $cantidad;
-    $costoPromedioEmpaqueAnioAnterior[$clave]   = $costo;
-    $impactoEconomicoEmpaqueAnioAnterior[$clave] = $impacto;
-  } else {
-    $cantidadEmpaqueAnioActual[$clave]          = $cantidad;
-    $costoPromedioEmpaqueAnioActual[$clave]     = $costo;
-    $impactoEconomicoEmpaqueAnioActual[$clave]  = $impacto;
+    if ((int)$anio === $anioAnterior) {
+      $cantidadEmpaqueAnioAnterior[$clave] = $cantidad;
+      $costoPromedioEmpaqueAnioAnterior[$clave] = $costo;
+      $impactoEconomicoEmpaqueAnioAnterior[$clave] = $impacto;
+    } else {
+      $cantidadEmpaqueAnioActual[$clave] = $cantidad;
+      $costoPromedioEmpaqueAnioActual[$clave] = $costo;
+      $impactoEconomicoEmpaqueAnioActual[$clave] = $impacto;
+    }
   }
 }
 
@@ -840,6 +683,7 @@ $result = [
     'intervaloActualizacion' => $intervaloActualizacion,
     'cveMov' => $cveMov,
     'sourceWarning' => $sourceWarning,
+    'fuenteMovimientos' => 'API movimientos-salida',
   ],
 ];
 
