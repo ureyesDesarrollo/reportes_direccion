@@ -1,0 +1,182 @@
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  background: #08131b;
+}
+
+body {
+  color: #f4f7fa;
+}
+
+.humidity-report {
+  width: 100%;
+  min-height: 100vh;
+  padding: 12px;
+  background: #08131b;
+}
+
+.report-header {
+  margin-bottom: 12px;
+}
+
+h1,
+.chart-head h2,
+.metric-value {
+  color: #f4f7fa;
+}
+
+.subtitle,
+.field > span,
+.metric-label,
+.metric-meta,
+.chart-average,
+.ranges {
+  color: #cbd8e2;
+}
+
+.title-icon {
+  color: #08131b;
+  background: #f4f7fa;
+}
+
+.back {
+  border-color: #314451;
+  color: #f4f7fa;
+  background: #1b2b36;
+}
+
+.filters,
+.dryer-card,
+.chart-card {
+  border: 1px solid #314451;
+  background: #13212b;
+  box-shadow: none;
+}
+
+.filters {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+}
+
+.period-tabs {
+  background: #1b2b36;
+}
+
+.period-tabs span {
+  color: #cbd8e2;
+}
+
+.period-tabs input:checked + span {
+  color: #08131b;
+  background: #f4f7fa;
+}
+
+.date-input {
+  border-color: #314451;
+  color: #f4f7fa;
+  background: #1b2b36;
+  color-scheme: dark;
+}
+
+.period-label {
+  color: #7dd3fc;
+}
+
+.cards,
+.charts {
+  gap: 10px;
+}
+
+.cards {
+  margin-bottom: 10px;
+}
+
+.dryer-card,
+.chart-card {
+  border-radius: 15px;
+}
+
+.dryer-head {
+  padding: 11px 14px;
+}
+
+.dryer-body {
+  min-height: 176px;
+  padding: 14px;
+  background: #13212b;
+}
+
+.status {
+  background: rgba(255, 255, 255, .22);
+}
+
+.dryer-card.amarillo .status {
+  background: rgba(17, 24, 39, .14);
+}
+
+.dryer-card.verde,
+.dryer-card.verde .dryer-body { background: #2e8b57; }
+.dryer-card.amarillo,
+.dryer-card.amarillo .dryer-body { color: #111827; background: #facc15; }
+.dryer-card.rojo,
+.dryer-card.rojo .dryer-body { background: #c94436; }
+.dryer-card.verde { border-color: #2e8b57; }
+.dryer-card.amarillo { border-color: #facc15; }
+.dryer-card.rojo { border-color: #c94436; }
+.dryer-card.verde .metric-value,
+.dryer-card.verde .metric-label,
+.dryer-card.verde .metric-meta,
+.dryer-card.rojo .metric-value,
+.dryer-card.rojo .metric-label,
+.dryer-card.rojo .metric-meta { color: #fff; }
+.dryer-card.amarillo .metric-value,
+.dryer-card.amarillo .metric-label,
+.dryer-card.amarillo .metric-meta { color: #111827; }
+
+.chart-head {
+  padding: 11px 14px 0;
+}
+
+.chart-wrap {
+  height: 235px;
+}
+
+.latest-label {
+  color: #f4f7fa;
+}
+
+.empty-chart {
+  color: #cbd8e2;
+  background: #1b2b36;
+}
+
+.ranges {
+  margin-top: 10px;
+  padding: 8px;
+}
+
+body.capture-mode .humidity-report {
+  padding: 7px;
+}
+
+body.capture-mode .chart-wrap {
+  height: 210px;
+}
+
+@media (max-width: 700px) {
+  .humidity-report {
+    padding: 8px;
+  }
+
+  .report-header {
+    margin-bottom: 9px;
+  }
+
+  .dryer-body {
+    min-height: 165px;
+  }
+}
+

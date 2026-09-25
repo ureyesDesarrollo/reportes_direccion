@@ -19,7 +19,7 @@ try {
   $loadError = 'No fue posible consultar la información del servidor 105.';
   $report = [
     'titulo' => (string)($config['titulo'] ?? 'Rendimiento por Proceso'),
-    'filtros' => ['desde' => '', 'hasta' => '', 'material' => 'all', 'proveedor' => null],
+    'filtros' => ['anio' => (int)date('Y'), 'mes' => (int)date('n'), 'mes_nombre' => '', 'anios' => [], 'meses' => [], 'material' => 'all', 'proveedor' => null],
     'opciones' => ['materiales' => [], 'proveedores' => []],
     'kpis' => [], 'graficas' => [], 'filas' => [], 'meta' => [], 'version' => time(),
   ];
@@ -134,6 +134,7 @@ $chartPalette = ['#0f766e', '#2563eb', '#7c3aed', '#d97706', '#dc2626', '#0891b2
     <div>
       <a class="rp-back" href="../index.php"><i class="fa-solid fa-arrow-left"></i> Reportes</a>
       <h1 class="rp-title"><?= $e($titulo) ?></h1>
+      <p class="rp-subtitle"><?= $e(($filtros['mes_nombre'] ?? '') . ' ' . ($filtros['anio'] ?? '')) ?> · <?= $e($meta['periodo_inicio'] ?? '') ?> al <?= $e($meta['periodo_fin'] ?? '') ?></p>
     </div>
     <div class="rp-updated">Actualizado: <?= $e($meta['generado_en'] ?? '—') ?></div>
   </header>
@@ -144,12 +145,20 @@ $chartPalette = ['#0f766e', '#2563eb', '#7c3aed', '#d97706', '#dc2626', '#0891b2
 
   <form class="rp-panel rp-filters" method="get">
     <div class="rp-field">
-      <label for="desde">Producción desde</label>
-      <input id="desde" name="desde" type="date" value="<?= $e($filtros['desde'] ?? '') ?>">
+      <label for="anio">Año</label>
+      <select id="anio" name="anio">
+        <?php foreach ((array)($filtros['anios'] ?? []) as $anio): ?>
+          <option value="<?= (int)$anio ?>" <?= (int)$anio === (int)($filtros['anio'] ?? 0) ? 'selected' : '' ?>><?= (int)$anio ?></option>
+        <?php endforeach; ?>
+      </select>
     </div>
     <div class="rp-field">
-      <label for="hasta">Producción hasta</label>
-      <input id="hasta" name="hasta" type="date" value="<?= $e($filtros['hasta'] ?? '') ?>">
+      <label for="mes">Mes</label>
+      <select id="mes" name="mes">
+        <?php foreach ((array)($filtros['meses'] ?? []) as $monthNumber => $monthName): ?>
+          <option value="<?= (int)$monthNumber ?>" <?= (int)$monthNumber === (int)($filtros['mes'] ?? 0) ? 'selected' : '' ?>><?= $e($monthName) ?></option>
+        <?php endforeach; ?>
+      </select>
     </div>
     <div class="rp-field">
       <label for="material">Material</label>

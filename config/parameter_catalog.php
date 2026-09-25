@@ -315,6 +315,17 @@ return [
       ],
     ],
     'votators' => [
+      'temperatura_nariz' => [
+        'modo' => 'bandas',
+        'leyenda' => '14–19',
+        'bandas' => [
+          ['max' => 11.999999, 'estado' => 'rojo', 'leyenda' => '<12'],
+          ['min' => 12, 'max' => 13.999999, 'estado' => 'amarillo', 'leyenda' => '12–13.9'],
+          ['min' => 14, 'max' => 19, 'estado' => 'verde', 'leyenda' => '14–19'],
+          ['min' => 19.000001, 'max' => 23, 'estado' => 'amarillo', 'leyenda' => '19.1–23'],
+          ['min' => 23.000001, 'estado' => 'rojo', 'leyenda' => '≥23.1'],
+        ],
+      ],
       'flujo' => [
         'modo' => 'bandas',
         'leyenda' => '11.5-12.5',

@@ -11,31 +11,30 @@ $timezone = (string)($config['timezone'] ?? 'America/Mexico_City');
 date_default_timezone_set($timezone);
 $tz = new DateTimeZone($timezone);
 $today = new DateTimeImmutable('today', $tz);
-
-$parseDate = static function ($value, DateTimeImmutable $fallback, DateTimeZone $tz): DateTimeImmutable {
-  $text = trim((string)$value);
-  if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $text) !== 1) {
-    return $fallback;
-  }
-
-  try {
-    return new DateTimeImmutable($text . ' 00:00:00', $tz);
-  } catch (Throwable $e) {
-    return $fallback;
-  }
+$monthNames = [
+  1 => 'enero', 2 => 'febrero', 3 => 'marzo', 4 => 'abril',
+  5 => 'mayo', 6 => 'junio', 7 => 'julio', 8 => 'agosto',
+  9 => 'septiembre', 10 => 'octubre', 11 => 'noviembre', 12 => 'diciembre',
+];
+$safeInt = static function ($value, int $fallback, int $min, int $max): int {
+  if (!is_scalar($value) || !is_numeric($value)) return $fallback;
+  $number = (int)$value;
+  return ($number >= $min && $number <= $max) ? $number : $fallback;
 };
 
-$defaultStart = $parseDate(
-  (string)($config['fecha_inicio_default'] ?? '2025-06-01'),
-  $today->modify('-12 months'),
-  $tz
-);
-$start = $parseDate($_GET['desde'] ?? null, $defaultStart, $tz);
-$end = $parseDate($_GET['hasta'] ?? null, $today, $tz);
-if ($end < $start) {
-  [$start, $end] = [$end, $start];
+$pdo = conectar((array)($dbConfig[(string)($config['database_key'] ?? 'prod')] ?? $dbConfig['prod']));
+$selectedYear = $safeInt($_GET['anio'] ?? null, (int)$today->format('Y'), 2020, 2100);
+$selectedMonth = $safeInt($_GET['mes'] ?? null, (int)$today->format('n'), 1, 12);
+$yearStmt = $pdo->query("SELECT DISTINCT YEAR(tar_fecha) AS anio FROM rev_tarimas WHERE tar_fecha IS NOT NULL ORDER BY anio DESC");
+$yearOptions = array_values(array_filter(array_map('intval', array_column($yearStmt->fetchAll() ?: [], 'anio'))));
+if (!in_array($selectedYear, $yearOptions, true)) {
+  $yearOptions[] = $selectedYear;
+  rsort($yearOptions);
 }
-$endExclusive = $end->modify('+1 day');
+
+$start = new DateTimeImmutable(sprintf('%04d-%02d-01 00:00:00', $selectedYear, $selectedMonth), $tz);
+$endExclusive = $start->modify('first day of next month');
+$end = $endExclusive->modify('-1 day');
 
 $selectedMaterial = trim((string)($_GET['material'] ?? 'all'));
 $selectedProvider = filter_var($_GET['proveedor'] ?? null, FILTER_VALIDATE_INT, [
@@ -43,7 +42,6 @@ $selectedProvider = filter_var($_GET['proveedor'] ?? null, FILTER_VALIDATE_INT, 
 ]);
 $selectedProvider = $selectedProvider === false ? null : (int)$selectedProvider;
 
-$pdo = conectar((array)($dbConfig[(string)($config['database_key'] ?? 'prod')] ?? $dbConfig['prod']));
 $barreduraProId = 2;
 $horaCorte = (string)($config['hora_corte'] ?? '07:00:00');
 if (preg_match('/^([01]\d|2[0-3]):[0-5]\d:[0-5]\d$/', $horaCorte) !== 1) {
@@ -610,8 +608,11 @@ $processChartRows = array_reverse(array_slice(array_values($processChartMap), 0,
 return [
   'titulo' => (string)($config['titulo'] ?? 'Rendimiento por Proceso'),
   'filtros' => [
-    'desde' => $start->format('Y-m-d'),
-    'hasta' => $end->format('Y-m-d'),
+    'anio' => $selectedYear,
+    'mes' => $selectedMonth,
+    'mes_nombre' => $monthNames[$selectedMonth] ?? (string)$selectedMonth,
+    'anios' => $yearOptions,
+    'meses' => $monthNames,
     'material' => $selectedMaterial,
     'proveedor' => $selectedProvider,
   ],
@@ -645,6 +646,8 @@ return [
   'filas' => $rows,
   'meta' => [
     'generado_en' => (new DateTimeImmutable('now', $tz))->format('Y-m-d H:i:s'),
+    'periodo_inicio' => $start->format('Y-m-d'),
+    'periodo_fin' => $end->format('Y-m-d'),
     'hora_corte' => $horaCorte,
     'zona_horaria' => (string)($config['timezone_label'] ?? 'UTC-6'),
     'intervalo_actualizacion_ms' => (int)($config['intervalo_actualizacion_ms'] ?? 900000),

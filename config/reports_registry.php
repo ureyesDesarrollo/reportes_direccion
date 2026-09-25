@@ -185,6 +185,16 @@ return [
       'enabled' => true,
     ],
     [
+      'slug' => 'votators',
+      'title' => 'Votators',
+      'description' => 'Monitoreo en tiempo real de los cuatro Votators con lecturas y semáforos de AVEVA.',
+      'icon' => 'fa-sliders',
+      'color' => '#0f766e',
+      'groups' => ['produccion'],
+      'url' => './votators/index.php',
+      'enabled' => true,
+    ],
+    [
       'slug' => 'materia-prima',
       'title' => 'Materia Prima',
       'direccion_general_title' => 'MP / Rendimiento',
@@ -246,6 +256,16 @@ return [
       'color' => '#0f766e',
       'groups' => ['produccion', 'direccion-general'],
       'url' => './calidad-produccion/index.php',
+      'enabled' => true,
+    ],
+    [
+      'slug' => 'humedad-churro',
+      'title' => 'Humedad Churro',
+      'description' => 'Humedad Churro por secador, considerando equipos fuera de operación.',
+      'icon' => 'fa-droplet',
+      'color' => '#0f766e',
+      'groups' => ['produccion'],
+      'url' => './humedad-churro/index.php',
       'enabled' => true,
     ],
     [

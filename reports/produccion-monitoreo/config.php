@@ -436,6 +436,9 @@ foreach ((array)($productionMonitoringConfig['secadores']['votator_campos_overla
     if (isset($productionMonitoringConfig['secadores']['votator_campos_overlay'][$tunnelKey][$votatorKey]['campos']['flujo'])) {
       $productionMonitoringConfig['secadores']['votator_campos_overlay'][$tunnelKey][$votatorKey]['campos']['flujo']['semaforo'] = (array)($masterVotatorRules['flujo'] ?? []);
     }
+    if (isset($productionMonitoringConfig['secadores']['votator_campos_overlay'][$tunnelKey][$votatorKey]['campos']['temperatura_nariz'])) {
+      $productionMonitoringConfig['secadores']['votator_campos_overlay'][$tunnelKey][$votatorKey]['campos']['temperatura_nariz']['semaforo'] = (array)($masterVotatorRules['temperatura_nariz'] ?? []);
+    }
   }
 }
 

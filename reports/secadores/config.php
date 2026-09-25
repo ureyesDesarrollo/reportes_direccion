@@ -996,6 +996,9 @@ foreach ((array)($config['votators_por_tunel'] ?? []) as $tunnelKey => $votators
     if (isset($config['votators_por_tunel'][$tunnelKey][$votatorKey]['campos']['presion_cuajado'])) {
       $config['votators_por_tunel'][$tunnelKey][$votatorKey]['campos']['presion_cuajado']['semaforo'] = (array)($masterVotators['presion_cuajado'] ?? []);
     }
+    if (isset($config['votators_por_tunel'][$tunnelKey][$votatorKey]['campos']['temperatura_nariz'])) {
+      $config['votators_por_tunel'][$tunnelKey][$votatorKey]['campos']['temperatura_nariz']['semaforo'] = (array)($masterVotators['temperatura_nariz'] ?? []);
+    }
   }
 }
 
