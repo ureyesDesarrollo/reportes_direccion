@@ -11,7 +11,7 @@ $secadoresConfig = array_replace_recursive($secadoresConfig, [
 return [
   'titulo' => 'Votators',
   'subtitulo' => 'Monitoreo en tiempo real',
-  'intervalo_actualizacion_ms' => 1000,
+  'intervalo_actualizacion_ms' => 60000,
   'votators' => ['votator_1', 'votator_2', 'votator_3', 'votator_4'],
   'campos_principales' => ['flujo', 'presion_cuajado', 'temperatura_nariz', 'solidos'],
   'campos_secundarios' => ['amperaje_bomba', 'amperaje_reductor', 'corriente_votator', 'tiempo_fuera'],
