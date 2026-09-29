@@ -57,7 +57,7 @@ $renderValue = static function (array $field) use ($e): string {
       --vc-green: #2e8b57;
       --vc-gray: #64748b;
       display: grid;
-      grid-template-rows: auto auto minmax(0, 1fr) auto;
+      grid-template-rows: auto minmax(0, 1fr) auto;
       gap: 10px;
       width: 100%;
       min-height: 100vh;
@@ -68,10 +68,10 @@ $renderValue = static function (array $field) use ($e): string {
     .vc-heading { display: flex; align-items: center; gap: 12px; }
     .vc-heading-icon { display: grid; width: 42px; height: 42px; place-items: center; border-radius: 12px; color: #08131b; background: #f4f7fa; font-size: 21px; }
     .vc-header h1, .vc-header p, .vc-unit h2 { margin: 0; }
-    .vc-header h1 { font-size: clamp(27px, 2.2vw, 40px); line-height: 1; }
-    .vc-header p { margin-top: 4px; color: var(--vc-muted); font-size: clamp(13px, 1vw, 17px); }
+    .vc-header h1 { font-size: clamp(32px, 2.5vw, 48px); line-height: 1; }
+    .vc-header p { margin-top: 4px; color: var(--vc-muted); font-size: clamp(15px, 1.12vw, 21px); }
     .vc-header-actions { display: flex; align-items: center; gap: 9px; }
-    .vc-count, .vc-back { padding: 8px 13px; border-radius: 999px; font-size: 13px; font-weight: 800; white-space: nowrap; }
+    .vc-count, .vc-back { padding: 8px 13px; border-radius: 999px; font-size: 15px; font-weight: 800; white-space: nowrap; }
     .vc-count { color: #7dd3fc; background: #203957; }
     .vc-back { color: #f4f7fa; background: #1b2b36; text-decoration: none; }
     .vc-warning { padding: 7px 10px; border-radius: 8px; color: #111827; background: var(--vc-yellow); font-weight: 800; }
@@ -79,10 +79,10 @@ $renderValue = static function (array $field) use ($e): string {
     .vc-temperature { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 14px; min-width: 0; padding: 10px 16px; border: 1px solid #2563eb; border-radius: 14px; background: #163354; }
     .vc-temperature-icon { display: grid; width: 46px; height: 46px; place-items: center; border-radius: 12px; color: #082f49; background: #7dd3fc; font-size: 25px; transition: color .2s ease, background-color .2s ease; }
     .vc-temperature-copy { min-width: 0; }
-    .vc-temperature-source { display: block; margin-bottom: 2px; color: #7dd3fc; font-size: 11px; font-weight: 900; letter-spacing: .09em; text-transform: uppercase; }
-    .vc-temperature-title { display: block; overflow: hidden; color: #f8fafc; font-size: clamp(16px, 1.15vw, 22px); font-weight: 900; text-overflow: ellipsis; white-space: nowrap; }
+    .vc-temperature-source { display: block; margin-bottom: 2px; color: #7dd3fc; font-size: 13px; font-weight: 900; letter-spacing: .09em; text-transform: uppercase; }
+    .vc-temperature-title { display: block; overflow: hidden; color: #f8fafc; font-size: clamp(24px, 1.75vw, 34px); font-weight: 900; text-overflow: ellipsis; white-space: nowrap; }
     .vc-temperature-reading { min-width: 150px; text-align: right; }
-    .vc-temperature-value { display: block; color: #fff; font-size: clamp(28px, 2.4vw, 42px); font-variant-numeric: tabular-nums; font-weight: 900; line-height: .95; white-space: nowrap; }
+    .vc-temperature-value { display: block; color: #fff; font-size: clamp(44px, 3.45vw, 66px); font-variant-numeric: tabular-nums; font-weight: 900; line-height: .95; white-space: nowrap; }
     .vc-temperature-value small { font-size: .48em; }
     .vc-temperature-time { display: block; margin-top: 4px; color: #cbd8e2; font-size: 11px; white-space: nowrap; }
     .vc-temperature-warning { grid-column: 2 / -1; color: #fde68a; font-size: 11px; font-weight: 700; }
@@ -102,22 +102,22 @@ $renderValue = static function (array $field) use ($e): string {
     .vc-unit { min-width: 0; overflow: hidden; display: flex; flex-direction: column; padding: 9px; border: 1px solid var(--vc-line); border-radius: 15px; background: var(--vc-panel); }
     .vc-unit-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: -9px -9px 9px; padding: 9px 12px; }
     .vc-unit-head, .vc-field { transition: background-color .2s ease, color .2s ease; }
-    .vc-unit-head h2 { font-size: clamp(32px, 2.3vw, 42px); }
+    .vc-unit-head h2 { font-size: clamp(46px, 3.2vw, 62px); }
     .vc-unit-head.status-verde { background: var(--vc-green); }
     .vc-unit-head.status-amarillo { color: #111827; background: var(--vc-yellow); }
     .vc-unit-head.status-rojo { background: var(--vc-red); }
     .vc-unit-head.status-gris { background: var(--vc-gray); }
-    .vc-state { padding: 5px 10px; border-radius: 999px; color: inherit; background: rgba(255,255,255,.22); font-size: 12px; font-weight: 800; }
+    .vc-state { padding: 5px 10px; border-radius: 999px; color: inherit; background: rgba(255,255,255,.22); font-size: 17px; font-weight: 900; }
     .vc-fields { display: grid; grid-template-columns: minmax(0, 1fr); gap: 7px; flex: 1 1 auto; min-height: 0; }
     .vc-field { min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 3px; padding: 10px 12px; border-radius: 11px; background: var(--vc-inner); }
     .vc-field.status-verde { background: var(--vc-green); }
     .vc-field.status-amarillo { color: #111827; background: var(--vc-yellow); }
     .vc-field.status-rojo { background: var(--vc-red); }
     .vc-field.status-gris { background: #334653; }
-    .vc-label { font-size: clamp(21px, 1.55vw, 27px); font-weight: 800; }
-    .vc-value { max-width: 100%; overflow: hidden; font-size: clamp(28px, 2.45vw, 42px); font-variant-numeric: tabular-nums; line-height: 1; text-overflow: ellipsis; white-space: nowrap; }
+    .vc-label { font-size: clamp(30px, 2.15vw, 42px); font-weight: 800; }
+    .vc-value { max-width: 100%; overflow: hidden; font-size: clamp(44px, 3.35vw, 64px); font-variant-numeric: tabular-nums; line-height: 1; text-overflow: ellipsis; white-space: nowrap; }
     .vc-value small { font-size: .52em; }
-    .vc-ranges { display: grid; grid-template-columns: repeat(3, minmax(0, auto)); align-items: center; gap: 4px 9px; margin-top: 5px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,.3); font-size: clamp(10px, .72vw, 12px); }
+    .vc-ranges { display: grid; grid-template-columns: repeat(3, minmax(0, auto)); align-items: center; gap: 4px 9px; margin-top: 5px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,.3); font-size: clamp(14px, .95vw, 18px); }
     .vc-field.status-amarillo .vc-ranges { border-top-color: rgba(17,24,39,.25); }
     .vc-range { min-width: 0; display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
     .vc-range i, .vc-legend i { flex: 0 0 auto; width: 8px; height: 8px; border-radius: 50%; }
@@ -127,9 +127,9 @@ $renderValue = static function (array $field) use ($e): string {
     .vc-no-range { margin-top: 5px; color: #dce6ed; font-size: 11px; }
     .vc-secondary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-top: 7px; }
     .vc-mini { min-width: 0; padding: 7px 5px; border-radius: 9px; text-align: center; background: var(--vc-inner); }
-    .vc-mini strong { display: block; overflow: hidden; font-size: clamp(16px, 1.25vw, 22px); font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
+    .vc-mini strong { display: block; overflow: hidden; font-size: clamp(24px, 1.75vw, 34px); font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
     .vc-mini strong small { font-size: .65em; }
-    .vc-mini span { display: block; margin-top: 3px; color: var(--vc-muted); font-size: clamp(14px, 1vw, 17px); }
+    .vc-mini span { display: block; margin-top: 3px; color: var(--vc-muted); font-size: clamp(18px, 1.25vw, 24px); }
     .vc-read-time { display: flex; align-items: center; justify-content: flex-end; gap: 5px; margin-top: 6px; color: var(--vc-muted); font-size: 11px; }
     .vc-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--vc-muted); font-size: 12px; }
     .vc-legend { display: flex; flex-wrap: wrap; gap: 12px; }
@@ -171,10 +171,6 @@ $renderValue = static function (array $field) use ($e): string {
 </head>
 <body class="<?= $captureMode ? 'capture-mode' : '' ?>">
   <main class="votators-report">
-    <header class="vc-header">
-      <div class="vc-heading"><span class="vc-heading-icon"><i class="fa-solid fa-sliders"></i></span><div><h1><?= $e($report['titulo']) ?></h1><p><?= $e($report['subtitulo']) ?> · actualización cada 1 s</p></div></div>
-      <div class="vc-header-actions"><span class="vc-count">4 equipos</span><a class="vc-back" href="../"><i class="fa-solid fa-arrow-left"></i> Regresar</a></div>
-    </header>
     <section class="vc-top-sensors" aria-label="Temperatura de alimentación de Votators">
     <?php $feedTemperature = (array)($report['temperatura_alimentacion'] ?? []); ?>
     <?php $feedStatus = in_array($feedTemperature['statusKey'] ?? '', ['verde', 'amarillo', 'rojo'], true) ? (string)$feedTemperature['statusKey'] : 'gris'; $feedRows = $rangeRows($feedTemperature); ?>
@@ -209,12 +205,9 @@ $renderValue = static function (array $field) use ($e): string {
           <div class="vc-secondary">
             <?php foreach ((array)$equipment['secundarios'] as $field): ?><div class="vc-mini" data-field-key="<?= $e($field['key']) ?>"><?= $renderValue((array)$field) ?><span><?= $e($field['label']) ?></span></div><?php endforeach; ?>
           </div>
-          <div class="vc-read-time"><i class="fa-regular fa-clock"></i> Última lectura <?= $e($equipment['ultimaLectura']) ?></div>
         </article>
       <?php endforeach; ?>
     </section>
-
-    <footer class="vc-footer"><div class="vc-legend"><span><i class="verde"></i>Verde (objetivo)</span><span><i class="amarillo"></i>Amarillo</span><span><i class="rojo"></i>Rojo</span><span>Gris: sin rango o sin dato</span></div><span class="vc-general-reading">Lectura general <?= $e($report['ultima_lectura']) ?></span></footer>
   </main>
   <script>
     (() => {

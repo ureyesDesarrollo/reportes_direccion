@@ -436,6 +436,24 @@ foreach ($concentratorConfig as $concentratorKey => $concentrator) {
   }
 
   $timestampRow = $fueraOperacion ? $stateRow : $row;
+  $statusPriority = ['unavailable' => 0, 'neutral' => 0, 'info' => 0, 'ok' => 1, 'warning' => 2, 'danger' => 3];
+  $overallStatus = $fueraOperacion
+    ? ['class' => 'unavailable', 'key' => 'gris', 'label' => 'Fuera de operación', 'color' => '#64748b']
+    : ['class' => 'neutral', 'key' => 'azul', 'label' => 'Lectura', 'color' => '#163354'];
+  if (!$fueraOperacion) {
+    foreach ($metrics as $metric) {
+      $metricStatus = (array)($metric['status'] ?? []);
+      $metricClass = (string)($metricStatus['class'] ?? 'unavailable');
+      if (($statusPriority[$metricClass] ?? 0) > ($statusPriority[(string)$overallStatus['class']] ?? 0)) {
+        $overallStatus = [
+          'class' => $metricClass,
+          'key' => (string)($metricStatus['key'] ?? 'gris'),
+          'label' => (string)($metricStatus['label'] ?? 'Sin dato'),
+          'color' => (string)($metricStatus['color'] ?? '#64748b'),
+        ];
+      }
+    }
+  }
 
   $concentradores[$concentratorKey] = [
     'key' => $concentratorKey,
@@ -443,6 +461,7 @@ foreach ($concentratorConfig as $concentratorKey => $concentrator) {
     'tipo' => $tipo,
     'fuera_operacion' => $fueraOperacion,
     'estado_fo' => $estadoFoColumn !== null ? ($stateRow[$estadoFoColumn] ?? null) : null,
+    'status' => $overallStatus,
     'metricas' => $metrics,
     'timestamp_mysql' => $mysqlTimestampColumn !== null ? ($timestampRow[$mysqlTimestampColumn] ?? null) : null,
   ];

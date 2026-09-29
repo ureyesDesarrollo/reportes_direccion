@@ -217,6 +217,16 @@ return [
       'enabled' => true,
     ],
     [
+      'slug' => 'inventario-materia-prima',
+      'title' => 'INVENTARIO DE MATERIA PRIMA',
+      'description' => 'Resultados de entrada de materia prima con criterios de aceptación y semáforo por parámetro.',
+      'icon' => 'fa-clipboard-check',
+      'color' => '#0f766e',
+      'groups' => ['produccion'],
+      'url' => './inventario-materia-prima/index.php',
+      'enabled' => true,
+    ],
+    [
       'slug' => 'secadores',
       'title' => 'SECADORES',
       'description' => 'Monitoreo del comportamiento de los secadores con semáforos configurables por variable y actualización automática.',

@@ -22,6 +22,8 @@ La fuente única de objetivos y rangos compartidos es:
   flujo de caldo y temperatura interna permanecen por definir.
 - Rangos de Votators para flujo, presión de cuajado y sólidos. Los amperajes de
   bomba y reductor permanecen como lecturas neutrales hasta contar con límites.
+- Rangos de inventario de materia prima para humedad, conductividad por tipo de
+  material, pH, sólidos, extractibilidad y rendimiento.
 
 ## Qué permanece en cada reporte
 
@@ -36,6 +38,7 @@ La fuente única de objetivos y rangos compartidos es:
 - `secadores-temperatura`
 - `secadores`
 - `produccion-monitoreo` (consume la configuración de `secadores`)
+- `inventario-materia-prima`
 
 El catálogo maestro reemplaza los valores locales al cargar la configuración.
 En Cocedores, las reglas y sus respaldos también se construyen directamente desde

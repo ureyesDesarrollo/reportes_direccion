@@ -107,6 +107,8 @@ $camposBaseVotator = [
   'solidos' => $crearCampoBase('Sólidos', '%'),
   'amperaje_bomba' => $crearCampoBase('Amp bomba', 'A'),
   'amperaje_reductor' => $crearCampoBase('Amp reductor', 'A'),
+  'temperatura_tanque_caldo' => $crearCampoBase('Temp. tanque caldo', '°C'),
+  'temperatura_entrada_tanque' => $crearCampoBase('Temp. entrada tanque', '°C'),
 ];
 
 $crearSensorVotator = static function (string $campoKey, string $sqlField, array $extra = []) use ($crearSensor, $camposBaseVotator): array {
@@ -139,6 +141,9 @@ $sensorSolidosVotator = $crearSensorVotator('solidos', 'SOLIDOS_DE_VOTATORS', [
 $camposSqlVotator = [
   'tunel_1' => [
     'votator_1' => $crearEquipoVotator('', [
+      'temperatura_tanque_caldo' => $crearSensor('Temp. tanque caldo', 'TEMPERATURA_TANQUE_CALDO_CONCENTRADO', '°C', [
+        'history' => false,
+      ]),
       'temperatura_nariz' => $crearSensor('Temp. nariz', 'TEMPERATURA_NARIZ_VOTATOR_1', '°C', [
         'history' => false,
       ]),
@@ -149,6 +154,9 @@ $camposSqlVotator = [
       ]),
     ]),
     'votator_2' => $crearEquipoVotator('', [
+      'temperatura_tanque_caldo' => $crearSensor('Temp. tanque caldo', 'TEMPERATURA_TANQUE_CALDO_CONCENTRADO', '°C', [
+        'history' => false,
+      ]),
       'temperatura_nariz' => $crearSensor('Temp. nariz', 'TEMPERATURA_NARIZ_VOTATOR_2', '°C', [
         'history' => false,
       ]),
@@ -161,6 +169,9 @@ $camposSqlVotator = [
   ],
   'tunel_2' => [
     'votator_3' => $crearEquipoVotator('', [
+      'temperatura_entrada_tanque' => $crearSensor('Temp. entrada tanque', 'TEMPERATURA_ENTRADA_TANQUE_ALIMENTACION_VOTATORS_3_Y_4', '°C', [
+        'history' => false,
+      ]),
       'temperatura_nariz' => $crearSensor('Temp. nariz', 'TEMPERATURA_NARIZ_VOTATOR_3', '°C', [
         'history' => false,
       ]),
@@ -170,6 +181,9 @@ $camposSqlVotator = [
       ]),
     ]),
     'votator_4' => $crearEquipoVotator('', [
+      'temperatura_entrada_tanque' => $crearSensor('Temp. entrada tanque', 'TEMPERATURA_ENTRADA_TANQUE_ALIMENTACION_VOTATORS_3_Y_4', '°C', [
+        'history' => false,
+      ]),
       'temperatura_nariz' => $crearSensor('Temp. nariz', 'TEMPERATURA_NARIZ_VOTATOR_4', '°C', [
         'history' => false,
       ]),
@@ -418,6 +432,42 @@ $configuracionIntegracion = [
   'metricas' => $camposIntegracion,
 ];
 
+$configuracionConcentradores = [
+  'equipos_overlay' => [
+    'concentrador_1' => [
+      'flujo_field' => 'FLUJO_ENTRADA_CONCENTRADOR_1',
+      'metricas_extra' => [
+        'frecuencia_moyno' => $crearSensor('Frecuencia Moyno', 'FRECUENCIA_SALIDA_MOYNO_CONCENTRADOR_1', 'Hz', ['history' => false]),
+        'corriente_moyno' => $crearSensor('Corriente Moyno', 'CORRIENTE_MOYNO_CONCENTRADOR_1', 'A', ['history' => false]),
+      ],
+    ],
+    'concentrador_2' => [
+      'flujo_field' => 'FLUJO_ENTRADA_CONCENTRADOR_2',
+      'metricas_extra' => [
+        'frecuencia_moyno' => $crearSensor('Frecuencia Moyno', 'FRECUENCIA_SALIDA_MOYNO_CONCENTRADOR_2', 'Hz', ['history' => false]),
+        'corriente_moyno' => $crearSensor('Corriente Moyno', 'CORRIENTE_MOYNO_CONCENTRADOR_2', 'A', ['history' => false]),
+      ],
+    ],
+    'concentrador_3' => [
+      'flujo_field' => 'FLUJO_ENTRADA_CALDO_CONCENTRADOR_3',
+    ],
+    'concentrador_4' => [
+      'flujo_field' => 'FLUJO_ENTRADA_CALDO_CONCENTRADOR_4',
+    ],
+  ],
+  'metricas_overlay' => [
+    'flujo' => [
+      'label' => 'Flujo entrada',
+    ],
+  ],
+  'ocultar_metricas_extra' => [
+    'concentrador_1' => ['flujo_entrada'],
+    'concentrador_2' => ['flujo_entrada'],
+    'concentrador_3' => ['flujo_entrada_caldo'],
+    'concentrador_4' => ['flujo_entrada_caldo'],
+  ],
+];
+
 $productionMonitoringConfig = [
   'titulo' => 'Avance Producción',
   'intervalo_actualizacion_ms' => 60000,
@@ -427,6 +477,7 @@ $productionMonitoringConfig = [
   'secadores' => $configuracionSecadores,
   'cocedores' => $configuracionCocedores,
   'clarificadores' => $configuracionClarificador,
+  'concentradores' => $configuracionConcentradores,
   'integracion' => $configuracionIntegracion,
 ];
 

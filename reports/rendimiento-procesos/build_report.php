@@ -337,26 +337,19 @@ rend_proceso AS (
   WHERE pro_id_2 IS NOT NULL
     AND NOT EXISTS (SELECT 1 FROM rend_grupo x WHERE x.pro_id = r.pro_id_2)
 ),
-maq_ticket AS (
-  SELECT inv_no_ticket, COUNT(*) parcialidades, SUM(inv_kilos) kg_enviados,
-         SUM(inv_kg_totales) kg_recibidos
-  FROM inventario
-  WHERE prv_recibe = 126 AND inv_enviado = 2
-  GROUP BY inv_no_ticket
-),
 maq_proceso_ticket AS (
-  SELECT DISTINCT pm.pro_id, i.inv_no_ticket
-  FROM procesos_materiales pm
-  INNER JOIN scope s ON s.pro_id = pm.pro_id
-  INNER JOIN inventario i ON i.inv_id = pm.inv_id
-  WHERE i.prv_recibe = 126
-),
-maq_proceso AS (
-  SELECT mpt.pro_id, SUM(mt.kg_enviados) kg_enviados, SUM(mt.kg_recibidos) kg_recibidos,
-         SUM(mt.kg_recibidos) / NULLIF(SUM(mt.kg_enviados), 0) rendimiento_maquila
-  FROM maq_proceso_ticket mpt
-  INNER JOIN maq_ticket mt ON mt.inv_no_ticket = mpt.inv_no_ticket
-  GROUP BY mpt.pro_id
+  SELECT vinc.pro_id, i.inv_no_ticket,
+         SUM(i.inv_kilos) kg_enviados,
+         SUM(i.inv_kg_totales) kg_recibidos,
+         (SUM(i.inv_kg_totales) / NULLIF(SUM(i.inv_kilos), 0) - 1) * 100 rendimiento_granja
+  FROM (
+    SELECT DISTINCT pm.pro_id, pm.inv_id
+    FROM procesos_materiales pm
+    INNER JOIN scope s ON s.pro_id = pm.pro_id
+  ) vinc
+  INNER JOIN inventario i ON i.inv_id = vinc.inv_id
+  WHERE i.prv_recibe = 126 AND i.inv_enviado = 2
+  GROUP BY vinc.pro_id, i.inv_no_ticket
 ),
 material_rows AS (
   SELECT s.pro_id, s.pt_id, s.pro_fe_carga, i.inv_no_ticket,
@@ -371,9 +364,11 @@ material_rows AS (
   INNER JOIN proveedores prv ON prv.prv_id = i.prv_id
 )
 SELECT
-  mr.pro_id, mr.pro_fe_carga, mr.material, mr.prv_id, mr.proveedor,
+  mr.pro_id, mr.pro_fe_carga, mr.inv_no_ticket,
+  GROUP_CONCAT(DISTINCT mr.material ORDER BY mr.material SEPARATOR ' / ') material,
+  MIN(mr.prv_id) prv_id,
+  GROUP_CONCAT(DISTINCT mr.proveedor ORDER BY mr.proveedor SEPARATOR ' / ') proveedor,
   SUM(mr.kg_mp) kg_mp_filtrada,
-  GROUP_CONCAT(DISTINCT mr.inv_no_ticket ORDER BY mr.inv_no_ticket SEPARATOR ', ') tickets,
   AVG(mr.inv_humedad) inv_humedad, AVG(mr.inv_extrac) inv_extractibilidad,
   AVG(mr.inv_solidos) inv_solidos, AVG(mr.inv_ph) inv_ph,
   AVG(mr.inv_rendimiento) inv_rendimiento,
@@ -390,7 +385,8 @@ SELECT
   CASE mr.pt_id WHEN 10 THEN cp.prol_cocido WHEN 11 THEN ca.prol_cocido WHEN 7 THEN cc.prol_cocido END cocimiento_ph,
   CASE mr.pt_id WHEN 10 THEN cp.prol_ce WHEN 11 THEN ca.prol_ce WHEN 7 THEN cc.prol_ce END cocimiento_ce,
   CASE mr.pt_id WHEN 10 THEN epf.prol_por_extrac WHEN 11 THEN eaf.prol_por_extrac WHEN 7 THEN lb7.prol_por_extrac END extractibilidad_final,
-  mp.rendimiento_maquila
+  mp.kg_recibidos kg_granja,
+  mp.rendimiento_granja
 FROM material_rows mr
 LEFT JOIN eqr eq ON eq.pro_id = mr.pro_id AND eq.rn = 1
 LEFT JOIN rend_proceso rp ON rp.pro_id = mr.pro_id
@@ -408,16 +404,16 @@ LEFT JOIN coc cc ON cc.pro_id = mr.pro_id AND cc.pe_id = 17 AND cc.rn = 1
 LEFT JOIN extfin epf ON epf.pro_id = mr.pro_id AND epf.pe_id = 20 AND epf.rn = 1
 LEFT JOIN extfin eaf ON eaf.pro_id = mr.pro_id AND eaf.pe_id = 18 AND eaf.rn = 1
 LEFT JOIN libb lb7 ON lb7.pro_id = mr.pro_id AND lb7.pe_id = 17 AND lb7.rn = 1
-LEFT JOIN maq_proceso mp ON mp.pro_id = mr.pro_id
+LEFT JOIN maq_proceso_ticket mp ON mp.pro_id = mr.pro_id AND mp.inv_no_ticket = mr.inv_no_ticket
 {$detailWhereSql}
-GROUP BY mr.pro_id, mr.pro_fe_carga, mr.material, mr.prv_id, mr.proveedor,
+GROUP BY mr.pro_id, mr.pro_fe_carga, mr.inv_no_ticket,
          eq.ep_descripcion, rp.grupo_pro_id, rp.tarimas, rp.grupo_kg_producto_terminado,
          rp.kg_mp_grupo, rp.kg_producto_proceso, rp.kg_mp_proceso,
          rp.rendimiento_pt, rp.bloom_promedio, rp.viscosidad_promedio,
          el.extractibilidad, enz.pfg2_enzima, enz.pfg2_hr_totales,
          acido_litros, acido_normalidad, cocimiento_ph, cocimiento_ce,
-         extractibilidad_final, mp.rendimiento_maquila
-ORDER BY mr.pro_id DESC, mr.material, mr.proveedor
+         extractibilidad_final, mp.kg_recibidos, mp.rendimiento_granja
+ORDER BY mr.pro_id DESC, mr.inv_no_ticket DESC
 ";
 
 $detailStmt = $pdo->prepare($sql);
@@ -478,14 +474,13 @@ foreach ($rows as &$row) {
   $groupId = (int)($row['grupo_pro_id'] ?? 0);
   $row['pro_id'] = $processId;
   $row['prv_id'] = (int)$row['prv_id'];
-  $row['tickets'] = trim((string)($row['tickets'] ?? ''));
   $row['riesgo_alto'] = (int)$row['riesgo_alto'];
   foreach ([
     'kg_mp_filtrada', 'inv_humedad', 'inv_extractibilidad', 'inv_solidos', 'inv_ph',
     'inv_rendimiento', 'kg_producto_terminado', 'grupo_kg_producto_terminado', 'kg_mp_grupo', 'rendimiento_pt',
     'bloom_promedio', 'viscosidad_promedio', 'extractibilidad_enzima_2b', 'enzima_kg',
     'horas_enzima', 'acido_litros', 'acido_normalidad', 'cocimiento_ph', 'cocimiento_ce',
-    'extractibilidad_final', 'rendimiento_maquila',
+    'extractibilidad_final', 'kg_granja', 'rendimiento_granja',
   ] as $field) {
     $row[$field] = $row[$field] === null ? null : (float)$row[$field];
   }

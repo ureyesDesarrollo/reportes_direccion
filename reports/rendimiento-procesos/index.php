@@ -228,14 +228,14 @@ $chartPalette = ['#0f766e', '#2563eb', '#7c3aed', '#d97706', '#dc2626', '#0891b2
           <thead>
             <tr class="rp-group-row">
               <th colspan="2">Proceso</th><th colspan="11">Compra e inventario</th><th colspan="1">Preparadores</th>
-              <th colspan="8">Etapas y liberación</th><th colspan="5">Producto terminado</th>
+              <th colspan="8">Etapas y liberación</th><th colspan="5">Producto terminado</th><th colspan="1">Referencia</th>
             </tr>
             <tr class="rp-column-row">
               <th>Proceso</th><th>Fecha carga</th>
-              <th>Material</th><th>Proveedor</th><th>Kg MP</th><th>No. ticket</th><th>Hum. MP</th><th>Extrac. MP</th><th>Sólidos MP</th><th>pH MP</th><th>Rend. MP</th><th>Riesgo MP</th><th>Rend. maquila</th>
+              <th>Material</th><th>Proveedor</th><th>Kg MP</th><th>Kilos granja</th><th>Rend. Granja</th><th>Rend. MP</th><th>Hum. MP</th><th>Extrac. MP</th><th>Sólidos MP</th><th>pH MP</th><th>Riesgo MP</th>
               <th>Equipo inicial</th>
               <th>Extrac. enzima</th><th>Enzima kg</th><th>Horas enzima</th><th>Ácido lts</th><th>Normalidad</th><th>pH cocimiento</th><th>CE cocimiento</th><th>Extrac. final</th>
-              <th>Tarimas</th><th>Kg PT asign.</th><th>Rend. PT</th><th>Bloom</th><th>Viscosidad</th>
+              <th>Tarimas</th><th>Kg PT asign.</th><th>Rend. PT</th><th>Bloom</th><th>Viscosidad</th><th>No. ticket</th>
             </tr>
           </thead>
           <tbody>
@@ -248,11 +248,13 @@ $chartPalette = ['#0f766e', '#2563eb', '#7c3aed', '#d97706', '#dc2626', '#0891b2
               <td class="rp-center"><?= $e($row['pro_fe_carga'] ?? '—') ?></td>
               <td class="rp-left"><?= $e($row['material'] ?? '—') ?></td>
               <td class="rp-left"><?= $e($row['proveedor'] ?? '—') ?></td>
-              <td><?= $fmt($row['kg_mp_filtrada'] ?? null, 0) ?></td><td class="rp-left"><?= $e(($row['tickets'] ?? '') !== '' ? $row['tickets'] : '—') ?></td>
+              <td><?= $fmt($row['kg_mp_filtrada'] ?? null, 0) ?></td>
+              <td><?= $fmt($row['kg_granja'] ?? null, 0) ?></td>
+              <td><?= $row['rendimiento_granja'] === null ? '—' : $fmtPct((float)$row['rendimiento_granja']) ?></td>
+              <td><?= $fmt($row['inv_rendimiento'] ?? null) ?></td>
               <td><?= $fmt($row['inv_humedad'] ?? null) ?></td><td><?= $fmt($row['inv_extractibilidad'] ?? null) ?></td><td><?= $fmt($row['inv_solidos'] ?? null) ?></td>
-              <td><?= $fmt($row['inv_ph'] ?? null) ?></td><td><?= $fmt($row['inv_rendimiento'] ?? null) ?></td>
+              <td><?= $fmt($row['inv_ph'] ?? null) ?></td>
               <td class="rp-center"><span class="rp-risk <?= $riskClass ?>"><?= $e($risk !== '' ? $risk : 'Sin dato') ?></span></td>
-              <td><?= $row['rendimiento_maquila'] === null ? '—' : $fmtPct((float)$row['rendimiento_maquila'] * 100) ?></td>
               <td class="rp-left"><?= $e($row['equipo_inicial'] ?? '—') ?></td>
               <td><?= $fmt($row['extractibilidad_enzima_2b'] ?? null) ?></td><td><?= $fmt($row['enzima_kg'] ?? null) ?></td><td><?= $fmt($row['horas_enzima'] ?? null) ?></td>
               <td><?= $fmt($row['acido_litros'] ?? null) ?></td><td><?= $fmt($row['acido_normalidad'] ?? null) ?></td>
@@ -260,6 +262,7 @@ $chartPalette = ['#0f766e', '#2563eb', '#7c3aed', '#d97706', '#dc2626', '#0891b2
               <td><?= $fmt($row['tarimas'] ?? null, 0) ?></td><td><?= $fmt($row['kg_producto_terminado'] ?? null, 0) ?></td>
               <td><?= $row['rendimiento_pt'] === null ? '—' : $fmtPct((float)$row['rendimiento_pt'] * 100) ?></td>
               <td><?= $fmt($row['bloom_promedio'] ?? null, 1) ?></td><td><?= $fmt($row['viscosidad_promedio'] ?? null, 1) ?></td>
+              <td class="rp-center"><?= $e((string)($row['inv_no_ticket'] ?? '—')) ?></td>
             </tr>
           <?php endforeach; ?>
           </tbody>

@@ -63,6 +63,74 @@ return [
       ],
     ],
   ],
+  'materia_prima' => [
+    'inventario' => [
+      'humedad' => [
+        'modo' => 'bandas',
+        'leyenda' => '70–74',
+        'bandas' => [
+          ['min' => 70, 'max' => 74, 'estado' => 'verde', 'leyenda' => '70–74'],
+          ['min' => 67, 'max' => 70, 'estado' => 'amarillo', 'leyenda' => '67–<70'],
+          ['min' => 74, 'max' => 76, 'estado' => 'amarillo', 'leyenda' => '>74–76'],
+          ['max' => 66.999999, 'estado' => 'rojo', 'leyenda' => '<67'],
+          ['min' => 76.000001, 'estado' => 'rojo', 'leyenda' => '>76'],
+        ],
+      ],
+      'solidos' => [
+        'modo' => 'bandas',
+        'leyenda' => '9–14',
+        'bandas' => [
+          ['min' => 9, 'max' => 14, 'estado' => 'verde', 'leyenda' => '9–14'],
+          ['min' => 6, 'max' => 9, 'estado' => 'amarillo', 'leyenda' => '6–<9'],
+          ['min' => 14, 'max' => 17, 'estado' => 'amarillo', 'leyenda' => '>14–17'],
+          ['max' => 5.999999, 'estado' => 'rojo', 'leyenda' => '<6'],
+          ['min' => 17.000001, 'estado' => 'rojo', 'leyenda' => '>17'],
+        ],
+      ],
+      'extractibilidad' => [
+        'modo' => 'bandas',
+        'leyenda' => '95–98',
+        'bandas' => [
+          ['min' => 95, 'max' => 98, 'estado' => 'verde', 'leyenda' => '95–98'],
+          ['min' => 90, 'max' => 95, 'estado' => 'amarillo', 'leyenda' => '90–<95'],
+          ['min' => 98, 'max' => 100, 'estado' => 'amarillo', 'leyenda' => '>98–100'],
+          ['max' => 89.999999, 'estado' => 'rojo', 'leyenda' => '<90'],
+          ['min' => 100.000001, 'estado' => 'rojo', 'leyenda' => '>100'],
+        ],
+      ],
+      'ph' => [
+        'modo' => 'bandas',
+        'leyenda' => '11.3–12.2',
+        'bandas' => [
+          ['min' => 11.3, 'max' => 12.2, 'estado' => 'verde', 'leyenda' => '11.3–12.2'],
+          ['min' => 11, 'max' => 11.3, 'estado' => 'amarillo', 'leyenda' => '11–<11.3'],
+          ['min' => 12.2, 'max' => 12.5, 'estado' => 'amarillo', 'leyenda' => '>12.2–12.5'],
+          ['max' => 10.999999, 'estado' => 'rojo', 'leyenda' => '<11'],
+          ['min' => 12.500001, 'estado' => 'rojo', 'leyenda' => '>12.5'],
+        ],
+      ],
+      'rendimiento' => [
+        'modo' => 'bandas',
+        'leyenda' => '25.5–32.5',
+        'bandas' => [
+          ['min' => 25.5, 'max' => 32.5, 'estado' => 'verde', 'leyenda' => '25.5–32.5'],
+          ['min' => 23, 'max' => 25.5, 'estado' => 'amarillo', 'leyenda' => '23–<25.5'],
+          ['min' => 32.5, 'max' => 38, 'estado' => 'amarillo', 'leyenda' => '>32.5–38'],
+          ['max' => 22.999999, 'estado' => 'rojo', 'leyenda' => '<23'],
+          ['min' => 38.000001, 'estado' => 'rojo', 'leyenda' => '>38'],
+        ],
+      ],
+      'conductividad' => [
+        'CARNAZA' => ['verde_min' => 5, 'verde_max' => 9.43, 'amarillo_min' => 2, 'amarillo_max' => 12.43],
+        'DESBARBE' => ['verde_min' => 5, 'verde_max' => 9.52, 'amarillo_min' => 2, 'amarillo_max' => 12.52],
+        'DESORILLE' => ['verde_min' => 5, 'verde_max' => 8.92, 'amarillo_min' => 2, 'amarillo_max' => 11.92],
+        'DESPALME' => ['verde_min' => 5, 'verde_max' => 7.43, 'amarillo_min' => 2, 'amarillo_max' => 10.43],
+        'GARRA' => ['verde_min' => 5, 'verde_max' => 10.32, 'amarillo_min' => 2, 'amarillo_max' => 13.32],
+        'RECORTE' => ['verde_min' => 5, 'verde_max' => 15.27, 'amarillo_min' => 2, 'amarillo_max' => 18.27],
+        'CUERO_ENTERO_PEDACERA' => ['verde_min' => 5, 'verde_max' => 21.01, 'amarillo_min' => 2, 'amarillo_max' => 24.01],
+      ],
+    ],
+  ],
   'secadores' => [
     'indicadores_superiores' => [
       'viscosidad_churro' => [

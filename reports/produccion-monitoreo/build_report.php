@@ -24,11 +24,22 @@ $sqlServerAvevaConnection = (array)($sqlServerAvevaConfig['conexion'] ?? ($secad
 $sqlServerAvevaTable = (string)($sqlServerAvevaConfig['tabla'] ?? ($secadoresConfig['tabla'] ?? 'TREND001'));
 $sqlServerAvevaTimestamp = (string)($sqlServerAvevaConfig['campo_fecha'] ?? ($secadoresConfig['campo_fecha'] ?? 'Time_Stamp'));
 
-$concentradoresConfig = require __DIR__ . '/../concentradores/config.php';
-$concentradoresReport = (static function (): array {
-  $config = require __DIR__ . '/../concentradores/config.php';
+$concentradoresConfig = array_replace_recursive(
+  require __DIR__ . '/../concentradores/config.php',
+  [
+    'concentradores' => (array)($config['concentradores']['equipos_overlay'] ?? []),
+    'metricas' => (array)($config['concentradores']['metricas_overlay'] ?? []),
+  ]
+);
+foreach ((array)($config['concentradores']['ocultar_metricas_extra'] ?? []) as $concentradorKey => $metricasOcultas) {
+  foreach ((array)$metricasOcultas as $metricaOculta) {
+    unset($concentradoresConfig['concentradores'][(string)$concentradorKey]['metricas_extra'][(string)$metricaOculta]);
+  }
+}
+$concentradoresReport = (static function (array $reportConfig): array {
+  $config = $reportConfig;
   return require __DIR__ . '/../concentradores/build_report.php';
-})();
+})($concentradoresConfig);
 
 $quoteSqlServerIdentifier = static function (string $name): string {
   if (preg_match('/^[A-Za-z0-9_]+$/', $name) !== 1) {
@@ -819,6 +830,28 @@ $buildConcentradorSummary = static function (array $report, array $concentradore
         (string)($metric['unit'] ?? ''),
         $aplicarFo ? [] : (array)($metric['trends'] ?? [])
       );
+    }
+
+    $flujoSalida = null;
+    foreach ($items as $item) {
+      if ((string)($item['key'] ?? '') === 'flujo_salida') {
+        $flujoSalida = $item;
+        break;
+      }
+    }
+    if ($flujoSalida !== null) {
+      $itemsOrdenados = [];
+      foreach ($items as $item) {
+        $itemKey = (string)($item['key'] ?? '');
+        if ($itemKey === 'flujo_salida') {
+          continue;
+        }
+        $itemsOrdenados[] = $item;
+        if ($itemKey === 'flujo') {
+          $itemsOrdenados[] = $flujoSalida;
+        }
+      }
+      $items = $itemsOrdenados;
     }
 
     $status = $worstStatus($items);

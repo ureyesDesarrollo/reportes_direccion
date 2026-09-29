@@ -99,414 +99,264 @@ $invertidoMetricGroups = [
   <script src="../../assets/js/display-mode.js?v=<?= urlencode((string)max($version, (int)(@filemtime(__DIR__ . '/../../assets/js/display-mode.js') ?: 0))) ?>"></script>
   <style>
     :root {
-      --bg: #f4f7fb;
-      --panel: #ffffff;
-      --ink: #172033;
-      --muted: #64748b;
-      --line: #dbe7f5;
-      --blue: #0ea5e9;
-      --green: #2e8b57;
-      --yellow: #facc15;
-      --red: #c94436;
-      --gray: #94a3b8;
-      --shadow: 0 14px 34px rgba(15, 23, 42, 0.08);
+      color-scheme: dark;
+      --cc-bg: #08131b;
+      --cc-panel: #13212b;
+      --cc-inner: #1b2b36;
+      --cc-line: #314451;
+      --cc-text: #f4f7fa;
+      --cc-muted: #cbd8e2;
+      --cc-blue: #163354;
+      --cc-green: #2e8b57;
+      --cc-yellow: #facc15;
+      --cc-red: #c94436;
+      --cc-gray: #64748b;
     }
-
-    * {
-      box-sizing: border-box;
-    }
-
-    body {
-      background: var(--bg);
-      min-height: 100vh;
-    }
-
-    .dashboard {
-      background: transparent;
-    }
-
-    .back-btn {
-      display: inline-flex;
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; background: var(--cc-bg); }
+    body { color: var(--cc-text); font-family: Inter, Arial, Helvetica, sans-serif; }
+    .dashboard { width: 100%; min-height: 100vh; padding: 10px; background: var(--cc-bg); }
+    .concentradores-header {
+      display: flex;
       align-items: center;
-      gap: 8px;
-      padding: 10px 18px;
-      border: 1px solid #dbe7f5;
-      border-radius: 999px;
-      color: #334155;
-      background: #ffffff;
-      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
-      font-weight: 700;
-      text-decoration: none;
-      transition: all 0.2s;
-    }
-
-    .back-btn:hover {
-      background: #eff6ff;
-      box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
-      transform: translateX(-2px);
-    }
-
-    .concentradores-exec-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-      gap: 14px;
-      align-items: start;
-    }
-
-    .concentradores-exec-panel {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      min-width: 0;
-      min-height: 410px;
-      padding: 14px;
-      border: 1px solid #dbe7f5;
-      border-radius: 16px;
-      background: #ffffff;
-      box-shadow:
-        0 10px 22px rgba(37, 99, 235, 0.08),
-        0 2px 6px rgba(15, 23, 42, 0.05);
-      transition: all .3s cubic-bezier(0.4, 0, 0.2, 1);
-    }
-
-    .concentradores-exec-panel:hover {
-      border-color: #93c5fd;
-      box-shadow:
-        0 16px 34px rgba(37, 99, 235, 0.12),
-        0 3px 10px rgba(15, 23, 42, 0.06);
-      transform: translateY(-2px);
-    }
-
-    .concentradores-exec-panel[data-concentrator="invertido"] {
-      grid-column: 1 / -1;
-      min-height: 0;
-    }
-
-    .concentradores-exec-head {
-      display: flex;
-      align-items: flex-start;
       justify-content: space-between;
-      gap: 10px;
-      flex-wrap: wrap;
-      padding: 12px 14px;
-      border: 1px solid #cfe0fb;
+      gap: 14px;
+      margin-bottom: 10px;
+    }
+    .concentradores-heading { display: flex; align-items: center; gap: 12px; min-width: 0; }
+    .concentradores-heading-icon {
+      display: grid;
+      flex: 0 0 auto;
+      width: 44px;
+      height: 44px;
+      place-items: center;
       border-radius: 12px;
-      background: #eef6ff;
+      color: #08131b;
+      background: #f4f7fa;
+      font-size: 22px;
     }
-
-    .concentradores-exec-head h2 {
-      margin: 0;
-      color: #0f172a;
-      font-size: 20px;
-      font-weight: 700;
-      line-height: 1.1;
-    }
-
-    .concentradores-exec-head span {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      min-width: 38px;
-      min-height: 24px;
-      padding: 4px 8px;
+    .concentradores-heading h1 { margin: 0; font-size: clamp(28px, 2.2vw, 40px); line-height: 1; }
+    .concentradores-heading p { margin: 4px 0 0; color: var(--cc-muted); font-size: clamp(13px, 1vw, 17px); }
+    .concentradores-header-actions { display: flex; align-items: center; gap: 9px; }
+    .concentradores-count, .back-btn {
+      padding: 8px 13px;
+      border: 0;
       border-radius: 999px;
-      color: #1d4ed8;
-      background: #dbeafe;
-      font-size: 12px;
+      font-size: 13px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+    .concentradores-count { color: #7dd3fc; background: #203957; }
+    .back-btn { display: inline-flex; align-items: center; gap: 7px; color: var(--cc-text); background: var(--cc-inner); text-decoration: none; }
+    .concentradores-exec-warning {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      margin-bottom: 9px;
+      padding: 9px 12px;
+      border-radius: 10px;
+      color: #111827;
+      background: var(--cc-yellow);
+      font-size: 13px;
       font-weight: 800;
     }
-
-    .concentradores-exec-head span.is-offline {
-      color: #ffffff;
-      background: #64748b;
-    }
-
-    .concentradores-exec-head span.is-empty {
-      visibility: hidden;
-    }
-
-    .concentradores-exec-metrics {
+    .concentradores-exec-grid {
       display: grid;
-      grid-template-columns: repeat(6, minmax(0, 1fr));
-      grid-auto-rows: minmax(142px, 1fr);
-      gap: 8px;
-      flex: 1;
-    }
-
-    .concentradores-exec-metric {
-      display: flex;
-      grid-column: span 3;
-      align-items: flex-start;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: 10px;
+      align-items: start;
+    }
+    .concentradores-exec-panel {
       min-width: 0;
-      min-height: 142px;
-      padding: 10px 11px;
-      border: 1px solid #0284c7;
-      border-radius: 12px;
-      color: #ffffff;
-      background: var(--blue);
-      box-shadow: 0 10px 24px rgba(14, 165, 233, 0.2);
+      overflow: hidden;
+      padding: 9px;
+      border: 1px solid var(--cc-line);
+      border-radius: 15px;
+      background: var(--cc-panel);
     }
-
-    .concentradores-exec-metric.ok {
-      border-color: #257447;
-      background: var(--green);
-      box-shadow: 0 10px 24px rgba(46, 139, 87, 0.2);
-    }
-
-    .concentradores-exec-metric.warning {
-      border-color: #eab308;
-      color: #111827;
-      background: var(--yellow);
-      box-shadow: 0 10px 24px rgba(228, 154, 50, 0.2);
-    }
-
-    .concentradores-exec-metric.danger {
-      border-color: #a9362c;
-      background: var(--red);
-      box-shadow: 0 10px 24px rgba(201, 68, 54, 0.2);
-    }
-
-    .concentradores-exec-metric.neutral {
-      border-color: #d9e0ea;
-      color: #111827;
-      background: #ffffff;
-      box-shadow: none;
-    }
-
-    .concentradores-exec-metric.unavailable {
-      border-color: #64748b;
-      background: var(--gray);
-      box-shadow: none;
-    }
-
-    .concentradores-exec-metric[data-metric="solidos_entrada"],
-    .concentradores-exec-metric[data-metric="solidos_salida"] {
-      grid-column: span 3;
-    }
-
-    .concentradores-exec-metric:last-child:nth-child(odd) {
-      grid-column: 2 / span 4;
-    }
-
-    .concentradores-invertido-layout {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 10px;
-    }
-
-    .concentradores-stage {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      min-width: 0;
-      padding: 10px;
-      border: 1px solid #dbe7f5;
-      border-radius: 14px;
-      background: #f8fbff;
-    }
-
-    .concentradores-stage h3 {
+    .concentradores-exec-panel[data-concentrator="invertido"] { grid-column: 1 / -1; }
+    .concentradores-exec-head {
       display: flex;
       align-items: center;
-      gap: 8px;
-      margin: 0;
-      color: #0f172a;
-      font-size: 13px;
-      font-weight: 900;
-      letter-spacing: 0;
-      text-transform: uppercase;
+      justify-content: space-between;
+      gap: 10px;
+      margin: -9px -9px 9px;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--cc-line);
+      background: #1d3442;
     }
-
-    .concentradores-stage h3::before {
-      content: "";
-      width: 8px;
-      height: 8px;
+    .concentradores-exec-head.ok { background: var(--cc-green); }
+    .concentradores-exec-head.warning { color: #111827; background: var(--cc-yellow); }
+    .concentradores-exec-head.danger { background: var(--cc-red); }
+    .concentradores-exec-head.neutral,
+    .concentradores-exec-head.info { background: var(--cc-blue); }
+    .concentradores-exec-head.unavailable { background: var(--cc-gray); }
+    .concentradores-exec-head h2 { margin: 0; color: inherit; font-size: clamp(25px, 1.8vw, 34px); line-height: 1; }
+    .concentradores-exec-head span {
+      display: inline-flex;
+      min-width: 38px;
+      min-height: 25px;
+      align-items: center;
+      justify-content: center;
+      padding: 4px 9px;
       border-radius: 999px;
-      background: #2563eb;
+      color: var(--cc-text);
+      background: var(--cc-gray);
+      font-size: 12px;
+      font-weight: 900;
     }
-
-    .concentradores-stage-metrics {
+    .concentradores-exec-head span.is-offline { background: rgba(15,23,42,.34); }
+    .concentradores-exec-metrics {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 8px;
+      gap: 7px;
     }
-
-    .concentradores-exec-panel[data-concentrator="invertido"] .concentradores-exec-metric {
-      grid-column: auto;
-      min-height: 112px;
-      padding: 9px;
-    }
-
-    .concentradores-exec-panel[data-concentrator="invertido"] .concentradores-exec-metric-value {
-      font-size: 20px;
-    }
-
-    .concentradores-exec-panel[data-concentrator="invertido"] .concentradores-exec-metric-status {
-      display: none;
-    }
-
-    .concentradores-exec-metric i {
-      width: 18px;
-      margin-top: 2px;
-      font-size: 16px;
-      opacity: 0.95;
-    }
-
-    .concentradores-exec-metric > i {
-      display: none;
-    }
-
-    .concentradores-exec-metric-body {
-      display: flex;
-      flex-direction: column;
-      gap: 5px;
+    .concentradores-exec-metric {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      align-items: center;
+      gap: 9px;
       min-width: 0;
-      width: 100%;
+      min-height: 82px;
+      padding: 7px 8px;
+      border: 1px solid #28577e;
+      border-radius: 11px;
+      color: var(--cc-text);
+      background: var(--cc-blue);
+      transition: color .2s ease, background-color .2s ease;
     }
-
+    .concentradores-exec-metric.ok { border-color: #43a36d; background: var(--cc-green); }
+    .concentradores-exec-metric.warning { border-color: var(--cc-yellow); color: #111827; background: var(--cc-yellow); }
+    .concentradores-exec-metric.danger { border-color: #e35d50; background: var(--cc-red); }
+    .concentradores-exec-metric.neutral,
+    .concentradores-exec-metric.info { border-color: #2563eb; background: var(--cc-blue); }
+    .concentradores-exec-metric.unavailable { border-color: var(--cc-gray); background: #334653; }
+    .concentradores-exec-metric > i {
+      display: grid;
+      width: 34px;
+      height: 34px;
+      place-items: center;
+      border-radius: 9px;
+      color: currentColor;
+      background: rgba(255,255,255,.18);
+      font-size: 17px;
+    }
+    .concentradores-exec-metric.warning > i { background: rgba(255,255,255,.45); }
+    .concentradores-exec-metric-body { min-width: 0; }
     .concentradores-exec-metric-label {
       display: flex;
       align-items: flex-start;
       justify-content: space-between;
-      gap: 6px;
-      min-height: 40px;
-      font-size: 11px;
-      font-weight: 900;
-      line-height: 1.15;
-      letter-spacing: 0;
-      text-transform: uppercase;
-      opacity: 0.9;
-    }
-
-    .concentradores-exec-metric-label > [data-field="label"] {
-      display: block;
-      flex: 1 1 auto;
+      gap: 5px;
       min-width: 0;
-      max-width: calc(100% - 22px);
-      white-space: normal;
-      overflow: visible;
-      overflow-wrap: break-word;
-      word-break: normal;
-      text-overflow: clip;
+      font-size: clamp(11px, .68vw, 13px);
+      font-weight: 900;
+      line-height: 1.08;
+      text-transform: uppercase;
     }
-
+    .concentradores-exec-metric-label > [data-field="label"] {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
     .concentradores-exec-source {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
+      display: grid;
       flex: 0 0 auto;
-      width: 16px;
-      height: 16px;
+      width: 17px;
+      height: 17px;
+      place-items: center;
       border-radius: 999px;
-      background: rgba(255, 255, 255, 0.22);
+      background: rgba(255,255,255,.2);
     }
-
-    .concentradores-exec-source i {
-      width: auto;
-      margin: 0;
-      font-size: 9px;
-      opacity: 1;
-    }
-
+    .concentradores-exec-source i { font-size: 9px; }
     .concentradores-exec-metric-value {
-      font-size: 25px;
+      max-width: 100%;
+      overflow: hidden;
+      margin-top: 5px;
+      font-size: clamp(20px, 1.45vw, 28px);
+      font-variant-numeric: tabular-nums;
       font-weight: 900;
       line-height: 1;
+      text-overflow: ellipsis;
       white-space: nowrap;
     }
-
     .concentradores-exec-metric-status {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 3px 8px;
+      margin-top: 5px;
+      padding-top: 4px;
+      border-top: 1px solid rgba(255,255,255,.28);
       font-size: 10px;
       font-weight: 800;
-      line-height: 1.25;
-      opacity: 0.92;
+      line-height: 1.15;
     }
-
-    .concentradores-exec-warning {
+    .concentradores-exec-metric.warning .concentradores-exec-metric-status { border-top-color: rgba(17,24,39,.24); }
+    .concentradores-exec-range { opacity: .88; }
+    .concentradores-invertido-layout {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .concentradores-stage {
+      min-width: 0;
+      padding: 8px;
+      border: 1px solid var(--cc-line);
+      border-radius: 12px;
+      background: #0f1d26;
+    }
+    .concentradores-stage h3 {
       display: flex;
       align-items: center;
-      gap: 10px;
-      margin-bottom: 12px;
-      padding: 12px 14px;
-      border: 1px solid #f59e0b;
-      border-radius: 12px;
-      color: #78350f;
-      background: #fef3c7;
+      gap: 7px;
+      margin: 0 0 7px;
       font-size: 13px;
-      font-weight: 800;
+      font-weight: 900;
+      text-transform: uppercase;
     }
-
-    @media (max-width: 1320px) {
-      .concentradores-exec-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-      }
-
-      .concentradores-invertido-layout {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-      }
+    .concentradores-stage h3::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #38bdf8; }
+    .concentradores-stage-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+    .concentradores-exec-panel[data-concentrator="invertido"] .concentradores-exec-metric { min-height: 82px; }
+    .concentradores-exec-panel[data-concentrator="invertido"] .concentradores-exec-metric-value { font-size: clamp(19px, 1.35vw, 25px); }
+    body.display-mode .dashboard { padding: 8px; }
+    @media (max-width: 1500px) {
+      .concentradores-exec-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .concentradores-invertido-layout { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
-
-    @media (max-width: 720px) {
-      .concentradores-exec-grid {
-        grid-template-columns: 1fr;
-      }
-
-      .concentradores-exec-metrics {
-        grid-template-columns: 1fr;
-      }
-
-      .concentradores-exec-metric,
-      .concentradores-exec-metric[data-metric="solidos_entrada"],
-      .concentradores-exec-metric[data-metric="solidos_salida"],
-      .concentradores-exec-metric:last-child:nth-child(odd) {
-        grid-column: auto;
-      }
-
-      .concentradores-invertido-layout,
-      .concentradores-stage-metrics {
-        grid-template-columns: 1fr;
-      }
+    @media (max-width: 820px) {
+      .dashboard { padding: 7px; }
+      .concentradores-header { align-items: flex-start; }
+      .concentradores-heading-icon, .concentradores-count { display: none; }
+      .concentradores-heading h1 { font-size: 28px; }
+      .concentradores-heading p { font-size: 12px; }
+      .back-btn { padding: 7px 10px; }
+      .concentradores-exec-grid,
+      .concentradores-invertido-layout { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 520px) {
+      .concentradores-exec-metrics,
+      .concentradores-stage-metrics { grid-template-columns: 1fr; }
+      .concentradores-exec-metric { min-height: 88px; }
+      .concentradores-header-actions { align-self: center; }
+      .back-btn span { display: none; }
     }
   </style>
 </head>
 
 <body>
   <div class="dashboard">
-    <div class="header">
-      <div class="header-left">
-        <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:10px;">
-          <a href="../index.php" class="back-btn">
-            <i class="fas fa-arrow-left"></i>
-            Regresar al inicio
-          </a>
-        </div>
-
-        <h1>
-          <i class="fas fa-industry" style="margin-right: 12px;"></i>
-          <?= $e($titulo) ?>
-        </h1>
-
-        <div class="sub">
-          <span>
-            <i class="fas fa-water"></i>
-            Flujo desde AVEVA
-          </span>
-          <span>
-            <i class="fas fa-database"></i>
-            Variables desde 105
-          </span>
-          <span>
-            <i class="fas fa-clock"></i>
-            Refresco: <?= $e((int)ceil(((int)($meta['intervaloActualizacion'] ?? 60000)) / 1000)) ?>s
-          </span>
-          <span class="badge">
-            <i class="fas fa-industry"></i>
-            <?= count($concentradores) ?> concentradores
-          </span>
+    <header class="concentradores-header">
+      <div class="concentradores-heading">
+        <span class="concentradores-heading-icon"><i class="fas fa-industry"></i></span>
+        <div>
+          <h1><?= $e($titulo) ?></h1>
+          <p>Monitoreo en tiempo real · actualización cada <?= $e((int)ceil(((int)($meta['intervaloActualizacion'] ?? 60000)) / 1000)) ?> s</p>
         </div>
       </div>
-    </div>
+      <div class="concentradores-header-actions">
+        <span class="concentradores-count"><?= max(0, count($concentradores) - (isset($concentradores['invertido']) ? 1 : 0)) ?> equipos</span>
+        <a href="../index.php" class="back-btn"><i class="fas fa-arrow-left"></i><span>Regresar</span></a>
+      </div>
+    </header>
 
     <div data-warnings>
       <?php foreach ((array)($meta['warnings'] ?? []) as $warning): ?>
@@ -516,11 +366,12 @@ $invertidoMetricGroups = [
 
     <section class="concentradores-exec-grid" aria-label="Lecturas por concentrador">
       <?php foreach ($concentradores as $concentrador): ?>
+        <?php $panelStatusClass = $metricClass(['status' => (array)($concentrador['status'] ?? [])]); ?>
         <article class="concentradores-exec-panel" data-concentrator="<?= $e($concentrador['key'] ?? '') ?>">
-          <header class="concentradores-exec-head">
+          <header class="concentradores-exec-head <?= $e($panelStatusClass) ?>">
             <h2><?= $e($concentrador['nombre'] ?? 'Concentrador') ?></h2>
-            <span data-field="operation-status" class="<?= !empty($concentrador['fuera_operacion']) ? 'is-offline' : 'is-empty' ?>">
-              <?= !empty($concentrador['fuera_operacion']) ? 'FO' : 'FO' ?>
+            <span data-field="operation-status" class="<?= !empty($concentrador['fuera_operacion']) ? 'is-offline' : '' ?>">
+              <?= $e(!empty($concentrador['fuera_operacion']) ? 'FO' : ($concentrador['status']['label'] ?? 'Lectura')) ?>
             </span>
           </header>
           <?php $metricas = (array)($concentrador['metricas'] ?? []); ?>
@@ -545,7 +396,7 @@ $invertidoMetricGroups = [
                             </span>
                           </div>
                           <div class="concentradores-exec-metric-value" data-field="value"><?= $e($metric['formatted'] ?? '-') ?></div>
-                          <div class="concentradores-exec-metric-status" data-field="status"><?= $e($metric['status']['label'] ?? 'Sin dato') ?></div>
+                          <div class="concentradores-exec-metric-status"><span data-field="status"><?= $e($metric['status']['label'] ?? 'Sin dato') ?></span><?php if (trim((string)($metric['leyenda'] ?? '')) !== ''): ?><span class="concentradores-exec-range"><?= $e($metric['leyenda']) ?></span><?php endif; ?></div>
                         </div>
                       </div>
                     <?php endforeach; ?>
@@ -570,7 +421,7 @@ $invertidoMetricGroups = [
                             </span>
                           </div>
                           <div class="concentradores-exec-metric-value" data-field="value"><?= $e($metric['formatted'] ?? '-') ?></div>
-                          <div class="concentradores-exec-metric-status" data-field="status"><?= $e($metric['status']['label'] ?? 'Sin dato') ?></div>
+                          <div class="concentradores-exec-metric-status"><span data-field="status"><?= $e($metric['status']['label'] ?? 'Sin dato') ?></span><?php if (trim((string)($metric['leyenda'] ?? '')) !== ''): ?><span class="concentradores-exec-range"><?= $e($metric['leyenda']) ?></span><?php endif; ?></div>
                         </div>
                       </div>
                     <?php endforeach; ?>
@@ -592,7 +443,7 @@ $invertidoMetricGroups = [
                       </span>
                     </div>
                     <div class="concentradores-exec-metric-value" data-field="value"><?= $e($metric['formatted'] ?? '-') ?></div>
-                    <div class="concentradores-exec-metric-status" data-field="status"><?= $e($metric['status']['label'] ?? 'Sin dato') ?></div>
+                    <div class="concentradores-exec-metric-status"><span data-field="status"><?= $e($metric['status']['label'] ?? 'Sin dato') ?></span><?php if (trim((string)($metric['leyenda'] ?? '')) !== ''): ?><span class="concentradores-exec-range"><?= $e($metric['leyenda']) ?></span><?php endif; ?></div>
                   </div>
                 </div>
               <?php endforeach; ?>
@@ -639,11 +490,12 @@ $invertidoMetricGroups = [
         const panel = document.querySelector(`[data-concentrator="${CSS.escape(concentrador.key)}"]`);
         if (!panel) return;
 
+        const panelHead = panel.querySelector('.concentradores-exec-head');
+        if (panelHead) panelHead.className = `concentradores-exec-head ${metricClass({ status: concentrador.status || {} })}`;
         const operationStatus = panel.querySelector('[data-field="operation-status"]');
         if (operationStatus) {
-          operationStatus.textContent = 'FO';
+          operationStatus.textContent = concentrador.fuera_operacion ? 'FO' : (concentrador?.status?.label || 'Lectura');
           operationStatus.classList.toggle('is-offline', Boolean(concentrador.fuera_operacion));
-          operationStatus.classList.toggle('is-empty', !concentrador.fuera_operacion);
         }
 
         Object.values(concentrador.metricas || {}).forEach((metric) => {
