@@ -104,6 +104,9 @@ $graficas = (array)$report['graficas'];
 $filas = (array)$report['filas'];
 $providerMaterialTable = (array)($report['tabla_proveedor_material'] ?? []);
 $providerMaterialGroups = (array)($providerMaterialTable['grupos'] ?? []);
+$inventoryEntryTable = (array)($report['tabla_inventario_entrada'] ?? []);
+$inventoryEntryRows = (array)($inventoryEntryTable['filas'] ?? []);
+$inventoryEntryCriteria = (array)($inventoryEntryTable['criterios'] ?? []);
 $meta = (array)$report['meta'];
 $version = (int)$report['version'];
 $capture = isset($_GET['capture']) && (string)$_GET['capture'] === '1';
@@ -124,6 +127,16 @@ $todayUrl = './?' . http_build_query($todayParams);
 $materialChart = (array)($graficas['materiales'] ?? []);
 $providerChart = (array)($graficas['proveedores'] ?? []);
 $chartPalette = ['#0f766e', '#2563eb', '#7c3aed', '#d97706', '#dc2626', '#0891b2'];
+$inventoryCell = static function (array $metric) use ($e, $fmt): string {
+  $status = (array)($metric['status'] ?? []);
+  $key = in_array((string)($status['key'] ?? ''), ['verde', 'amarillo', 'rojo'], true)
+    ? (string)$status['key']
+    : 'gris';
+  $title = trim((string)($status['label'] ?? '') . ' · ' . (string)($status['range'] ?? ''), ' ·');
+  return '<td class="rp-inventory-metric rp-state-' . $e($key) . '" title="' . $e($title) . '"><strong>'
+    . $e($fmt($metric['value'] ?? null)) . '</strong></td>';
+};
+$inventoryRange = static fn(string $key): string => (string)($inventoryEntryCriteria[$key]['leyenda'] ?? '');
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -266,6 +279,14 @@ $chartPalette = ['#0f766e', '#2563eb', '#7c3aed', '#d97706', '#dc2626', '#0891b2
     .rp-yield-rojo { background: #c94436 !important; color: #fff !important; }
     .rp-yield-gris { background: #94a3b8 !important; color: #fff !important; }
     .rp-table-panel { overflow: hidden; }
+    .rp-inventory-panel { margin-bottom: 14px; }
+    .rp-inventory-wrap { min-height: 0; max-height: 390px; }
+    .rp-inventory-table { min-width: 1450px; font-size: .7rem; }
+    .rp-inventory-table th, .rp-inventory-table td { text-align: center; }
+    .rp-inventory-table td.rp-left { text-align: left; }
+    .rp-inventory-metric { font-variant-numeric: tabular-nums; }
+    .rp-inventory-status { display: inline-flex; align-items: center; gap: 5px; padding: 4px 7px; border-radius: 999px; font-size: .63rem; font-weight: 900; }
+    .rp-inventory-status .rp-lab-dot { background: currentColor; opacity: .82; }
     .rp-table-head { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 14px 16px 10px; border-bottom: 1px solid #e4ebf3; }
     .rp-count { background: #e7f3f1; color: #0f766e; border-radius: 999px; padding: 5px 10px; font-size: .72rem; font-weight: 800; }
     .rp-table-tools, .rp-lab-legend, .rp-lab-legend span { display: flex; align-items: center; }
@@ -339,6 +360,7 @@ $chartPalette = ['#0f766e', '#2563eb', '#7c3aed', '#d97706', '#dc2626', '#0891b2
     body.rp-table-only .rp-count { font-size: .78rem; padding: 6px 11px; }
     body.rp-table-only .rp-lab-legend { font-size: .72rem; }
     body.rp-table-only .rp-table-wrap { max-height: calc(100vh - 285px); min-height: 560px; }
+    body.rp-table-only .rp-inventory-wrap { max-height: 390px; min-height: 0; }
     body.rp-table-only .rp-data-table { min-width: 2350px; font-size: .8rem; }
     body.rp-table-only .rp-data-table th { padding: 11px 9px; }
     body.rp-table-only .rp-data-table td { padding: 10px 9px; }
@@ -529,6 +551,65 @@ $chartPalette = ['#0f766e', '#2563eb', '#7c3aed', '#d97706', '#dc2626', '#0891b2
         </div>
       <?php endif; ?>
     </article>
+  </section>
+  <?php endif; ?>
+
+  <?php if (!empty($config['mostrar_tabla_inventario_entrada'])): ?>
+  <section class="rp-panel rp-table-panel rp-inventory-panel">
+    <div class="rp-table-head">
+      <div>
+        <h2>Resultados de entrada</h2>
+        <p>Una fila por registro de inventario. El estado general corresponde al parámetro más crítico.</p>
+      </div>
+      <span class="rp-count"><?= count($inventoryEntryRows) ?> registros</span>
+    </div>
+    <div class="rp-table-wrap rp-inventory-wrap">
+      <?php if (!empty($inventoryEntryTable['error'])): ?>
+        <div class="rp-empty"><?= $e($inventoryEntryTable['error']) ?></div>
+      <?php elseif ($inventoryEntryRows === []): ?>
+        <div class="rp-empty">No hay entradas de inventario para los filtros seleccionados.</div>
+      <?php else: ?>
+        <table class="rp-inventory-table">
+          <thead>
+            <tr>
+              <th>No.</th><th>Ticket</th><th>Fecha</th><th>Kilos</th><th>Tipo de material</th><th>Proveedor</th>
+              <th>Humedad<small><?= $e($inventoryRange('humedad')) ?></small></th>
+              <th>Conductividad<small>Objetivo según material · máx. 20</small></th>
+              <th>pH<small><?= $e($inventoryRange('ph')) ?></small></th>
+              <th>Sólidos<small><?= $e($inventoryRange('solidos')) ?></small></th>
+              <th>Extractibilidad<small><?= $e($inventoryRange('extractibilidad')) ?></small></th>
+              <th>Rendimiento<small><?= $e($inventoryRange('rendimiento')) ?></small></th>
+              <th>Semáforo</th><th>Observaciones</th>
+            </tr>
+          </thead>
+          <tbody>
+          <?php foreach ($inventoryEntryRows as $entryRow):
+            $entryStatus = (array)($entryRow['semaforo'] ?? []);
+            $entryStatusKey = in_array((string)($entryStatus['key'] ?? ''), ['verde', 'amarillo', 'rojo'], true)
+              ? (string)$entryStatus['key']
+              : 'gris';
+          ?>
+            <tr>
+              <td><?= (int)($entryRow['numero'] ?? 0) ?></td>
+              <td><strong><?= (int)($entryRow['ticket'] ?? 0) ?></strong></td>
+              <td><?= $e($entryRow['fecha'] ?? '—') ?></td>
+              <td><strong><?= $fmt($entryRow['kilos'] ?? null) ?></strong></td>
+              <td class="rp-left"><?= $e($entryRow['material'] ?? '—') ?></td>
+              <td class="rp-left"><?= $e($entryRow['proveedor'] ?? '—') ?></td>
+              <?= $inventoryCell((array)(($entryRow['metricas'] ?? [])['humedad'] ?? [])) ?>
+              <?= $inventoryCell((array)(($entryRow['metricas'] ?? [])['conductividad'] ?? [])) ?>
+              <?= $inventoryCell((array)(($entryRow['metricas'] ?? [])['ph'] ?? [])) ?>
+              <?= $inventoryCell((array)(($entryRow['metricas'] ?? [])['solidos'] ?? [])) ?>
+              <?= $inventoryCell((array)(($entryRow['metricas'] ?? [])['extractibilidad'] ?? [])) ?>
+              <?= $inventoryCell((array)(($entryRow['metricas'] ?? [])['rendimiento'] ?? [])) ?>
+              <td><span class="rp-inventory-status rp-state-<?= $e($entryStatusKey) ?>"><i class="rp-lab-dot"></i><?= $e($entryStatus['label'] ?? 'Sin dato') ?></span></td>
+              <td class="rp-left" title="<?= $e($entryRow['observaciones'] ?? '') ?>"><?= $e(($entryRow['observaciones'] ?? '') !== '' ? $entryRow['observaciones'] : '—') ?></td>
+            </tr>
+          <?php endforeach; ?>
+          </tbody>
+        </table>
+      <?php endif; ?>
+    </div>
   </section>
   <?php endif; ?>
 

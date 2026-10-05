@@ -12,7 +12,7 @@ return [
   'intervalo_actualizacion_ms' => 120000,
   'secadores' => [1, 2, 3, 4],
   'conexion' => (array)($secadoresConfig['mysql_verificacion_secado'] ?? []),
-  'tabla' => 'verificacion_secado',
+  'tabla' => 'calidad_humedad_secadores',
   'campo_valor' => 'hum_ultima',
   'campo_fuera_operacion' => 'estado_fo',
   'semaforo' => ['modo' => 'minimo', 'verde_min' => 12, 'amarillo_min' => 10],

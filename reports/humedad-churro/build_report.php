@@ -67,8 +67,19 @@ try {
     PDO::ATTR_TIMEOUT => max(1, (int)($db['timeout'] ?? 3)),
   ]);
 
+  $quoteIdentifier = static function ($value, string $fallback): string {
+    $identifier = trim((string)$value);
+    if (preg_match('/^[A-Za-z0-9_]+$/', $identifier) !== 1) {
+      $identifier = $fallback;
+    }
+    return '`' . $identifier . '`';
+  };
+  $table = $quoteIdentifier($config['tabla'] ?? null, 'verificacion_secado');
+  $valueField = $quoteIdentifier($config['campo_valor'] ?? null, 'hum_ultima');
+  $outOfOperationField = $quoteIdentifier($config['campo_fuera_operacion'] ?? null, 'estado_fo');
+
   $placeholders = implode(',', array_fill(0, count($secadores), '?'));
-  $sql = "SELECT id, secador, hum_ultima, estado_fo, creado_en FROM verificacion_secado WHERE secador IN ({$placeholders}) AND creado_en >= ? AND creado_en < ? ORDER BY creado_en ASC, id ASC";
+  $sql = "SELECT `id`, `secador`, {$valueField} AS hum_ultima, {$outOfOperationField} AS estado_fo, `creado_en` FROM {$table} WHERE `secador` IN ({$placeholders}) AND `creado_en` >= ? AND `creado_en` < ? ORDER BY `creado_en` ASC, `id` ASC";
   $stmt = $pdo->prepare($sql);
   $stmt->execute(array_merge($secadores, [$inicio->format('Y-m-d H:i:s'), $fin->format('Y-m-d H:i:s')]));
   $rowsByDryer = array_fill_keys($secadores, []);
