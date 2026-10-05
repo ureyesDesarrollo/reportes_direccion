@@ -109,14 +109,23 @@ try {
     return $sheetRows;
   };
   $wholeLeatherPurchases = (array)($report['compras_cuero_americano'] ?? []);
-  $wholeLeatherCpRows = $buildWholeLeatherRows('Cuero entero C/P (con pelo)', array_values(array_filter(
+  $pedaceraPurchases = array_values(array_filter(
     $wholeLeatherPurchases,
+    static fn(array $row): bool => (string)($row['grupo'] ?? '') === 'pedacera'
+  ));
+  $wholeLeatherOnlyPurchases = array_values(array_filter(
+    $wholeLeatherPurchases,
+    static fn(array $row): bool => (string)($row['grupo'] ?? '') !== 'pedacera'
+  ));
+  $wholeLeatherCpRows = $buildWholeLeatherRows('Cuero entero C/P (con pelo)', array_values(array_filter(
+    $wholeLeatherOnlyPurchases,
     static fn(array $row): bool => strpos(strtoupper((string)($row['material'] ?? '')), 'DEPILAD') === false
   )));
   $wholeLeatherDepilatedRows = $buildWholeLeatherRows('Cuero entero depilado', array_values(array_filter(
-    $wholeLeatherPurchases,
+    $wholeLeatherOnlyPurchases,
     static fn(array $row): bool => strpos(strtoupper((string)($row['material'] ?? '')), 'DEPILAD') !== false
   )));
+  $pedaceraRows = $buildWholeLeatherRows('Pedacera', $pedaceraPurchases);
 
   $path = InventarioMateriaPrimaXlsxWriter::create([
     [
@@ -134,6 +143,12 @@ try {
     [
       'name' => 'Cuero depilado',
       'rows' => $wholeLeatherDepilatedRows,
+      'header_row' => 4,
+      'widths' => [12, 11, 28, 30, 14, 16, 11, 14, 15, 15, 17, 12, 14, 17, 18, 30],
+    ],
+    [
+      'name' => 'Pedacera',
+      'rows' => $pedaceraRows,
       'header_row' => 4,
       'widths' => [12, 11, 28, 30, 14, 16, 11, 14, 15, 15, 17, 12, 14, 17, 18, 30],
     ],

@@ -117,7 +117,10 @@ $selectedMaterial = filter_var($_GET['material'] ?? null, FILTER_VALIDATE_INT, [
 $selectedMaterial = $selectedMaterial === false ? null : (int)$selectedMaterial;
 $selectedProvider = filter_var($_GET['proveedor'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
 $selectedProvider = $selectedProvider === false ? null : (int)$selectedProvider;
-$wholeLeatherMaterialIds = array_values(array_filter(array_map('intval', (array)($config['materiales_cuero_entero'] ?? []))));
+$receivedMaterialIds = array_values(array_filter(array_map(
+  'intval',
+  (array)($config['materiales_cuero_entero_pedacera'] ?? $config['materiales_cuero_entero'] ?? [])
+)));
 
 $materialOptions = $pdo->query("
   SELECT DISTINCT m.mat_id, m.mat_nombre
@@ -256,11 +259,11 @@ foreach ($rawRows as $index => $raw) {
 }
 
 /*
- * Segunda sección del formato: cuero entero recibido de Pelambre. El periodo
- * se aplica sobre inv_fe_recibe; la compra original se conserva como cabecera
+ * Secciones de cuero entero y pedacera recibidos de Pelambre. El periodo se
+ * aplica sobre inv_fe_recibe; la compra original se conserva como cabecera
  * para mostrar proveedor, material y kilos del ticket.
  */
-$americanMaterialIds = $wholeLeatherMaterialIds;
+$americanMaterialIds = $receivedMaterialIds;
 $americanPurchases = [];
 if ($americanMaterialIds !== []) {
   $purchaseWhere = [
@@ -396,9 +399,10 @@ if ($americanMaterialIds !== []) {
       'fecha' => $latestReceipt instanceof DateTimeImmutable ? $latestReceipt->format('d/m/Y') : '—',
       'fecha_orden' => $latestReceipt instanceof DateTimeImmutable ? $latestReceipt->format('Y-m-d H:i:s') : '',
       'ticket' => $ticket,
+      'mat_id' => (int)$purchase['mat_id'],
       'proveedor' => (string)$purchase['prv_nombre'],
       'material' => (string)$purchase['mat_nombre'],
-      'grupo' => 'cuero_entero',
+      'grupo' => stripos((string)$purchase['mat_nombre'], 'PEDACERA') !== false ? 'pedacera' : 'cuero_entero',
       'kilos_compra' => $purchaseKilos,
       'humedad_origen' => [
         'value' => $purchase['inv_humedad_origen'],

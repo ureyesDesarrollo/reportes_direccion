@@ -34,8 +34,10 @@ $filters = (array)$report['filtros'];
 $options = (array)$report['opciones'];
 $rows = (array)$report['filas'];
 $americanPurchases = (array)($report['compras_cuero_americano'] ?? []);
-$wholeLeatherCp = array_values(array_filter($americanPurchases, static fn(array $row): bool => strpos(strtoupper((string)($row['material'] ?? '')), 'DEPILAD') === false));
-$wholeLeatherDepilated = array_values(array_filter($americanPurchases, static fn(array $row): bool => strpos(strtoupper((string)($row['material'] ?? '')), 'DEPILAD') !== false));
+$pedaceraRows = array_values(array_filter($americanPurchases, static fn(array $row): bool => (string)($row['grupo'] ?? '') === 'pedacera'));
+$wholeLeatherRows = array_values(array_filter($americanPurchases, static fn(array $row): bool => (string)($row['grupo'] ?? '') !== 'pedacera'));
+$wholeLeatherCp = array_values(array_filter($wholeLeatherRows, static fn(array $row): bool => strpos(strtoupper((string)($row['material'] ?? '')), 'DEPILAD') === false));
+$wholeLeatherDepilated = array_values(array_filter($wholeLeatherRows, static fn(array $row): bool => strpos(strtoupper((string)($row['material'] ?? '')), 'DEPILAD') !== false));
 $americanSections = [
   'cuero_entero_cp' => [
     'titulo' => 'Cuero entero C/P (con pelo)',
@@ -46,6 +48,11 @@ $americanSections = [
     'titulo' => 'Cuero entero depilado',
     'descripcion' => 'Cuero entero depilado recibido de Pelambre, filtrado por la fecha de recepción.',
     'filas' => $wholeLeatherDepilated,
+  ],
+  'pedacera' => [
+    'titulo' => 'Pedacera',
+    'descripcion' => 'Pedacera recibida de Pelambre, filtrada por la fecha de recepción.',
+    'filas' => $pedaceraRows,
   ],
 ];
 $criteria = (array)$report['criterios'];

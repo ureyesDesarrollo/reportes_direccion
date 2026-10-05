@@ -108,13 +108,13 @@ return [
       ],
       'solidos' => [
         'modo' => 'bandas',
-        'leyenda' => '9–14',
+        'leyenda' => '9–14 · máx. 18.0',
         'bandas' => [
           ['min' => 9, 'max' => 14, 'estado' => 'verde', 'leyenda' => '9–14'],
           ['min' => 6, 'max' => 9, 'estado' => 'amarillo', 'leyenda' => '6–<9'],
-          ['min' => 14, 'max' => 17, 'estado' => 'amarillo', 'leyenda' => '>14–17'],
+          ['min' => 14, 'max' => 18, 'estado' => 'amarillo', 'leyenda' => '>14–18.0'],
           ['max' => 5.999999, 'estado' => 'rojo', 'leyenda' => '<6'],
-          ['min' => 17.000001, 'estado' => 'rojo', 'leyenda' => '>17'],
+          ['min' => 18.000001, 'estado' => 'rojo', 'leyenda' => '>18.0'],
         ],
       ],
       'extractibilidad' => [
