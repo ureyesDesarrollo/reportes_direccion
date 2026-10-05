@@ -77,40 +77,46 @@ try {
     ];
   }
 
-  $wholeLeatherRows = [
-    [$c('Cuero entero', 'string', 'title')],
-    [$c($scope, 'string', 'subtitle')],
-    [],
-    array_map(static fn(string $label): array => InventarioMateriaPrimaXlsxWriter::cell($label, 'string', 'header'), [
-      'Fecha', 'Ticket', 'Proveedor', 'Material', 'Kg compra', 'Humedad origen',
-      'Entregas', 'Kg granja', 'Rend. granja', 'Prom. humedad', 'Prom. conductividad',
-      'Prom. pH', 'Prom. sólidos', 'Prom. extractibilidad', 'Prom. rendimiento', 'Observaciones',
-    ]),
-  ];
-
-  foreach ((array)($report['compras_cuero_americano'] ?? []) as $row) {
-    $averages = (array)$row['promedios'];
-    $origin = (array)$row['humedad_origen'];
-    $deliveries = (int)$row['numero_entregas'];
-    $wholeLeatherRows[] = [
-      $c($excelDate($row['fecha']), 'date'),
-      $c((string)$row['ticket']),
-      $c($row['proveedor']),
-      $c($row['material']),
-      $c((float)$row['kilos_compra'], 'number'),
-      $c($origin['value'] ?? null, 'number', $statusKey($origin)),
-      $c($deliveries > 0 ? $deliveries : null, 'integer'),
-      $c($row['kilos_granja'] ?? null, 'number'),
-      $c($row['rendimiento_granja'] ?? null, 'percent_points'),
-      $c($averages['humedad']['value'] ?? null, 'number', $statusKey((array)$averages['humedad'])),
-      $c($averages['conductividad']['value'] ?? null, 'number', $statusKey((array)$averages['conductividad'])),
-      $c($averages['ph']['value'] ?? null, 'number', $statusKey((array)$averages['ph'])),
-      $c($averages['solidos']['value'] ?? null, 'number', $statusKey((array)$averages['solidos'])),
-      $c($averages['extractibilidad']['value'] ?? null, 'number', $statusKey((array)$averages['extractibilidad'])),
-      $c($averages['rendimiento']['value'] ?? null, 'number', $statusKey((array)$averages['rendimiento'])),
-      $c((string)($row['observaciones'] ?? '')),
+  $buildWholeLeatherRows = static function (string $title, array $sourceRows) use ($c, $scope, $excelDate, $statusKey): array {
+    $sheetRows = [
+      [$c($title, 'string', 'title')],
+      [$c($scope, 'string', 'subtitle')],
+      [],
+      array_map(static fn(string $label): array => InventarioMateriaPrimaXlsxWriter::cell($label, 'string', 'header'), [
+        'Fecha recepción', 'Ticket', 'Proveedor', 'Material', 'Kg compra', 'Humedad origen',
+        'Entregas', 'Kg granja', 'Rend. granja', 'Prom. humedad', 'Prom. conductividad',
+        'Prom. pH', 'Prom. sólidos', 'Prom. extractibilidad', 'Prom. rendimiento', 'Observaciones',
+      ]),
     ];
-  }
+    foreach ($sourceRows as $row) {
+      $averages = (array)$row['promedios'];
+      $origin = (array)$row['humedad_origen'];
+      $deliveries = (int)$row['numero_entregas'];
+      $sheetRows[] = [
+        $c($excelDate($row['fecha']), 'date'), $c((string)$row['ticket']), $c($row['proveedor']), $c($row['material']),
+        $c((float)$row['kilos_compra'], 'number'), $c($origin['value'] ?? null, 'number', $statusKey($origin)),
+        $c($deliveries > 0 ? $deliveries : null, 'integer'), $c($row['kilos_granja'] ?? null, 'number'),
+        $c($row['rendimiento_granja'] ?? null, 'percent_points'),
+        $c($averages['humedad']['value'] ?? null, 'number', $statusKey((array)$averages['humedad'])),
+        $c($averages['conductividad']['value'] ?? null, 'number', $statusKey((array)$averages['conductividad'])),
+        $c($averages['ph']['value'] ?? null, 'number', $statusKey((array)$averages['ph'])),
+        $c($averages['solidos']['value'] ?? null, 'number', $statusKey((array)$averages['solidos'])),
+        $c($averages['extractibilidad']['value'] ?? null, 'number', $statusKey((array)$averages['extractibilidad'])),
+        $c($averages['rendimiento']['value'] ?? null, 'number', $statusKey((array)$averages['rendimiento'])),
+        $c((string)($row['observaciones'] ?? '')),
+      ];
+    }
+    return $sheetRows;
+  };
+  $wholeLeatherPurchases = (array)($report['compras_cuero_americano'] ?? []);
+  $wholeLeatherCpRows = $buildWholeLeatherRows('Cuero entero C/P (con pelo)', array_values(array_filter(
+    $wholeLeatherPurchases,
+    static fn(array $row): bool => strpos(strtoupper((string)($row['material'] ?? '')), 'DEPILAD') === false
+  )));
+  $wholeLeatherDepilatedRows = $buildWholeLeatherRows('Cuero entero depilado', array_values(array_filter(
+    $wholeLeatherPurchases,
+    static fn(array $row): bool => strpos(strtoupper((string)($row['material'] ?? '')), 'DEPILAD') !== false
+  )));
 
   $path = InventarioMateriaPrimaXlsxWriter::create([
     [
@@ -120,20 +126,43 @@ try {
       'widths' => [7, 11, 12, 14, 28, 28, 13, 16, 11, 12, 16, 15, 17, 32],
     ],
     [
-      'name' => 'Cuero entero',
-      'rows' => $wholeLeatherRows,
+      'name' => 'Cuero C-P',
+      'rows' => $wholeLeatherCpRows,
+      'header_row' => 4,
+      'widths' => [12, 11, 28, 30, 14, 16, 11, 14, 15, 15, 17, 12, 14, 17, 18, 30],
+    ],
+    [
+      'name' => 'Cuero depilado',
+      'rows' => $wholeLeatherDepilatedRows,
       'header_row' => 4,
       'widths' => [12, 11, 28, 30, 14, 16, 11, 14, 15, 15, 17, 12, 14, 17, 18, 30],
     ],
   ], 'Inventario de Materia Prima');
 
-  $filename = sprintf('inventario-materia-prima-%04d-%02d.xlsx', (int)$filters['anio'], (int)$filters['mes']);
+  $filename = (string)($filters['periodo'] ?? 'mes') === 'fecha'
+    ? 'inventario-materia-prima-' . (string)($filters['fecha_inicio'] ?? $filters['fecha']) . '-a-' . (string)($filters['fecha_fin'] ?? $filters['fecha']) . '.xlsx'
+    : ((string)($filters['periodo'] ?? 'mes') === 'semana'
+      ? 'inventario-materia-prima-' . (string)($filters['semana_inicio'] ?? $filters['semana'] ?? 'semana') . '-a-' . (string)($filters['semana_fin'] ?? $filters['semana'] ?? 'semana') . '.xlsx'
+      : sprintf('inventario-materia-prima-%04d-%02d.xlsx', (int)$filters['anio'], (int)$filters['mes']));
+  @ini_set('zlib.output_compression', '0');
+  while (ob_get_level() > 0) {
+    ob_end_clean();
+  }
+  clearstatcache(true, $path);
+
+  header('Content-Description: File Transfer');
   header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-  header('Content-Disposition: attachment; filename="' . $filename . '"');
+  header('Content-Disposition: attachment; filename="' . $filename . '"; filename*=UTF-8' . "''" . rawurlencode($filename));
+  header('Content-Transfer-Encoding: binary');
   header('Content-Length: ' . (string)filesize($path));
-  header('Cache-Control: private, max-age=0, must-revalidate');
+  header('Cache-Control: private, no-store, no-cache, must-revalidate, max-age=0');
+  header('Pragma: public');
+  header('Expires: 0');
+  header('X-Content-Type-Options: nosniff');
+
   readfile($path);
   @unlink($path);
+  exit;
 } catch (Throwable $exception) {
   http_response_code(500);
   header('Content-Type: text/plain; charset=UTF-8');

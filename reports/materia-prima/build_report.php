@@ -44,9 +44,41 @@ if (preg_match('/^(\d{2}):(\d{2}):(\d{2})$/', $horaCorte) !== 1) {
 
 $pdo = conectar((array)($dbConfig[(string)($config['database_key'] ?? 'prod')] ?? $dbConfig['prod']));
 $currentDate = new DateTimeImmutable('now', $tz);
+$periodMode = (string)($_GET['periodo'] ?? 'mes');
+if (!in_array($periodMode, ['mes', 'semana', 'fecha'], true)) $periodMode = 'mes';
 $selectedYear = $safeInt($_GET['anio'] ?? null, (int)$currentDate->format('Y'), 2020, 2100);
 $selectedMonth = $safeInt($_GET['mes'] ?? null, (int)$currentDate->format('n'), 1, 12);
 $selectedMaterialType = trim((string)($_GET['mt_id'] ?? 'all'));
+
+$legacyDateValue = trim((string)($_GET['fecha'] ?? ''));
+$selectedStartDateValue = trim((string)($_GET['fecha_inicio'] ?? $legacyDateValue));
+$selectedEndDateValue = trim((string)($_GET['fecha_fin'] ?? $legacyDateValue));
+$parseSelectedDate = static function (string $value, DateTimeImmutable $fallback, DateTimeZone $timezone): DateTimeImmutable {
+  $date = DateTimeImmutable::createFromFormat('!Y-m-d', $value, $timezone);
+  return $date instanceof DateTimeImmutable && $date->format('Y-m-d') === $value ? $date : $fallback;
+};
+$selectedStartDate = $parseSelectedDate($selectedStartDateValue, $currentDate->setTime(0, 0), $tz);
+$selectedEndDate = $parseSelectedDate($selectedEndDateValue, $selectedStartDate, $tz);
+if ($selectedEndDate < $selectedStartDate) {
+  [$selectedStartDate, $selectedEndDate] = [$selectedEndDate, $selectedStartDate];
+}
+$legacyWeekValue = trim((string)($_GET['semana'] ?? ''));
+$selectedWeekStartValue = trim((string)($_GET['semana_inicio'] ?? $legacyWeekValue));
+$selectedWeekEndValue = trim((string)($_GET['semana_fin'] ?? $legacyWeekValue));
+$parseSelectedWeek = static function (string $value, DateTimeImmutable $fallback): DateTimeImmutable {
+  $matches = [];
+  if (preg_match('/^(\d{4})-W(\d{2})$/', $value, $matches) !== 1) return $fallback;
+  $weekStart = $fallback->setISODate((int)$matches[1], (int)$matches[2], 1)->setTime(0, 0);
+  return $weekStart->format('o-\WW') === $value ? $weekStart : $fallback;
+};
+$currentWeekStart = $currentDate->modify('monday this week')->setTime(0, 0);
+$selectedWeekStart = $parseSelectedWeek($selectedWeekStartValue, $currentWeekStart);
+$selectedWeekEnd = $parseSelectedWeek($selectedWeekEndValue, $selectedWeekStart);
+if ($selectedWeekEnd < $selectedWeekStart) {
+  [$selectedWeekStart, $selectedWeekEnd] = [$selectedWeekEnd, $selectedWeekStart];
+}
+$selectedWeekValue = $selectedWeekStart->format('o-\WW');
+$selectedWeekEndValue = $selectedWeekEnd->format('o-\WW');
 
 $yearStmt = $pdo->query("
   SELECT DISTINCT YEAR(pma_fe_entrada) AS anio
@@ -77,12 +109,31 @@ if ($selectedMaterialType !== 'all' && !isset($materialTypes[$selectedMaterialTy
   $selectedMaterialType = 'all';
 }
 
-$periodStart = new DateTimeImmutable(sprintf('%04d-%02d-01 00:00:00', $selectedYear, $selectedMonth), $tz);
-$periodEnd = $periodStart->modify('first day of next month');
+if ($periodMode === 'fecha') {
+  $periodStart = $selectedStartDate->setTime(0, 0);
+  $periodEnd = $selectedEndDate->setTime(0, 0)->modify('+1 day');
+} elseif ($periodMode === 'semana') {
+  $periodStart = $selectedWeekStart;
+  $periodEnd = $selectedWeekEnd->modify('+7 days');
+} else {
+  $periodStart = new DateTimeImmutable(sprintf('%04d-%02d-01 00:00:00', $selectedYear, $selectedMonth), $tz);
+  $periodEnd = $periodStart->modify('first day of next month');
+}
+$selectedYear = (int)$periodStart->format('Y');
+$selectedMonth = (int)$periodStart->format('n');
 $startDate = $periodStart->format('Y-m-d');
 $endDate = $periodEnd->format('Y-m-d');
 $startDateTime = $periodStart->format('Y-m-d 00:00:00');
 $endDateTime = $periodEnd->modify('+7 hours')->format('Y-m-d H:i:s');
+$periodLabel = $periodMode === 'fecha'
+  ? ($periodStart->format('Y-m-d') === $periodEnd->modify('-1 day')->format('Y-m-d')
+    ? $periodStart->format('d/m/Y')
+    : $periodStart->format('d/m/Y') . ' al ' . $periodEnd->modify('-1 day')->format('d/m/Y'))
+  : ($periodMode === 'semana'
+    ? ($selectedWeekStart->format('o-\WW') === $selectedWeekEnd->format('o-\WW')
+      ? 'Semana ' . $periodStart->format('W')
+      : 'Semanas ' . $periodStart->format('W') . ' a ' . $selectedWeekEnd->format('W')) . ' · ' . $periodStart->format('d/m/Y') . ' al ' . $periodEnd->modify('-1 day')->format('d/m/Y')
+    : ucfirst($monthNames[$selectedMonth] ?? (string)$selectedMonth) . ' ' . $selectedYear);
 $operationDateSql = "DATE(CASE WHEN TIME(t.tar_fecha) < '{$horaCorte}' THEN DATE_SUB(t.tar_fecha, INTERVAL 1 DAY) ELSE t.tar_fecha END)";
 $primaryProcessIsCarnazaSql = "EXISTS (
   SELECT 1
@@ -214,8 +265,57 @@ foreach ($closedPairProduction as &$processProduction) {
 unset($processProduction);
 
 $selectedProcessProduction = [];
-foreach ($closedPairProduction as $pairProduction) {
-  if (($pairProduction['periodo_dominante'] ?? null) !== $selectedYieldMonth) {
+$selectedPairProduction = $closedPairProduction;
+if ($periodMode !== 'mes') {
+  $selectedPairProductionStmt = $pdo->prepare("
+    SELECT
+      t.pro_id,
+      t.pro_id_2,
+      COUNT(*) AS tarimas,
+      SUM(t.tar_kilos) AS kilos,
+      SUM({$primaryProductionKilosSql}) AS kilos_primario,
+      SUM(CASE
+        WHEN t.pro_id_2 IS NOT NULL AND t.pro_id_2 <> 0 AND t.pro_id_2 <> t.pro_id
+          THEN {$secondaryProductionKilosSql}
+        ELSE 0
+      END) AS kilos_secundario
+    FROM rev_tarimas t
+    WHERE t.tar_fecha >= ?
+      AND t.tar_fecha < ?
+      AND {$operationDateSql} >= ?
+      AND {$operationDateSql} < ?
+      AND t.tar_count_etiquetado > 0
+      AND t.pro_id IS NOT NULL
+      AND t.pro_id <> 0
+      AND t.pro_id <> {$barreduraProId}
+      AND (t.pro_id_2 IS NULL OR t.pro_id_2 = 0 OR t.pro_id_2 <> {$barreduraProId})
+      AND EXISTS (
+        SELECT 1
+        FROM procesos_agrupados pa_cerrado_1
+        INNER JOIN lotes_anio lote_cerrado_1
+          ON lote_cerrado_1.lote_id = pa_cerrado_1.lote_id
+         AND lote_cerrado_1.lote_estatus = 3
+        WHERE pa_cerrado_1.pro_id = t.pro_id
+      )
+      AND (
+        t.pro_id_2 IS NULL OR t.pro_id_2 = 0 OR t.pro_id_2 = t.pro_id
+        OR EXISTS (
+          SELECT 1
+          FROM procesos_agrupados pa_cerrado_2
+          INNER JOIN lotes_anio lote_cerrado_2
+            ON lote_cerrado_2.lote_id = pa_cerrado_2.lote_id
+           AND lote_cerrado_2.lote_estatus = 3
+          WHERE pa_cerrado_2.pro_id = t.pro_id_2
+        )
+      )
+    GROUP BY t.pro_id, t.pro_id_2
+  ");
+  $selectedPairProductionStmt->execute([$startDateTime, $endDateTime, $startDate, $endDate]);
+  $selectedPairProduction = $selectedPairProductionStmt->fetchAll() ?: [];
+}
+
+foreach ($selectedPairProduction as $pairProduction) {
+  if ($periodMode === 'mes' && ($pairProduction['periodo_dominante'] ?? null) !== $selectedYieldMonth) {
     continue;
   }
 
@@ -294,9 +394,13 @@ $purchaseBaseSql = "
 $purchaseParams = array_merge([$startDate, $endDate], $materialParams);
 $materialFamilySql = "
   CASE
-    WHEN m.mat_id IN (5, 7, 9, 12) THEN 'Cuero Entero'
-    WHEN m.mat_id IN (4, 3, 10, 11, 13) THEN 'Recorte'
-    WHEN m.mat_id IN (2, 6, 8) THEN 'Pedacera'
+    WHEN m.mat_id IN (5, 7) THEN 'Cuero Entero C/P (con pelo)'
+    WHEN m.mat_id IN (9, 12) THEN 'Cuero Entero Depilado'
+    WHEN m.mat_id IN (3, 4, 10, 11, 13) THEN m.mat_nombre
+    WHEN m.mat_id = 2 THEN 'Pedacera Americana S/P'
+    WHEN m.mat_id = 6 THEN 'Pedacera Americana C/P'
+    WHEN m.mat_id = 8 THEN 'Pedacera Americana Depilada'
+    WHEN m.mat_id = 14 THEN 'Pedacera Nacional C/P'
     WHEN m.mat_id IN (1) THEN 'Carnaza'
     ELSE 'Otros'
   END
@@ -780,6 +884,234 @@ $providerMaterials = array_map(static function (array $row): array {
   ];
 }, $providerMaterialStmt->fetchAll() ?: []);
 
+
+/*
+ * Comparativo proveedor/material.
+ * El consolidado semanal debe cuadrar con el mensual: cada proceso cerrado se
+ * conserva en su mes dominante y se asigna completo a su semana operativa
+ * dominante. El costo del cuero incluye compra y maquila.
+ */
+$providerMaterialKgSql = !empty($config['proveedor_material_usar_consumo_proceso'])
+  ? 'COALESCE(pm.pma_kg, 0)'
+  : 'COALESCE(i.inv_kilos, 0)';
+$providerMaterialInputStmt = $pdo->prepare("
+  SELECT
+    pm.pro_id,
+    COALESCE(p.prv_id, 0) AS prv_id,
+    COALESCE(NULLIF(p.prv_nom_comercial, ''), NULLIF(p.prv_nombre, ''), 'Sin proveedor') AS proveedor,
+    m.mat_id,
+    m.mat_nombre AS material,
+    m.mt_id,
+    {$materialFamilySql} AS grupo,
+    SUM({$providerMaterialKgSql}) AS kilos_consumidos,
+    SUM(CASE WHEN i.inv_costo > 0 THEN {$providerMaterialKgSql} ELSE 0 END) AS kilos_con_precio,
+    SUM(CASE WHEN i.inv_costo > 0 THEN i.inv_costo * {$providerMaterialKgSql} ELSE 0 END) AS valor_compra,
+    SUM(CASE WHEN i.inv_costo_mql > 0 THEN i.inv_costo_mql * {$providerMaterialKgSql} ELSE 0 END) AS valor_maquila
+  FROM procesos_materiales pm
+  INNER JOIN ({$periodProcessSql}) period_processes ON period_processes.pro_id = pm.pro_id
+  INNER JOIN inventario i ON i.inv_id = pm.inv_id
+  INNER JOIN materiales m ON m.mat_id = pm.mat_id
+  LEFT JOIN proveedores p ON p.prv_id = i.prv_id
+  GROUP BY pm.pro_id, prv_id, proveedor, m.mat_id, m.mat_nombre, m.mt_id, grupo
+  ORDER BY proveedor, m.mat_nombre
+");
+$providerMaterialInputStmt->execute($periodProcessParams);
+$providerMaterialInputs = $providerMaterialInputStmt->fetchAll() ?: [];
+
+$processInputTotals = [];
+foreach ($providerMaterialInputs as $inputRow) {
+  $processId = (int)($inputRow['pro_id'] ?? 0);
+  $processInputTotals[$processId] = ($processInputTotals[$processId] ?? 0.0)
+    + (float)($inputRow['kilos_consumidos'] ?? 0);
+}
+
+$processWeekStmt = $pdo->prepare("
+  SELECT
+    production_week.process_id AS pro_id,
+    YEARWEEK(production_week.op_dia, 3) AS semana_clave,
+    COUNT(*) AS tarimas,
+    SUM(production_week.kilos) AS kilos
+  FROM (
+    SELECT t.pro_id AS process_id, {$primaryProductionKilosSql} AS kilos, {$operationDateSql} AS op_dia
+    FROM rev_tarimas t
+    WHERE t.tar_fecha >= ?
+      AND t.tar_fecha < ?
+      AND t.tar_count_etiquetado > 0
+    UNION ALL
+    SELECT t.pro_id_2 AS process_id, {$secondaryProductionKilosSql} AS kilos, {$operationDateSql} AS op_dia
+    FROM rev_tarimas t
+    WHERE t.tar_fecha >= ?
+      AND t.tar_fecha < ?
+      AND t.tar_count_etiquetado > 0
+      AND t.pro_id_2 IS NOT NULL
+      AND t.pro_id_2 <> 0
+      AND t.pro_id_2 <> t.pro_id
+  ) production_week
+  INNER JOIN tmp_materia_prima_rendimiento selected_process
+    ON selected_process.pro_id = production_week.process_id
+  WHERE production_week.op_dia >= ?
+    AND production_week.op_dia < ?
+  GROUP BY production_week.process_id, semana_clave
+  ORDER BY production_week.process_id, tarimas DESC, kilos DESC, semana_clave
+");
+$processWeekStmt->execute([
+  $startDateTime,
+  $endDateTime,
+  $startDateTime,
+  $endDateTime,
+  $startDate,
+  $endDate,
+]);
+
+$dominantWeekByProcess = [];
+foreach ($processWeekStmt->fetchAll() ?: [] as $weekRow) {
+  $processId = (int)($weekRow['pro_id'] ?? 0);
+  if ($processId <= 0 || isset($dominantWeekByProcess[$processId])) {
+    continue;
+  }
+
+  $weekKey = (string)($weekRow['semana_clave'] ?? '');
+  $weekYear = (int)substr($weekKey, 0, 4);
+  $weekNumber = (int)substr($weekKey, 4, 2);
+  $weekStart = (new DateTimeImmutable('now', $tz))->setISODate($weekYear, $weekNumber)->setTime(0, 0);
+  $weekEnd = $weekStart->modify('+6 days');
+  $dominantWeekByProcess[$processId] = [
+    'clave' => $weekKey,
+    'numero' => $weekNumber,
+    'inicio' => $weekStart->format('Y-m-d'),
+    'fin' => $weekEnd->format('Y-m-d'),
+    'etiqueta' => 'Semana ' . $weekNumber . ' - ' . $weekStart->format('d/m') . ' a ' . $weekEnd->format('d/m'),
+  ];
+}
+
+$providerMaterialPeriodMap = ['mensual' => [], 'semanal' => []];
+$accumulateProviderMaterial = static function (array &$target, string $key, array $identity, array $values): void {
+  if (!isset($target[$key])) {
+    $target[$key] = array_merge($identity, [
+      'kilos_consumidos' => 0.0,
+      'kilos_con_precio' => 0.0,
+      'kilos_producidos' => 0.0,
+      'valor_compra' => 0.0,
+      'valor_maquila' => 0.0,
+      'procesos_ids' => [],
+    ]);
+  }
+  foreach (['kilos_consumidos', 'kilos_con_precio', 'kilos_producidos', 'valor_compra', 'valor_maquila'] as $field) {
+    $target[$key][$field] += (float)($values[$field] ?? 0);
+  }
+  $processId = (int)($values['pro_id'] ?? 0);
+  if ($processId > 0) {
+    $target[$key]['procesos_ids'][$processId] = true;
+  }
+};
+
+foreach ($providerMaterialInputs as $inputRow) {
+  $processId = (int)($inputRow['pro_id'] ?? 0);
+  $processInputTotal = (float)($processInputTotals[$processId] ?? 0);
+  $consumed = (float)($inputRow['kilos_consumidos'] ?? 0);
+  if ($processId <= 0 || $processInputTotal <= 0 || $consumed <= 0) {
+    continue;
+  }
+  if ($selectedMaterialType !== 'all' && (string)($inputRow['mt_id'] ?? '') !== $selectedMaterialType) {
+    continue;
+  }
+
+  $produced = (float)($selectedProcessProduction[$processId]['kilos'] ?? 0) * ($consumed / $processInputTotal);
+  $identity = [
+    'prv_id' => (int)($inputRow['prv_id'] ?? 0),
+    'proveedor' => (string)($inputRow['proveedor'] ?? 'Sin proveedor'),
+    'mat_id' => (int)($inputRow['mat_id'] ?? 0),
+    'material' => (string)($inputRow['material'] ?? 'Sin material'),
+    'grupo' => (string)($inputRow['grupo'] ?? 'Otros'),
+  ];
+  $values = [
+    'pro_id' => $processId,
+    'kilos_consumidos' => $consumed,
+    'kilos_con_precio' => (float)($inputRow['kilos_con_precio'] ?? 0),
+    'kilos_producidos' => $produced,
+    'valor_compra' => (float)($inputRow['valor_compra'] ?? 0),
+    'valor_maquila' => (float)($inputRow['valor_maquila'] ?? 0),
+  ];
+  $baseKey = $identity['prv_id'] . '|' . $identity['mat_id'];
+  $accumulateProviderMaterial($providerMaterialPeriodMap['mensual'], $baseKey, array_merge($identity, [
+    'periodo' => 'mensual',
+    'periodo_clave' => $periodMode !== 'mes' ? $startDate . '|' . $endDate : sprintf('%04d-%02d', $selectedYear, $selectedMonth),
+    'periodo_etiqueta' => $periodLabel,
+  ]), $values);
+
+  $week = $dominantWeekByProcess[$processId] ?? null;
+  if ($week !== null) {
+    $weeklyKey = (string)$week['clave'] . '|' . $baseKey;
+    $accumulateProviderMaterial($providerMaterialPeriodMap['semanal'], $weeklyKey, array_merge($identity, [
+      'periodo' => 'semanal',
+      'periodo_clave' => (string)$week['clave'],
+      'periodo_etiqueta' => (string)$week['etiqueta'],
+      'semana' => (int)$week['numero'],
+      'fecha_inicio' => (string)$week['inicio'],
+      'fecha_fin' => (string)$week['fin'],
+    ]), $values);
+  }
+}
+
+$finalizeProviderMaterialRows = static function (array $rows): array {
+  $result = [];
+  foreach ($rows as $row) {
+    $consumed = (float)($row['kilos_consumidos'] ?? 0);
+    $pricedKilos = (float)($row['kilos_con_precio'] ?? 0);
+    $produced = (float)($row['kilos_producidos'] ?? 0);
+    $purchaseValue = (float)($row['valor_compra'] ?? 0);
+    $precioProveedorBase = $pricedKilos > 0 ? $purchaseValue / $pricedKilos : null;
+    $materialName = strtoupper(trim((string)($row['material'] ?? '')));
+    $ajustePrecio = 0.0;
+    if (strpos($materialName, 'C/P') !== false || strpos($materialName, 'CON PELO') !== false) {
+      $ajustePrecio += 1.5;
+    }
+    if (preg_match('/DEPILAD[AO]/', $materialName) === 1) {
+      $ajustePrecio += 0.5;
+    }
+    $precioProveedor = $precioProveedorBase !== null ? $precioProveedorBase + $ajustePrecio : null;
+    $rendimiento = $consumed > 0 ? ($produced / $consumed) * 100 : null;
+    $row['precio_proveedor_base'] = $precioProveedorBase;
+    $row['ajuste_precio'] = $ajustePrecio;
+    $row['precio_proveedor'] = $precioProveedor;
+    $row['rendimiento'] = $rendimiento;
+    $row['costo_compra_kg_produccion'] = $precioProveedorBase !== null && $rendimiento !== null && $rendimiento > 0
+      ? $precioProveedorBase / ($rendimiento / 100)
+      : null;
+    $row['costo_cuero_kg_produccion'] = $precioProveedor !== null && $rendimiento !== null && $rendimiento > 0
+      ? $precioProveedor / ($rendimiento / 100)
+      : null;
+    $row['toneladas_consumidas'] = $consumed / 1000;
+    $row['toneladas_producidas'] = $produced / 1000;
+    $row['procesos'] = count((array)($row['procesos_ids'] ?? []));
+    unset($row['procesos_ids']);
+    $result[] = $row;
+  }
+  return $result;
+};
+
+$providerMaterialPeriods = [
+  'mensual' => $finalizeProviderMaterialRows($providerMaterialPeriodMap['mensual']),
+  'semanal' => $finalizeProviderMaterialRows($providerMaterialPeriodMap['semanal']),
+];
+usort($providerMaterialPeriods['mensual'], static function (array $a, array $b): int {
+  return strcasecmp((string)$a['proveedor'], (string)$b['proveedor'])
+    ?: strcasecmp((string)$a['material'], (string)$b['material']);
+});
+usort($providerMaterialPeriods['semanal'], static function (array $a, array $b): int {
+  return strcmp((string)$b['periodo_clave'], (string)$a['periodo_clave'])
+    ?: strcasecmp((string)$a['proveedor'], (string)$b['proveedor'])
+    ?: strcasecmp((string)$a['material'], (string)$b['material']);
+});
+$showAllProviderMaterialWeeks = !empty($config['proveedor_material_todas_semanas']);
+$latestWeeklyPeriodKey = (string)($providerMaterialPeriods['semanal'][0]['periodo_clave'] ?? '');
+if (!$showAllProviderMaterialWeeks && $latestWeeklyPeriodKey !== '') {
+  $providerMaterialPeriods['semanal'] = array_values(array_filter(
+    $providerMaterialPeriods['semanal'],
+    static fn(array $weeklyRow): bool => (string)($weeklyRow['periodo_clave'] ?? '') === $latestWeeklyPeriodKey
+  ));
+}
+
 $enzymeProcessStmt = $pdo->prepare("
   SELECT
     p.pro_id,
@@ -884,9 +1216,17 @@ $precioTotalPromedio = is_numeric($purchaseSummary['precio_total'] ?? null) ? (f
 return [
   'titulo' => (string)($config['titulo'] ?? 'Materia Prima'),
   'filtros' => [
+    'periodo' => $periodMode,
     'anio' => $selectedYear,
     'mes' => $selectedMonth,
     'mes_nombre' => $monthNames[$selectedMonth] ?? (string)$selectedMonth,
+    'fecha' => $selectedStartDate->format('Y-m-d'),
+    'fecha_inicio' => $selectedStartDate->format('Y-m-d'),
+    'fecha_fin' => $selectedEndDate->format('Y-m-d'),
+    'semana' => $selectedWeekValue,
+    'semana_inicio' => $selectedWeekValue,
+    'semana_fin' => $selectedWeekEndValue,
+    'hoy' => $currentDate->format('Y-m-d'),
     'mt_id' => $selectedMaterialType,
     'anios' => $yearOptions,
     'meses' => $monthNames,
@@ -926,14 +1266,18 @@ return [
     'materiales' => $materials,
     'proveedores' => $providers,
     'proveedores_material' => $providerMaterials,
+    'proveedor_material_periodos' => $providerMaterialPeriods,
     'enzima_procesos' => $enzymeProcesses,
   ],
   'meta' => [
+    'periodo_label' => $periodLabel,
     'periodo_inicio' => $startDate,
     'periodo_fin' => $periodEnd->modify('-1 day')->format('Y-m-d'),
     'intervaloActualizacion' => (int)($config['intervalo_actualizacion_ms'] ?? ($appConfig['intervalo_actualizacion'] ?? 300000)),
     'agrupador_materiales' => (string)($config['agrupador_materiales'] ?? 'tipo'),
-    'nota_rendimiento' => 'La producción visible incluye todas las tarimas etiquetadas del mes operativo. El rendimiento usa procesos cerrados asignados al mes con más tarimas, más barredura.',
+    'nota_rendimiento' => $periodMode !== 'mes'
+      ? 'La producción visible incluye las tarimas etiquetadas del periodo operativo. El rendimiento usa los procesos cerrados con producción dentro del rango, más barredura.'
+      : 'La producción visible incluye todas las tarimas etiquetadas del mes operativo. El rendimiento usa procesos cerrados asignados al mes con más tarimas, más barredura.',
     'rendimiento_solo_procesos_cerrados' => false,
     'rendimiento_procesos_solo_cerrados' => true,
     'rendimiento_asignado_mes_mayor_tarimas' => true,

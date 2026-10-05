@@ -74,8 +74,8 @@ final class InventarioMateriaPrimaXlsxWriter
       . '</sheetView></sheetViews><sheetFormatPr defaultRowHeight="18"/>'
       . ($cols !== '' ? '<cols>' . $cols . '</cols>' : '')
       . '<sheetData>' . $rowXml . '</sheetData>'
-      . '<mergeCells count="1"><mergeCell ref="A1:' . $lastColumn . '1"/></mergeCells>'
       . $autoFilter
+      . '<mergeCells count="1"><mergeCell ref="A1:' . $lastColumn . '1"/></mergeCells>'
       . '<pageMargins left="0.25" right="0.25" top="0.4" bottom="0.4" header="0.2" footer="0.2"/>'
       . '<pageSetup orientation="landscape" fitToWidth="1" fitToHeight="0" paperSize="9"/>'
       . '</worksheet>';

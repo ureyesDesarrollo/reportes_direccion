@@ -26,30 +26,92 @@ $safeInt = static function ($value, int $fallback, int $min, int $max): int {
 $pdo = conectar((array)($dbConfig[(string)($config['database_key'] ?? 'prod')] ?? $dbConfig['prod']));
 
 $latestDate = (string)($pdo->query("
-  SELECT COALESCE(MAX(inv_fecha), '')
-  FROM inventario
-  WHERE inv_humedad IS NOT NULL
-     OR inv_ce IS NOT NULL
-     OR inv_ph IS NOT NULL
-     OR inv_solidos IS NOT NULL
-     OR inv_extrac IS NOT NULL
-     OR inv_rendimiento IS NOT NULL
+  SELECT COALESCE(MAX(fecha), '')
+  FROM (
+    SELECT inv_fecha fecha
+    FROM inventario
+    WHERE inv_fecha IS NOT NULL
+      AND (inv_enviado IS NULL OR inv_enviado <> 3)
+    UNION ALL
+    SELECT DATE(inv_fe_recibe) fecha
+    FROM inventario
+    WHERE inv_fe_recibe IS NOT NULL
+      AND (inv_enviado IS NULL OR inv_enviado <> 3)
+  ) fechas
 ")->fetchColumn() ?: '');
 
 $latestReference = $latestDate !== '' ? new DateTimeImmutable($latestDate . ' 00:00:00', $tz) : $today;
 $selectedYear = $safeInt($_GET['anio'] ?? null, (int)$latestReference->format('Y'), 2020, 2100);
 $selectedMonth = $safeInt($_GET['mes'] ?? null, (int)$latestReference->format('n'), 1, 12);
+$periodMode = (string)($_GET['periodo'] ?? 'mes');
+if (!in_array($periodMode, ['mes', 'semana', 'fecha'], true)) $periodMode = 'mes';
+$legacyDateValue = trim((string)($_GET['fecha'] ?? ''));
+$selectedStartDateValue = trim((string)($_GET['fecha_inicio'] ?? $legacyDateValue));
+$selectedEndDateValue = trim((string)($_GET['fecha_fin'] ?? $legacyDateValue));
+$parseSelectedDate = static function (string $value, DateTimeImmutable $fallback, DateTimeZone $timezone): DateTimeImmutable {
+  $date = DateTimeImmutable::createFromFormat('!Y-m-d', $value, $timezone);
+  return $date instanceof DateTimeImmutable
+    && $date->format('Y-m-d') === $value
+    && (int)$date->format('Y') >= 2020
+    && (int)$date->format('Y') <= 2100
+      ? $date
+      : $fallback;
+};
+$selectedStartDate = $parseSelectedDate($selectedStartDateValue, $today, $tz);
+$selectedEndDate = $parseSelectedDate($selectedEndDateValue, $selectedStartDate, $tz);
+if ($selectedEndDate < $selectedStartDate) {
+  [$selectedStartDate, $selectedEndDate] = [$selectedEndDate, $selectedStartDate];
+}
+$legacyWeekValue = trim((string)($_GET['semana'] ?? ''));
+$selectedWeekStartValue = trim((string)($_GET['semana_inicio'] ?? $legacyWeekValue));
+$selectedWeekEndValue = trim((string)($_GET['semana_fin'] ?? $legacyWeekValue));
+$parseSelectedWeek = static function (string $value, DateTimeImmutable $fallback): DateTimeImmutable {
+  $matches = [];
+  if (preg_match('/^(\d{4})-W(\d{2})$/', $value, $matches) !== 1) return $fallback;
+  $weekStart = $fallback->setISODate((int)$matches[1], (int)$matches[2], 1)->setTime(0, 0);
+  return $weekStart->format('o-\WW') === $value ? $weekStart : $fallback;
+};
+$currentWeekStart = $today->modify('monday this week')->setTime(0, 0);
+$selectedWeekStart = $parseSelectedWeek($selectedWeekStartValue, $currentWeekStart);
+$selectedWeekEnd = $parseSelectedWeek($selectedWeekEndValue, $selectedWeekStart);
+if ($selectedWeekEnd < $selectedWeekStart) {
+  [$selectedWeekStart, $selectedWeekEnd] = [$selectedWeekEnd, $selectedWeekStart];
+}
+$selectedWeekValue = $selectedWeekStart->format('o-\WW');
+$selectedWeekEndValue = $selectedWeekEnd->format('o-\WW');
+
 $yearOptions = array_values(array_filter(array_map('intval', array_column($pdo->query("
-  SELECT DISTINCT YEAR(inv_fecha) anio
-  FROM inventario
-  WHERE inv_fecha IS NOT NULL
+  SELECT DISTINCT YEAR(fecha) anio
+  FROM (
+    SELECT inv_fecha fecha
+    FROM inventario
+    WHERE inv_fecha IS NOT NULL
+      AND (inv_enviado IS NULL OR inv_enviado <> 3)
+    UNION ALL
+    SELECT inv_fe_recibe fecha
+    FROM inventario
+    WHERE inv_fe_recibe IS NOT NULL
+      AND (inv_enviado IS NULL OR inv_enviado <> 3)
+  ) fechas
   ORDER BY anio DESC
 ")->fetchAll() ?: [], 'anio'))));
-if (!in_array($selectedYear, $yearOptions, true)) {
+if ($periodMode === 'mes' && !in_array($selectedYear, $yearOptions, true)) {
   $selectedYear = (int)$latestReference->format('Y');
 }
-$periodStart = new DateTimeImmutable(sprintf('%04d-%02d-01 00:00:00', $selectedYear, $selectedMonth), $tz);
-$periodEnd = $periodStart->modify('first day of next month');
+if ($periodMode === 'fecha') {
+  $selectedYear = (int)$selectedStartDate->format('Y');
+  $selectedMonth = (int)$selectedStartDate->format('n');
+  $periodStart = $selectedStartDate->setTime(0, 0);
+  $periodEnd = $selectedEndDate->setTime(0, 0)->modify('+1 day');
+} elseif ($periodMode === 'semana') {
+  $periodStart = $selectedWeekStart;
+  $periodEnd = $selectedWeekEnd->modify('+7 days');
+  $selectedYear = (int)$periodStart->format('Y');
+  $selectedMonth = (int)$periodStart->format('n');
+} else {
+  $periodStart = new DateTimeImmutable(sprintf('%04d-%02d-01 00:00:00', $selectedYear, $selectedMonth), $tz);
+  $periodEnd = $periodStart->modify('first day of next month');
+}
 
 $selectedMaterial = filter_var($_GET['material'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
 $selectedMaterial = $selectedMaterial === false ? null : (int)$selectedMaterial;
@@ -61,12 +123,14 @@ $materialOptions = $pdo->query("
   SELECT DISTINCT m.mat_id, m.mat_nombre
   FROM inventario i
   INNER JOIN materiales m ON m.mat_id = i.mat_id
+  WHERE i.inv_enviado IS NULL OR i.inv_enviado <> 3
   ORDER BY m.mat_nombre
 ")->fetchAll() ?: [];
 $providerOptions = $pdo->query("
   SELECT DISTINCT p.prv_id, p.prv_nombre
   FROM inventario i
   INNER JOIN proveedores p ON p.prv_id = i.prv_id
+  WHERE i.inv_enviado IS NULL OR i.inv_enviado <> 3
   ORDER BY p.prv_nombre
 ")->fetchAll() ?: [];
 
@@ -75,12 +139,12 @@ if ($selectedMaterial !== null && !in_array($selectedMaterial, $validMaterialIds
 $validProviderIds = array_map('intval', array_column($providerOptions, 'prv_id'));
 if ($selectedProvider !== null && !in_array($selectedProvider, $validProviderIds, true)) $selectedProvider = null;
 
-$where = ['i.inv_fecha >= ?', 'i.inv_fecha < ?'];
+$where = [
+  'i.inv_fecha >= ?',
+  'i.inv_fecha < ?',
+  '(i.inv_enviado IS NULL OR i.inv_enviado <> 3)',
+];
 $queryParams = [$periodStart->format('Y-m-d'), $periodEnd->format('Y-m-d')];
-if ($wholeLeatherMaterialIds !== []) {
-  $where[] = 'i.mat_id NOT IN (' . implode(',', array_fill(0, count($wholeLeatherMaterialIds), '?')) . ')';
-  $queryParams = array_merge($queryParams, $wholeLeatherMaterialIds);
-}
 if ($selectedMaterial !== null) {
   $where[] = 'i.mat_id = ?';
   $queryParams[] = $selectedMaterial;
@@ -137,7 +201,8 @@ $conductivityRule = static function (int $materialId, string $materialName) use 
   $yellowMax = (float)$limits['amarillo_max'];
   return [
     'modo' => 'bandas',
-    'leyenda' => number_format($greenMin, 2, '.', '') . '–' . number_format($greenMax, 2, '.', ''),
+    'leyenda' => number_format($greenMin, 2, '.', '') . '–' . number_format($greenMax, 2, '.', '')
+      . ' · máx. ' . number_format($yellowMax, 2, '.', ''),
     'bandas' => [
       ['min' => $greenMin, 'max' => $greenMax, 'estado' => 'verde'],
       ['min' => $yellowMin, 'max' => $greenMin, 'estado' => 'amarillo'],
@@ -177,6 +242,8 @@ foreach ($rawRows as $index => $raw) {
   $rows[] = [
     'numero' => $index + 1,
     'id' => (int)$raw['inv_id'],
+    'mat_id' => (int)$raw['mat_id'],
+    'prv_id' => (int)$raw['prv_id'],
     'ticket' => (int)$raw['inv_no_ticket'],
     'fecha' => (new DateTimeImmutable((string)$raw['inv_fecha'] . ' 00:00:00', $tz))->format('d/m/Y'),
     'kilos' => (float)$raw['inv_kilos'],
@@ -189,23 +256,29 @@ foreach ($rawRows as $index => $raw) {
 }
 
 /*
- * Segunda sección del formato: compra de cuero americano y sus entregas a
- * granja/maquila. Sólo se usan columnas cuyo significado está confirmado en
- * inventario; los datos de sal e inspección física no tienen aún un campo
- * identificado y por eso no se infieren.
+ * Segunda sección del formato: cuero entero recibido de Pelambre. El periodo
+ * se aplica sobre inv_fe_recibe; la compra original se conserva como cabecera
+ * para mostrar proveedor, material y kilos del ticket.
  */
 $americanMaterialIds = $wholeLeatherMaterialIds;
 $americanPurchases = [];
 if ($americanMaterialIds !== []) {
   $purchaseWhere = [
-    'i.inv_fecha >= ?',
-    'i.inv_fecha < ?',
-    'i.inv_id_key IS NULL',
     'i.mat_id IN (' . implode(',', array_fill(0, count($americanMaterialIds), '?')) . ')',
+    '(i.inv_enviado IS NULL OR i.inv_enviado <> 3)',
+    'EXISTS (
+      SELECT 1
+      FROM inventario recibido
+      WHERE recibido.inv_no_ticket = i.inv_no_ticket
+        AND recibido.inv_enviado = 2
+        AND recibido.prv_recibe = 126
+        AND recibido.inv_fe_recibe >= ?
+        AND recibido.inv_fe_recibe < ?
+    )',
   ];
   $purchaseParams = array_merge(
-    [$periodStart->format('Y-m-d'), $periodEnd->format('Y-m-d')],
-    $americanMaterialIds
+    $americanMaterialIds,
+    [$periodStart->format('Y-m-d H:i:s'), $periodEnd->format('Y-m-d H:i:s')]
   );
   if ($selectedMaterial !== null) {
     $purchaseWhere[] = 'i.mat_id = ?';
@@ -217,14 +290,21 @@ if ($americanMaterialIds !== []) {
   }
 
   $purchaseStmt = $pdo->prepare("
-    SELECT i.inv_id, i.inv_fecha, i.inv_no_ticket, i.inv_kilos, i.inv_enviado,
-           i.inv_humedad_origen, i.inv_observaciones,
-           i.mat_id, m.mat_nombre, i.prv_id, p.prv_nombre
+    SELECT MIN(i.inv_id) inv_id, MAX(i.inv_fecha) inv_fecha, i.inv_no_ticket,
+           SUM(COALESCE(i.inv_kilos, 0)) inv_kilos, MAX(i.inv_enviado) inv_enviado,
+           AVG(i.inv_humedad_origen) inv_humedad_origen,
+           GROUP_CONCAT(DISTINCT i.inv_observaciones ORDER BY i.inv_id SEPARATOR ' / ') inv_observaciones,
+           MIN(i.mat_id) mat_id,
+           GROUP_CONCAT(DISTINCT m.mat_nombre ORDER BY m.mat_nombre SEPARATOR ' / ') mat_nombre,
+           MIN(i.prv_id) prv_id,
+           GROUP_CONCAT(DISTINCT p.prv_nombre ORDER BY p.prv_nombre SEPARATOR ' / ') prv_nombre
     FROM inventario i
     INNER JOIN materiales m ON m.mat_id = i.mat_id
     INNER JOIN proveedores p ON p.prv_id = i.prv_id
     WHERE " . implode(' AND ', $purchaseWhere) . "
-    ORDER BY i.inv_fecha DESC, i.inv_hora DESC, i.inv_id DESC
+      AND i.inv_fecha IS NOT NULL
+    GROUP BY i.inv_no_ticket
+    ORDER BY MAX(i.inv_fecha) DESC, i.inv_no_ticket DESC
   ");
   $purchaseStmt->execute($purchaseParams);
   $purchaseRows = $purchaseStmt->fetchAll() ?: [];
@@ -240,7 +320,8 @@ if ($americanMaterialIds !== []) {
       WHERE i.inv_no_ticket IN (" . implode(',', array_fill(0, count($tickets), '?')) . ")
         AND i.inv_enviado = 2
         AND i.prv_recibe = 126
-      ORDER BY i.inv_no_ticket, COALESCE(i.inv_fe_recibe, CONCAT(i.inv_fecha, ' 00:00:00')), i.inv_id
+        AND i.inv_fe_recibe IS NOT NULL
+      ORDER BY i.inv_no_ticket, i.inv_fe_recibe, i.inv_id
     ");
     $deliveryStmt->execute($tickets);
     foreach (($deliveryStmt->fetchAll() ?: []) as $delivery) {
@@ -273,9 +354,7 @@ if ($americanMaterialIds !== []) {
     foreach ($deliveryRows as $delivery) {
       $deliveryKilos += is_numeric($delivery['inv_kg_totales'] ?? null) ? (float)$delivery['inv_kg_totales'] : 0.0;
       $deliveryDetails[] = [
-        'fecha' => !empty($delivery['inv_fe_recibe'])
-          ? (new DateTimeImmutable((string)$delivery['inv_fe_recibe'], $tz))->format('d/m/Y H:i')
-          : (new DateTimeImmutable((string)$delivery['inv_fecha'] . ' 00:00:00', $tz))->format('d/m/Y'),
+        'fecha' => (new DateTimeImmutable((string)$delivery['inv_fe_recibe'], $tz))->format('d/m/Y H:i'),
         'kilos' => $delivery['inv_kg_totales'],
         'humedad' => $delivery['inv_humedad'],
         'conductividad' => $delivery['inv_ce'],
@@ -285,13 +364,9 @@ if ($americanMaterialIds !== []) {
         'rendimiento' => $delivery['inv_rendimiento'],
       ];
     }
+    // Total comprado: suma de inv_kilos de los registros con inv_fecha, agrupados por ticket.
+    // inv_fe_recibe sólo determina qué recepciones de Pelambre entran en el periodo.
     $purchaseKilos = (float)$purchase['inv_kilos'];
-    if ((int)$purchase['inv_enviado'] === 2 && $deliveryRows !== []) {
-      $purchaseKilos = 0.0;
-      foreach ($deliveryRows as $delivery) {
-        $purchaseKilos += is_numeric($delivery['inv_kilos'] ?? null) ? (float)$delivery['inv_kilos'] : 0.0;
-      }
-    }
     $averageValues = [
       'humedad' => $average($deliveryRows, 'inv_humedad'),
       'conductividad' => $average($deliveryRows, 'inv_ce'),
@@ -309,8 +384,17 @@ if ($americanMaterialIds !== []) {
       'extractibilidad' => ['value' => $averageValues['extractibilidad'], 'status' => $evaluateBands($averageValues['extractibilidad'], (array)($params['extractibilidad'] ?? []))],
       'rendimiento' => ['value' => $averageValues['rendimiento'], 'status' => $evaluateBands($averageValues['rendimiento'], (array)($params['rendimiento'] ?? []))],
     ];
+    $periodDeliveryRows = array_values(array_filter($deliveryRows, static function (array $delivery) use ($periodStart, $periodEnd, $tz): bool {
+      if (empty($delivery['inv_fe_recibe'])) return false;
+      $receivedAt = new DateTimeImmutable((string)$delivery['inv_fe_recibe'], $tz);
+      return $receivedAt >= $periodStart && $receivedAt < $periodEnd;
+    }));
+    $latestReceipt = $periodDeliveryRows === []
+      ? null
+      : new DateTimeImmutable((string)$periodDeliveryRows[count($periodDeliveryRows) - 1]['inv_fe_recibe'], $tz);
     $americanPurchases[] = [
-      'fecha' => (new DateTimeImmutable((string)$purchase['inv_fecha'] . ' 00:00:00', $tz))->format('d/m/Y'),
+      'fecha' => $latestReceipt instanceof DateTimeImmutable ? $latestReceipt->format('d/m/Y') : '—',
+      'fecha_orden' => $latestReceipt instanceof DateTimeImmutable ? $latestReceipt->format('Y-m-d H:i:s') : '',
       'ticket' => $ticket,
       'proveedor' => (string)$purchase['prv_nombre'],
       'material' => (string)$purchase['mat_nombre'],
@@ -330,6 +414,9 @@ if ($americanMaterialIds !== []) {
       'entregas' => $deliveryDetails,
     ];
   }
+  usort($americanPurchases, static function (array $left, array $right): int {
+    return strcmp((string)($right['fecha_orden'] ?? ''), (string)($left['fecha_orden'] ?? ''));
+  });
 }
 
 return [
@@ -338,6 +425,14 @@ return [
   'filtros' => [
     'anio' => $selectedYear,
     'mes' => $selectedMonth,
+    'periodo' => $periodMode,
+    'fecha' => $selectedStartDate->format('Y-m-d'),
+    'fecha_inicio' => $selectedStartDate->format('Y-m-d'),
+    'fecha_fin' => $selectedEndDate->format('Y-m-d'),
+    'semana' => $selectedWeekValue,
+    'semana_inicio' => $selectedWeekValue,
+    'semana_fin' => $selectedWeekEndValue,
+    'hoy' => $today->format('Y-m-d'),
     'anios' => $yearOptions,
     'meses' => $monthNames,
     'material' => $selectedMaterial,
@@ -348,7 +443,15 @@ return [
   'compras_cuero_americano' => $americanPurchases,
   'criterios' => $params,
   'meta' => [
-    'periodo_label' => ucfirst($monthNames[$selectedMonth]) . ' ' . $selectedYear,
+    'periodo_label' => $periodMode === 'fecha'
+      ? ($selectedStartDate->format('Y-m-d') === $selectedEndDate->format('Y-m-d')
+        ? $selectedStartDate->format('d/m/Y')
+        : $selectedStartDate->format('d/m/Y') . ' al ' . $selectedEndDate->format('d/m/Y'))
+      : ($periodMode === 'semana'
+        ? ($selectedWeekStart->format('o-\WW') === $selectedWeekEnd->format('o-\WW')
+          ? 'Semana ' . $periodStart->format('W')
+          : 'Semanas ' . $periodStart->format('W') . ' a ' . $selectedWeekEnd->format('W')) . ' · ' . $periodStart->format('d/m/Y') . ' al ' . $periodEnd->modify('-1 day')->format('d/m/Y')
+        : ucfirst($monthNames[$selectedMonth]) . ' ' . $selectedYear),
     'ultima_fecha_disponible' => $latestDate,
     'generado_en' => (new DateTimeImmutable('now', $tz))->format('d/m/Y H:i'),
   ],

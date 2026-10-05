@@ -26,6 +26,36 @@ $maximum = static fn(float $greenMax, float $yellowMax): array => [
   'amarillo_max' => $yellowMax,
 ];
 
+$enzymeBelow80 = [
+  'modo' => 'bandas',
+  'leyenda' => '<80 / 80–84 / >84',
+  'bandas' => [
+    ['max' => 79.999999, 'estado' => 'verde', 'leyenda' => '<80'],
+    ['min' => 80, 'max' => 84, 'estado' => 'amarillo', 'leyenda' => '80–84'],
+    ['min' => 84.000001, 'estado' => 'rojo', 'leyenda' => '>84'],
+  ],
+];
+
+$enzymeBelow90 = [
+  'modo' => 'bandas',
+  'leyenda' => '<90 / 90–94 / >94',
+  'bandas' => [
+    ['max' => 89.999999, 'estado' => 'verde', 'leyenda' => '<90'],
+    ['min' => 90, 'max' => 94, 'estado' => 'amarillo', 'leyenda' => '90–94'],
+    ['min' => 94.000001, 'estado' => 'rojo', 'leyenda' => '>94'],
+  ],
+];
+
+$rendimientoPtAbove19 = [
+  'modo' => 'bandas',
+  'leyenda' => '>19 / 18–19 / <18',
+  'bandas' => [
+    ['min' => 19.000001, 'estado' => 'verde', 'leyenda' => '>19'],
+    ['min' => 18, 'max' => 19, 'estado' => 'amarillo', 'leyenda' => '18–19'],
+    ['max' => 17.999999, 'estado' => 'rojo', 'leyenda' => '<18'],
+  ],
+];
+
 return [
   'produccion' => [
     'objetivo_diario_toneladas' => 24.0,
@@ -100,34 +130,74 @@ return [
       ],
       'ph' => [
         'modo' => 'bandas',
-        'leyenda' => '11.3–12.2',
+        'leyenda' => '11.3–12.2 · máx. 13.0',
         'bandas' => [
           ['min' => 11.3, 'max' => 12.2, 'estado' => 'verde', 'leyenda' => '11.3–12.2'],
           ['min' => 11, 'max' => 11.3, 'estado' => 'amarillo', 'leyenda' => '11–<11.3'],
-          ['min' => 12.2, 'max' => 12.5, 'estado' => 'amarillo', 'leyenda' => '>12.2–12.5'],
+          ['min' => 12.2, 'max' => 13, 'estado' => 'amarillo', 'leyenda' => '>12.2–13.0'],
           ['max' => 10.999999, 'estado' => 'rojo', 'leyenda' => '<11'],
-          ['min' => 12.500001, 'estado' => 'rojo', 'leyenda' => '>12.5'],
+          ['min' => 13.000001, 'estado' => 'rojo', 'leyenda' => '>13.0'],
         ],
       ],
       'rendimiento' => [
         'modo' => 'bandas',
-        'leyenda' => '25.5–32.5',
+        'leyenda' => '26.0–35.0',
         'bandas' => [
-          ['min' => 25.5, 'max' => 32.5, 'estado' => 'verde', 'leyenda' => '25.5–32.5'],
-          ['min' => 23, 'max' => 25.5, 'estado' => 'amarillo', 'leyenda' => '23–<25.5'],
-          ['min' => 32.5, 'max' => 38, 'estado' => 'amarillo', 'leyenda' => '>32.5–38'],
+          ['min' => 26, 'max' => 35, 'estado' => 'verde', 'leyenda' => '26.0–35.0'],
+          ['min' => 23, 'max' => 25.999999, 'estado' => 'amarillo', 'leyenda' => '23–<26.0'],
+          ['min' => 35.000001, 'max' => 38, 'estado' => 'amarillo', 'leyenda' => '>35.0–38.0'],
           ['max' => 22.999999, 'estado' => 'rojo', 'leyenda' => '<23'],
-          ['min' => 38.000001, 'estado' => 'rojo', 'leyenda' => '>38'],
+          ['min' => 38.000001, 'estado' => 'rojo', 'leyenda' => '>38.0'],
         ],
       ],
       'conductividad' => [
-        'CARNAZA' => ['verde_min' => 5, 'verde_max' => 9.43, 'amarillo_min' => 2, 'amarillo_max' => 12.43],
-        'DESBARBE' => ['verde_min' => 5, 'verde_max' => 9.52, 'amarillo_min' => 2, 'amarillo_max' => 12.52],
-        'DESORILLE' => ['verde_min' => 5, 'verde_max' => 8.92, 'amarillo_min' => 2, 'amarillo_max' => 11.92],
-        'DESPALME' => ['verde_min' => 5, 'verde_max' => 7.43, 'amarillo_min' => 2, 'amarillo_max' => 10.43],
-        'GARRA' => ['verde_min' => 5, 'verde_max' => 10.32, 'amarillo_min' => 2, 'amarillo_max' => 13.32],
-        'RECORTE' => ['verde_min' => 5, 'verde_max' => 15.27, 'amarillo_min' => 2, 'amarillo_max' => 18.27],
-        'CUERO_ENTERO_PEDACERA' => ['verde_min' => 5, 'verde_max' => 21.01, 'amarillo_min' => 2, 'amarillo_max' => 24.01],
+        'CARNAZA' => ['verde_min' => 5, 'verde_max' => 9.43, 'amarillo_min' => 2, 'amarillo_max' => 20],
+        'DESBARBE' => ['verde_min' => 5, 'verde_max' => 9.52, 'amarillo_min' => 2, 'amarillo_max' => 20],
+        'DESORILLE' => ['verde_min' => 5, 'verde_max' => 8.92, 'amarillo_min' => 2, 'amarillo_max' => 20],
+        'DESPALME' => ['verde_min' => 5, 'verde_max' => 7.43, 'amarillo_min' => 2, 'amarillo_max' => 20],
+        'GARRA' => ['verde_min' => 5, 'verde_max' => 10.32, 'amarillo_min' => 2, 'amarillo_max' => 20],
+        'RECORTE' => ['verde_min' => 5, 'verde_max' => 15.27, 'amarillo_min' => 2, 'amarillo_max' => 20],
+        'CUERO_ENTERO_PEDACERA' => ['verde_min' => 5, 'verde_max' => 20, 'amarillo_min' => 2, 'amarillo_max' => 20],
+      ],
+    ],
+    'rendimiento_procesos' => [
+      'rendimiento_pt' => [
+        'CARNAZA' => [
+          'modo' => 'bandas',
+          'leyenda' => '>16 / 15.5–16 / <15.5',
+          'bandas' => [
+            ['min' => 16.000001, 'estado' => 'verde', 'leyenda' => '>16'],
+            ['min' => 15.5, 'max' => 16, 'estado' => 'amarillo', 'leyenda' => '15.5–16'],
+            ['max' => 15.499999, 'estado' => 'rojo', 'leyenda' => '<15.5'],
+          ],
+        ],
+        'CUERO_ENTERO' => $rendimientoPtAbove19,
+        'PEDACERA' => $rendimientoPtAbove19,
+        'RECORTE' => [
+          'modo' => 'bandas',
+          'leyenda' => '>13.5 / 13–13.5 / <13',
+          'bandas' => [
+            ['min' => 13.500001, 'estado' => 'verde', 'leyenda' => '>13.5'],
+            ['min' => 13, 'max' => 13.5, 'estado' => 'amarillo', 'leyenda' => '13–13.5'],
+            ['max' => 12.999999, 'estado' => 'rojo', 'leyenda' => '<13'],
+          ],
+        ],
+      ],
+      'extractibilidad_enzima' => [
+        'CARNAZA' => [
+          'modo' => 'bandas',
+          'leyenda' => '<95 / 95–97 / >97',
+          'bandas' => [
+            ['max' => 94.999999, 'estado' => 'verde', 'leyenda' => '<95'],
+            ['min' => 95, 'max' => 97, 'estado' => 'amarillo', 'leyenda' => '95–97'],
+            ['min' => 97.000001, 'estado' => 'rojo', 'leyenda' => '>97'],
+          ],
+        ],
+        'DESBARBE' => $enzymeBelow80,
+        'GARRA' => $enzymeBelow80,
+        'DESORILLE' => $enzymeBelow80,
+        'CUERO_ENTERO' => $enzymeBelow90,
+        'PEDACERA_AMERICANA' => $enzymeBelow90,
       ],
     ],
   ],

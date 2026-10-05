@@ -217,6 +217,16 @@ return [
       'enabled' => true,
     ],
     [
+      'slug' => 'procesos-rendimiento',
+      'title' => 'PROCESOS RENDIMIENTO',
+      'description' => 'Detalle de todos los procesos, materiales y proveedores, incluyendo procesos abiertos y cerrados.',
+      'icon' => 'fa-table-list',
+      'color' => '#0f766e',
+      'groups' => ['produccion'],
+      'url' => './procesos-rendimiento/index.php',
+      'enabled' => true,
+    ],
+    [
       'slug' => 'inventario-materia-prima',
       'title' => 'INVENTARIO DE MATERIA PRIMA',
       'description' => 'Resultados de entrada de materia prima con criterios de aceptación y semáforo por parámetro.',

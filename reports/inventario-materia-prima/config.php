@@ -14,4 +14,6 @@ return [
   'materiales_cuero_entero_pedacera' => [2, 5, 6, 7, 8, 9, 12, 14],
   'materiales_compra_cuero_americano' => [2, 5, 6, 7],
   'materiales_cuero_entero' => [5, 7, 9, 12],
+  'materiales_cuero_entero_cp' => [5, 7],
+  'materiales_cuero_entero_depilado' => [9, 12],
 ];

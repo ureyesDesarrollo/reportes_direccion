@@ -21,20 +21,103 @@ $safeInt = static function ($value, int $fallback, int $min, int $max): int {
   $number = (int)$value;
   return ($number >= $min && $number <= $max) ? $number : $fallback;
 };
+$labParams = (array)($config['parametros_lab'] ?? []);
+$processParams = (array)($config['parametros_proceso'] ?? []);
+$includeAllProcesses = !empty($config['incluir_todos_procesos']);
+$evaluateLabBands = static function ($value, array $rule): array {
+  if ($value === null || $value === '' || !is_numeric($value)) {
+    return ['key' => 'gris', 'label' => 'Sin dato', 'range' => (string)($rule['leyenda'] ?? '')];
+  }
+  $number = (float)$value;
+  foreach ((array)($rule['bandas'] ?? []) as $band) {
+    $minOk = !array_key_exists('min', $band) || $number >= (float)$band['min'];
+    $maxOk = !array_key_exists('max', $band) || $number <= (float)$band['max'];
+    if ($minOk && $maxOk) {
+      $key = (string)($band['estado'] ?? 'gris');
+      return [
+        'key' => $key,
+        'label' => ['verde' => 'En objetivo', 'amarillo' => 'Alerta', 'rojo' => 'Fuera de rango'][$key] ?? 'Sin dato',
+        'range' => (string)($rule['leyenda'] ?? ''),
+      ];
+    }
+  }
+  return ['key' => 'gris', 'label' => 'Sin rango', 'range' => (string)($rule['leyenda'] ?? '')];
+};
+
+$horaCorte = (string)($config['hora_corte'] ?? '07:00:00');
+if (preg_match('/^([01]\d|2[0-3]):[0-5]\d:[0-5]\d$/', $horaCorte) !== 1) {
+  $horaCorte = '07:00:00';
+}
+$now = new DateTimeImmutable('now', $tz);
+$operationalToday = $now->format('H:i:s') < $horaCorte ? $today->modify('-1 day') : $today;
 
 $pdo = conectar((array)($dbConfig[(string)($config['database_key'] ?? 'prod')] ?? $dbConfig['prod']));
-$selectedYear = $safeInt($_GET['anio'] ?? null, (int)$today->format('Y'), 2020, 2100);
-$selectedMonth = $safeInt($_GET['mes'] ?? null, (int)$today->format('n'), 1, 12);
-$yearStmt = $pdo->query("SELECT DISTINCT YEAR(tar_fecha) AS anio FROM rev_tarimas WHERE tar_fecha IS NOT NULL ORDER BY anio DESC");
+$periodMode = (string)($_GET['periodo'] ?? 'mes');
+if (!in_array($periodMode, ['mes', 'semana', 'fecha'], true)) $periodMode = 'mes';
+$selectedYear = $safeInt($_GET['anio'] ?? null, (int)$operationalToday->format('Y'), 2020, 2100);
+$selectedMonth = $safeInt($_GET['mes'] ?? null, (int)$operationalToday->format('n'), 1, 12);
+
+$legacyDateValue = trim((string)($_GET['fecha'] ?? ''));
+$selectedStartDateValue = trim((string)($_GET['fecha_inicio'] ?? $legacyDateValue));
+$selectedEndDateValue = trim((string)($_GET['fecha_fin'] ?? $legacyDateValue));
+$parseSelectedDate = static function (string $value, DateTimeImmutable $fallback, DateTimeZone $timezone): DateTimeImmutable {
+  $date = DateTimeImmutable::createFromFormat('!Y-m-d', $value, $timezone);
+  return $date instanceof DateTimeImmutable && $date->format('Y-m-d') === $value ? $date : $fallback;
+};
+$selectedStartDate = $parseSelectedDate($selectedStartDateValue, $operationalToday, $tz);
+$selectedEndDate = $parseSelectedDate($selectedEndDateValue, $selectedStartDate, $tz);
+if ($selectedEndDate < $selectedStartDate) {
+  [$selectedStartDate, $selectedEndDate] = [$selectedEndDate, $selectedStartDate];
+}
+
+$legacyWeekValue = trim((string)($_GET['semana'] ?? ''));
+$selectedWeekStartValue = trim((string)($_GET['semana_inicio'] ?? $legacyWeekValue));
+$selectedWeekEndValue = trim((string)($_GET['semana_fin'] ?? $legacyWeekValue));
+$parseSelectedWeek = static function (string $value, DateTimeImmutable $fallback): DateTimeImmutable {
+  $matches = [];
+  if (preg_match('/^(\d{4})-W(\d{2})$/', $value, $matches) !== 1) return $fallback;
+  $weekStart = $fallback->setISODate((int)$matches[1], (int)$matches[2], 1)->setTime(0, 0);
+  return $weekStart->format('o-\WW') === $value ? $weekStart : $fallback;
+};
+$currentWeekStart = $operationalToday->modify('monday this week')->setTime(0, 0);
+$selectedWeekStart = $parseSelectedWeek($selectedWeekStartValue, $currentWeekStart);
+$selectedWeekEnd = $parseSelectedWeek($selectedWeekEndValue, $selectedWeekStart);
+if ($selectedWeekEnd < $selectedWeekStart) {
+  [$selectedWeekStart, $selectedWeekEnd] = [$selectedWeekEnd, $selectedWeekStart];
+}
+$selectedWeekValue = $selectedWeekStart->format('o-\WW');
+$selectedWeekEndValue = $selectedWeekEnd->format('o-\WW');
+
+if ($periodMode === 'fecha') {
+  $start = $selectedStartDate->setTime(0, 0);
+  $endExclusive = $selectedEndDate->setTime(0, 0)->modify('+1 day');
+} elseif ($periodMode === 'semana') {
+  $start = $selectedWeekStart;
+  $endExclusive = $selectedWeekEnd->modify('+7 days');
+} else {
+  $start = new DateTimeImmutable(sprintf('%04d-%02d-01 00:00:00', $selectedYear, $selectedMonth), $tz);
+  $endExclusive = $start->modify('first day of next month');
+}
+$end = $endExclusive->modify('-1 day');
+
+$yearStmt = $pdo->query($includeAllProcesses
+  ? "SELECT DISTINCT YEAR(pro_fe_carga) AS anio FROM procesos WHERE pro_fe_carga IS NOT NULL ORDER BY anio DESC"
+  : "SELECT DISTINCT YEAR(tar_fecha) AS anio FROM rev_tarimas WHERE tar_fecha IS NOT NULL ORDER BY anio DESC");
 $yearOptions = array_values(array_filter(array_map('intval', array_column($yearStmt->fetchAll() ?: [], 'anio'))));
 if (!in_array($selectedYear, $yearOptions, true)) {
   $yearOptions[] = $selectedYear;
   rsort($yearOptions);
 }
 
-$start = new DateTimeImmutable(sprintf('%04d-%02d-01 00:00:00', $selectedYear, $selectedMonth), $tz);
-$endExclusive = $start->modify('first day of next month');
-$end = $endExclusive->modify('-1 day');
+$periodLabel = $periodMode === 'fecha'
+  ? ($start->format('Y-m-d') === $end->format('Y-m-d')
+    ? $start->format('d/m/Y')
+    : $start->format('d/m/Y') . ' al ' . $end->format('d/m/Y'))
+  : ($periodMode === 'semana'
+    ? ($selectedWeekStart->format('o-\WW') === $selectedWeekEnd->format('o-\WW')
+      ? 'Semana ' . $start->format('W')
+      : 'Semanas ' . $start->format('W') . ' a ' . $selectedWeekEnd->format('W'))
+    : ucfirst($monthNames[$selectedMonth] ?? (string)$selectedMonth) . ' ' . $selectedYear);
 
 $selectedMaterial = trim((string)($_GET['material'] ?? 'all'));
 $selectedProvider = filter_var($_GET['proveedor'] ?? null, FILTER_VALIDATE_INT, [
@@ -43,72 +126,118 @@ $selectedProvider = filter_var($_GET['proveedor'] ?? null, FILTER_VALIDATE_INT, 
 $selectedProvider = $selectedProvider === false ? null : (int)$selectedProvider;
 
 $barreduraProId = 2;
-$horaCorte = (string)($config['hora_corte'] ?? '07:00:00');
-if (preg_match('/^([01]\d|2[0-3]):[0-5]\d:[0-5]\d$/', $horaCorte) !== 1) {
-  $horaCorte = '07:00:00';
-}
 $operationDateSql = "DATE(CASE WHEN TIME(t.tar_fecha) < '{$horaCorte}' THEN DATE_SUB(t.tar_fecha, INTERVAL 1 DAY) ELSE t.tar_fecha END)";
 
 $materialFamilySql = "CASE
-  WHEN m.mat_id IN (5, 7, 9, 12) THEN 'Cuero Entero'
-  WHEN m.mat_id IN (3, 4, 10, 11, 13) THEN 'Recorte'
-  WHEN m.mat_id IN (2, 6, 8, 14) THEN 'Pedacera'
+  WHEN m.mat_id IN (5, 7) THEN 'Cuero Entero C/P (con pelo)'
+  WHEN m.mat_id IN (9, 12) THEN 'Cuero Entero Depilado'
+  WHEN m.mat_id IN (3, 4, 10, 11, 13) THEN m.mat_nombre
+  WHEN m.mat_id = 2 THEN 'Pedacera Americana S/P'
+  WHEN m.mat_id = 6 THEN 'Pedacera Americana C/P'
+  WHEN m.mat_id = 8 THEN 'Pedacera Americana Depilada'
+  WHEN m.mat_id = 14 THEN 'Pedacera Nacional C/P'
   WHEN m.mat_id = 1 THEN 'Carnaza'
   ELSE 'Otros'
 END";
 
 $pdo->exec('DROP TEMPORARY TABLE IF EXISTS tmp_rp_selected_pairs');
-$selectedPairsStmt = $pdo->prepare("
-  CREATE TEMPORARY TABLE tmp_rp_selected_pairs AS
-  WITH
-  closed_processes AS (
-    SELECT DISTINCT pa.pro_id
-    FROM procesos_agrupados pa
-    INNER JOIN lotes_anio lote ON lote.lote_id = pa.lote_id AND lote.lote_estatus = 3
-  ),
-  eligible_tarimas AS (
-    SELECT t.pro_id,
-           CASE
-             WHEN t.pro_id_2 IS NOT NULL AND t.pro_id_2 <> 0 AND t.pro_id_2 <> t.pro_id THEN t.pro_id_2
-             ELSE 0
-           END pro_id_2,
-           t.tar_kilos,
-           {$operationDateSql} op_dia
-    FROM rev_tarimas t
-    INNER JOIN closed_processes cp1 ON cp1.pro_id = t.pro_id
-    LEFT JOIN closed_processes cp2 ON cp2.pro_id = t.pro_id_2
-    WHERE t.tar_count_etiquetado > 0
-      AND t.pro_id IS NOT NULL
-      AND t.pro_id NOT IN (0, {$barreduraProId})
-      AND (t.pro_id_2 IS NULL OR t.pro_id_2 = 0 OR t.pro_id_2 <> {$barreduraProId})
-      AND (
-        t.pro_id_2 IS NULL
-        OR t.pro_id_2 = 0
-        OR t.pro_id_2 = t.pro_id
-        OR cp2.pro_id IS NOT NULL
-      )
-  ),
-  pair_months AS (
-    SELECT pro_id, pro_id_2, DATE_FORMAT(op_dia, '%Y-%m-01') periodo,
+$pairBucketSql = $periodMode === 'fecha'
+  ? 'op_dia'
+  : ($periodMode === 'semana'
+    ? 'DATE_SUB(op_dia, INTERVAL WEEKDAY(op_dia) DAY)'
+    : "DATE_FORMAT(op_dia, '%Y-%m-01')");
+$pairSelectionSql = "pair_periods AS (
+    SELECT pro_id, pro_id_2, {$pairBucketSql} periodo,
            COUNT(*) tarimas, SUM(tar_kilos) kilos
     FROM eligible_tarimas
     GROUP BY pro_id, pro_id_2, periodo
   ),
   ranked_pairs AS (
-    SELECT pm.*,
+    SELECT pp.*,
            ROW_NUMBER() OVER (
-             PARTITION BY pm.pro_id, pm.pro_id_2
-             ORDER BY pm.tarimas DESC, pm.kilos DESC, pm.periodo ASC
+             PARTITION BY pp.pro_id, pp.pro_id_2
+             ORDER BY pp.tarimas DESC, pp.kilos DESC, pp.periodo ASC
            ) rn
-    FROM pair_months pm
+    FROM pair_periods pp
   )
-  SELECT pro_id, pro_id_2
+  SELECT pro_id, pro_id_2, periodo
   FROM ranked_pairs
-  WHERE rn = 1 AND periodo >= ? AND periodo < ?
-");
-$selectedPairsStmt->execute([$start->format('Y-m-d'), $endExclusive->format('Y-m-d')]);
+  WHERE rn = 1 AND periodo >= ? AND periodo < ?";
+
+if ($includeAllProcesses) {
+  $selectedPairsStmt = $pdo->prepare("
+    CREATE TEMPORARY TABLE tmp_rp_selected_pairs AS
+    SELECT candidatos.pro_id, candidatos.pro_id_2, MIN(candidatos.periodo) periodo
+    FROM (
+      SELECT alcance.pro_id, 0 pro_id_2, {$pairBucketSql} periodo
+      FROM (
+        SELECT p.pro_id, DATE(p.pro_fe_carga) op_dia
+        FROM procesos p
+        WHERE p.pro_fe_carga >= ? AND p.pro_fe_carga < ?
+          AND p.pro_id NOT IN (0, {$barreduraProId})
+      ) alcance
+      UNION ALL
+      SELECT t.pro_id,
+             CASE
+               WHEN t.pro_id_2 IS NOT NULL AND t.pro_id_2 <> 0 AND t.pro_id_2 <> t.pro_id THEN t.pro_id_2
+               ELSE 0
+             END pro_id_2,
+             {$pairBucketSql} periodo
+      FROM rev_tarimas t
+      INNER JOIN (
+        SELECT p.pro_id, DATE(p.pro_fe_carga) op_dia
+        FROM procesos p
+        WHERE p.pro_fe_carga >= ? AND p.pro_fe_carga < ?
+          AND p.pro_id NOT IN (0, {$barreduraProId})
+      ) alcance ON alcance.pro_id = t.pro_id
+      WHERE t.tar_count_etiquetado > 0
+        AND (t.pro_id_2 IS NULL OR t.pro_id_2 = 0 OR t.pro_id_2 <> {$barreduraProId})
+    ) candidatos
+    GROUP BY candidatos.pro_id, candidatos.pro_id_2
+  ");
+  $selectedPairsStmt->execute([
+    $start->format('Y-m-d'),
+    $endExclusive->format('Y-m-d'),
+    $start->format('Y-m-d'),
+    $endExclusive->format('Y-m-d'),
+  ]);
+} else {
+  $selectedPairsStmt = $pdo->prepare("
+    CREATE TEMPORARY TABLE tmp_rp_selected_pairs AS
+    WITH
+    closed_processes AS (
+      SELECT DISTINCT pa.pro_id
+      FROM procesos_agrupados pa
+      INNER JOIN lotes_anio lote ON lote.lote_id = pa.lote_id AND lote.lote_estatus = 3
+    ),
+    eligible_tarimas AS (
+      SELECT t.pro_id,
+             CASE
+               WHEN t.pro_id_2 IS NOT NULL AND t.pro_id_2 <> 0 AND t.pro_id_2 <> t.pro_id THEN t.pro_id_2
+               ELSE 0
+             END pro_id_2,
+             t.tar_kilos,
+             {$operationDateSql} op_dia
+      FROM rev_tarimas t
+      INNER JOIN closed_processes cp1 ON cp1.pro_id = t.pro_id
+      LEFT JOIN closed_processes cp2 ON cp2.pro_id = t.pro_id_2
+      WHERE t.tar_count_etiquetado > 0
+        AND t.pro_id IS NOT NULL
+        AND t.pro_id NOT IN (0, {$barreduraProId})
+        AND (t.pro_id_2 IS NULL OR t.pro_id_2 = 0 OR t.pro_id_2 <> {$barreduraProId})
+        AND (
+          t.pro_id_2 IS NULL
+          OR t.pro_id_2 = 0
+          OR t.pro_id_2 = t.pro_id
+          OR cp2.pro_id IS NOT NULL
+        )
+    ),
+    {$pairSelectionSql}
+  ");
+  $selectedPairsStmt->execute([$start->format('Y-m-d'), $endExclusive->format('Y-m-d')]);
+}
 $pdo->exec('ALTER TABLE tmp_rp_selected_pairs ADD PRIMARY KEY (pro_id, pro_id_2)');
-$selectedPairRows = $pdo->query('SELECT pro_id, pro_id_2 FROM tmp_rp_selected_pairs')->fetchAll() ?: [];
+$selectedPairRows = $pdo->query('SELECT pro_id, pro_id_2, periodo FROM tmp_rp_selected_pairs')->fetchAll() ?: [];
 $selectedPairsSql = $selectedPairRows === []
   ? 'SELECT NULL pro_id, NULL pro_id_2 WHERE 1 = 0'
   : implode(' UNION ALL ', array_map(
@@ -117,9 +246,11 @@ $selectedPairsSql = $selectedPairRows === []
     ));
 $scopeIds = [];
 foreach ($selectedPairRows as $selectedPair) {
-  $scopeIds[(int)$selectedPair['pro_id']] = true;
-  if ((int)$selectedPair['pro_id_2'] > 0) {
-    $scopeIds[(int)$selectedPair['pro_id_2']] = true;
+  $primaryProcessId = (int)$selectedPair['pro_id'];
+  $secondaryProcessId = (int)$selectedPair['pro_id_2'];
+  $scopeIds[$primaryProcessId] = true;
+  if ($secondaryProcessId > 0) {
+    $scopeIds[$secondaryProcessId] = true;
   }
 }
 $scopeProcessSql = $scopeIds === []
@@ -129,16 +260,14 @@ $scopeProcessSql = $scopeIds === []
       array_keys($scopeIds)
     ));
 
-$optionParams = [];
-$materialOptionStmt = $pdo->prepare("
+// Los catálogos de filtro no dependen del periodo ni se limitan entre sí.
+// Se incluyen todas las opciones que realmente han sido usadas en procesos.
+$materialOptionStmt = $pdo->query("
   SELECT DISTINCT {$materialFamilySql} AS material
-  FROM procesos p
-  INNER JOIN ({$scopeProcessSql}) alcance ON alcance.pro_id = p.pro_id
-  INNER JOIN procesos_materiales pm ON pm.pro_id = p.pro_id
+  FROM procesos_materiales pm
   INNER JOIN materiales m ON m.mat_id = pm.mat_id
   ORDER BY material
 ");
-$materialOptionStmt->execute($optionParams);
 $materialOptions = array_values(array_filter(array_map(
   static fn(array $row): string => (string)($row['material'] ?? ''),
   $materialOptionStmt->fetchAll() ?: []
@@ -147,24 +276,13 @@ if ($selectedMaterial !== 'all' && !in_array($selectedMaterial, $materialOptions
   $selectedMaterial = 'all';
 }
 
-$providerOptionSql = "
+$providerOptionStmt = $pdo->query("
   SELECT DISTINCT prv.prv_id, prv.prv_nombre
-  FROM procesos p
-  INNER JOIN ({$scopeProcessSql}) alcance ON alcance.pro_id = p.pro_id
-  INNER JOIN procesos_materiales pm ON pm.pro_id = p.pro_id
+  FROM procesos_materiales pm
   INNER JOIN inventario i ON i.inv_id = pm.inv_id
-  INNER JOIN materiales m ON m.mat_id = pm.mat_id
   INNER JOIN proveedores prv ON prv.prv_id = i.prv_id
-  WHERE 1 = 1
-";
-$providerOptionParams = $optionParams;
-if ($selectedMaterial !== 'all') {
-  $providerOptionSql .= " AND {$materialFamilySql} = ?";
-  $providerOptionParams[] = $selectedMaterial;
-}
-$providerOptionSql .= ' ORDER BY prv.prv_nombre';
-$providerOptionStmt = $pdo->prepare($providerOptionSql);
-$providerOptionStmt->execute($providerOptionParams);
+  ORDER BY prv.prv_nombre
+");
 $providerOptions = $providerOptionStmt->fetchAll() ?: [];
 $validProviderIds = array_map('intval', array_column($providerOptions, 'prv_id'));
 if ($selectedProvider !== null && !in_array($selectedProvider, $validProviderIds, true)) {
@@ -353,7 +471,7 @@ maq_proceso_ticket AS (
 ),
 material_rows AS (
   SELECT s.pro_id, s.pt_id, s.pro_fe_carga, i.inv_no_ticket,
-         {$materialFamilySql} material,
+         {$materialFamilySql} material, m.mat_id,
          i.prv_id, prv.prv_nombre proveedor,
          i.inv_kilos kg_mp,
          i.inv_humedad, i.inv_extrac, i.inv_solidos, i.inv_ph, i.inv_rendimiento, i.inv_riesgo
@@ -366,6 +484,7 @@ material_rows AS (
 SELECT
   mr.pro_id, mr.pro_fe_carga, mr.inv_no_ticket,
   GROUP_CONCAT(DISTINCT mr.material ORDER BY mr.material SEPARATOR ' / ') material,
+  GROUP_CONCAT(DISTINCT mr.mat_id ORDER BY mr.mat_id) material_ids,
   MIN(mr.prv_id) prv_id,
   GROUP_CONCAT(DISTINCT mr.proveedor ORDER BY mr.proveedor SEPARATOR ' / ') proveedor,
   SUM(mr.kg_mp) kg_mp_filtrada,
@@ -484,6 +603,51 @@ foreach ($rows as &$row) {
   ] as $field) {
     $row[$field] = $row[$field] === null ? null : (float)$row[$field];
   }
+  $row['semaforos_lab'] = [
+    'rendimiento' => $evaluateLabBands($row['inv_rendimiento'], (array)($labParams['rendimiento'] ?? [])),
+    'humedad' => $evaluateLabBands($row['inv_humedad'], (array)($labParams['humedad'] ?? [])),
+    'extractibilidad' => $evaluateLabBands($row['inv_extractibilidad'], (array)($labParams['extractibilidad'] ?? [])),
+    'solidos' => $evaluateLabBands($row['inv_solidos'], (array)($labParams['solidos'] ?? [])),
+    'ph' => $evaluateLabBands($row['inv_ph'], (array)($labParams['ph'] ?? [])),
+  ];
+  $materialNames = array_map('trim', explode('/', strtoupper((string)($row['material'] ?? ''))));
+  $materialIds = array_values(array_filter(array_map('intval', explode(',', (string)($row['material_ids'] ?? '')))));
+  $enzymeRuleKeys = $materialNames;
+  if (array_intersect($materialIds, [5, 7, 9, 12]) !== []) $enzymeRuleKeys[] = 'CUERO_ENTERO';
+  if (array_intersect($materialIds, [2, 6, 8]) !== []) $enzymeRuleKeys[] = 'PEDACERA_AMERICANA';
+  $enzymeRuleKeys = array_values(array_unique($enzymeRuleKeys));
+  $enzymeStatus = null;
+  $statusPriority = ['gris' => 0, 'verde' => 1, 'amarillo' => 2, 'rojo' => 3];
+  foreach ($enzymeRuleKeys as $materialName) {
+    $enzymeRule = (array)($processParams['extractibilidad_enzima'][$materialName] ?? []);
+    if ($enzymeRule === []) continue;
+    $candidate = $evaluateLabBands($row['extractibilidad_enzima_2b'], $enzymeRule);
+    $candidate['range'] = $materialName . ' · ' . (string)($candidate['range'] ?? '');
+    if ($enzymeStatus === null || ($statusPriority[$candidate['key']] ?? 0) > ($statusPriority[$enzymeStatus['key']] ?? 0)) {
+      $enzymeStatus = $candidate;
+    }
+  }
+  $rendimientoPtRuleKeys = $materialNames;
+  if (array_intersect($materialIds, [5, 7, 9, 12]) !== []) $rendimientoPtRuleKeys[] = 'CUERO_ENTERO';
+  if (array_intersect($materialIds, [2, 6, 8, 14]) !== []) $rendimientoPtRuleKeys[] = 'PEDACERA';
+  $rendimientoPtRuleKeys = array_values(array_unique($rendimientoPtRuleKeys));
+  $rendimientoPtStatus = null;
+  foreach ($rendimientoPtRuleKeys as $materialName) {
+    $rendimientoPtRule = (array)($processParams['rendimiento_pt'][$materialName] ?? []);
+    if ($rendimientoPtRule === []) continue;
+    $candidate = $evaluateLabBands(
+      $row['rendimiento_pt'] === null ? null : (float)$row['rendimiento_pt'] * 100,
+      $rendimientoPtRule
+    );
+    $candidate['range'] = $materialName . ' · ' . (string)($candidate['range'] ?? '');
+    if ($rendimientoPtStatus === null || ($statusPriority[$candidate['key']] ?? 0) > ($statusPriority[$rendimientoPtStatus['key']] ?? 0)) {
+      $rendimientoPtStatus = $candidate;
+    }
+  }
+  $row['semaforos_proceso'] = [
+    'extractibilidad_enzima' => $enzymeStatus,
+    'rendimiento_pt' => $rendimientoPtStatus,
+  ];
 
   $processes[$processId] = true;
   $selectedMpKg += (float)$row['kg_mp_filtrada'];
@@ -514,6 +678,9 @@ foreach ($rows as &$row) {
   $providerChart[$providerId]['kg_pt'] += (float)($row['kg_producto_terminado'] ?? 0);
 }
 unset($row);
+
+$detailRows = $rows;
+$detailPeriodLabel = $periodLabel;
 
 $hasParticipationFilter = $selectedMaterial !== 'all' || $selectedProvider !== null;
 $totalPt = 0.0;
@@ -600,12 +767,239 @@ foreach ($rows as $row) {
 krsort($processChartMap);
 $processChartRows = array_reverse(array_slice(array_values($processChartMap), 0, 18));
 
+/*
+ * La comparación proveedor/material usa exactamente la misma fuente y cálculo
+ * del reporte Materia Prima. Se carga en un ámbito aislado para no alterar las
+ * variables, filtros ni conexión de Rendimiento por Procesos.
+ */
+$providerMaterialComparisonGroups = [];
+$providerMaterialComparisonError = null;
+$monthlyCostPerKg = null;
+$weeklyCostPerKg = null;
+$providerMaterialMonthAnchor = $periodMode === 'semana'
+  ? $selectedWeekEnd->modify('+6 days')
+  : ($periodMode === 'fecha' ? $selectedEndDate : $start);
+$providerMaterialYear = (int)$providerMaterialMonthAnchor->format('Y');
+$providerMaterialMonth = (int)$providerMaterialMonthAnchor->format('n');
+$originalQuery = $_GET;
+try {
+  $loadMateriaPrimaComparison = static function (array $query): array {
+    $_GET = $query;
+    $config = require __DIR__ . '/../materia-prima/config.php';
+    $config['proveedor_material_todas_semanas'] = true;
+    $config['proveedor_material_usar_consumo_proceso'] = true;
+    $appConfig = require __DIR__ . '/../../config/app.php';
+    $dbConfig = require __DIR__ . '/../../config/database.php';
+    return require __DIR__ . '/../materia-prima/build_report.php';
+  };
+  $materiaPrimaReport = $loadMateriaPrimaComparison([
+    'periodo' => 'mes',
+    'anio' => $providerMaterialYear,
+    'mes' => $providerMaterialMonth,
+    'mt_id' => 'all',
+  ]);
+  $periodRows = (array)($materiaPrimaReport['tablas']['proveedor_material_periodos'] ?? []);
+  $selectedPeriodRows = $periodRows;
+  if ($periodMode === 'semana') {
+    $selectedPeriodReport = $loadMateriaPrimaComparison([
+      'periodo' => 'semana',
+      'semana_inicio' => $selectedWeekValue,
+      'semana_fin' => $selectedWeekEndValue,
+      'mt_id' => 'all',
+    ]);
+    $selectedPeriodRows = (array)($selectedPeriodReport['tablas']['proveedor_material_periodos'] ?? []);
+  } elseif ($periodMode === 'fecha') {
+    $selectedPeriodReport = $loadMateriaPrimaComparison([
+      'periodo' => 'fecha',
+      'fecha_inicio' => $selectedStartDate->format('Y-m-d'),
+      'fecha_fin' => $selectedEndDate->format('Y-m-d'),
+      'mt_id' => 'all',
+    ]);
+    $selectedPeriodRows = (array)($selectedPeriodReport['tablas']['proveedor_material_periodos'] ?? []);
+  }
+  $matchesProviderMaterialFilters = static function (array $periodRow) use ($selectedMaterial, $selectedProvider): bool {
+    if ($selectedMaterial !== 'all' && (string)($periodRow['grupo'] ?? '') !== $selectedMaterial) {
+      return false;
+    }
+    if ($selectedProvider !== null && (int)($periodRow['prv_id'] ?? 0) !== $selectedProvider) {
+      return false;
+    }
+    return true;
+  };
+  $monthlyPeriodRows = array_values(array_filter(
+    (array)($periodRows['mensual'] ?? []),
+    $matchesProviderMaterialFilters
+  ));
+  $allWeeklyPeriodRows = array_values(array_filter(
+    (array)($periodRows['semanal'] ?? []),
+    $matchesProviderMaterialFilters
+  ));
+  $selectedRangeWeeklyPeriodRows = array_values(array_filter(
+    (array)($selectedPeriodRows['semanal'] ?? []),
+    $matchesProviderMaterialFilters
+  ));
+  $hasProviderMaterialFilter = $selectedMaterial !== 'all' || $selectedProvider !== null;
+  $selectedComparisonWeekStartKey = '';
+  $selectedComparisonWeekEndKey = '';
+  if ($periodMode === 'semana') {
+    $selectedComparisonWeekStartKey = $selectedWeekStart->format('oW');
+    $selectedComparisonWeekEndKey = $selectedWeekEnd->format('oW');
+  } elseif ($periodMode === 'fecha') {
+    $selectedComparisonWeekStartKey = $selectedStartDate->format('oW');
+    $selectedComparisonWeekEndKey = $selectedEndDate->format('oW');
+  } elseif ($allWeeklyPeriodRows !== []) {
+    $selectedComparisonWeekStartKey = (string)($allWeeklyPeriodRows[0]['periodo_clave'] ?? '');
+    $selectedComparisonWeekEndKey = $selectedComparisonWeekStartKey;
+  }
+  $selectedWeeklyPeriodRows = array_values(array_filter(
+    $selectedRangeWeeklyPeriodRows,
+    static function (array $weeklyRow) use ($selectedComparisonWeekStartKey, $selectedComparisonWeekEndKey): bool {
+      $weekKey = (string)($weeklyRow['periodo_clave'] ?? '');
+      return $weekKey !== ''
+        && $weekKey >= $selectedComparisonWeekStartKey
+        && $weekKey <= $selectedComparisonWeekEndKey;
+    }
+  ));
+  $weeklyPeriodRows = $hasProviderMaterialFilter
+    ? $allWeeklyPeriodRows
+    : $selectedWeeklyPeriodRows;
+  $weightedCostPerKg = static function (array $costRows): ?float {
+    $weightedCost = 0.0;
+    $producedKg = 0.0;
+    foreach ($costRows as $costRow) {
+      $rowCost = $costRow['costo_cuero_kg_produccion'] ?? null;
+      $rowProducedKg = $costRow['kilos_producidos'] ?? null;
+      if (!is_numeric($rowCost) || !is_numeric($rowProducedKg) || (float)$rowProducedKg <= 0) {
+        continue;
+      }
+      $weightedCost += (float)$rowCost * (float)$rowProducedKg;
+      $producedKg += (float)$rowProducedKg;
+    }
+    return $producedKg > 0 ? $weightedCost / $producedKg : null;
+  };
+  $monthlyCostPerKg = $weightedCostPerKg($monthlyPeriodRows);
+  $weeklyCostPerKg = $weightedCostPerKg($selectedWeeklyPeriodRows);
+  $comparisonGroups = [];
+  foreach ($monthlyPeriodRows as $monthlyRow) {
+    $key = (int)($monthlyRow['prv_id'] ?? 0) . '|' . (int)($monthlyRow['mat_id'] ?? 0);
+    $comparisonGroups[$key] = [
+      'identidad' => $monthlyRow,
+      'mensual' => $monthlyRow,
+      'semanas' => [],
+    ];
+  }
+  foreach ($weeklyPeriodRows as $weeklyRow) {
+    $key = (int)($weeklyRow['prv_id'] ?? 0) . '|' . (int)($weeklyRow['mat_id'] ?? 0);
+    if (!isset($comparisonGroups[$key])) {
+      $comparisonGroups[$key] = [
+        'identidad' => $weeklyRow,
+        'mensual' => [],
+        'semanas' => [],
+      ];
+    }
+    $comparisonGroups[$key]['semanas'][] = $weeklyRow;
+  }
+  $providerMaterialComparisonGroups = array_values(array_filter(
+    $comparisonGroups,
+    static fn(array $group): bool => (array)($group['mensual'] ?? []) !== []
+      || (array)($group['semanas'] ?? []) !== []
+  ));
+  usort($providerMaterialComparisonGroups, static function (array $left, array $right): int {
+    $leftMonthly = (array)($left['mensual'] ?? []);
+    $rightMonthly = (array)($right['mensual'] ?? []);
+    $leftCost = is_numeric($leftMonthly['costo_cuero_kg_produccion'] ?? null)
+      ? (float)$leftMonthly['costo_cuero_kg_produccion']
+      : -INF;
+    $rightCost = is_numeric($rightMonthly['costo_cuero_kg_produccion'] ?? null)
+      ? (float)$rightMonthly['costo_cuero_kg_produccion']
+      : -INF;
+    $costCompare = $rightCost <=> $leftCost;
+    if ($costCompare !== 0) return $costCompare;
+    $leftIdentity = (array)($left['identidad'] ?? []);
+    $rightIdentity = (array)($right['identidad'] ?? []);
+    return strcasecmp((string)($leftIdentity['proveedor'] ?? ''), (string)($rightIdentity['proveedor'] ?? ''))
+      ?: strcasecmp((string)($leftIdentity['material'] ?? ''), (string)($rightIdentity['material'] ?? ''));
+  });
+} catch (Throwable $providerMaterialException) {
+  $providerMaterialComparisonError = 'No fue posible cargar la comparación por proveedor y material.';
+} finally {
+  $_GET = $originalQuery;
+  date_default_timezone_set($timezone);
+}
+
+$inventoryEntryRows = [];
+$inventoryEntryCriteria = [];
+$inventoryEntryError = null;
+if (!empty($config['mostrar_tabla_inventario_entrada'])) {
+  $originalInventoryQuery = $_GET;
+  try {
+    $inventoryQuery = [
+      'periodo' => $periodMode,
+      'anio' => $selectedYear,
+      'mes' => $selectedMonth,
+      'semana_inicio' => $selectedWeekValue,
+      'semana_fin' => $selectedWeekEndValue,
+      'fecha_inicio' => $selectedStartDate->format('Y-m-d'),
+      'fecha_fin' => $selectedEndDate->format('Y-m-d'),
+    ];
+    if ($selectedProvider !== null) {
+      $inventoryQuery['proveedor'] = $selectedProvider;
+    }
+    $loadInventoryEntries = static function (array $query): array {
+      $_GET = $query;
+      $config = require __DIR__ . '/../inventario-materia-prima/config.php';
+      $dbConfig = require __DIR__ . '/../../config/database.php';
+      return require __DIR__ . '/../inventario-materia-prima/build_report.php';
+    };
+    $inventoryEntryReport = $loadInventoryEntries($inventoryQuery);
+    $inventoryEntryRows = (array)($inventoryEntryReport['filas'] ?? []);
+    $inventoryEntryCriteria = (array)($inventoryEntryReport['criterios'] ?? []);
+
+    if ($selectedMaterial !== 'all') {
+      $inventoryMaterialFamily = static function (array $row): string {
+        $materialId = (int)($row['mat_id'] ?? 0);
+        $materialName = (string)($row['material'] ?? '');
+        if (in_array($materialId, [5, 7], true)) return 'Cuero Entero C/P (con pelo)';
+        if (in_array($materialId, [9, 12], true)) return 'Cuero Entero Depilado';
+        if (in_array($materialId, [3, 4, 10, 11, 13], true)) return $materialName;
+        if ($materialId === 2) return 'Pedacera Americana S/P';
+        if ($materialId === 6) return 'Pedacera Americana C/P';
+        if ($materialId === 8) return 'Pedacera Americana Depilada';
+        if ($materialId === 14) return 'Pedacera Nacional C/P';
+        if ($materialId === 1) return 'Carnaza';
+        return 'Otros';
+      };
+      $inventoryEntryRows = array_values(array_filter(
+        $inventoryEntryRows,
+        static fn(array $row): bool => $inventoryMaterialFamily($row) === $selectedMaterial
+      ));
+    }
+    foreach ($inventoryEntryRows as $inventoryEntryIndex => &$inventoryEntryRow) {
+      $inventoryEntryRow['numero'] = $inventoryEntryIndex + 1;
+    }
+    unset($inventoryEntryRow);
+  } catch (Throwable $inventoryEntryException) {
+    $inventoryEntryError = 'No fue posible cargar los resultados de entrada de materia prima.';
+  } finally {
+    $_GET = $originalInventoryQuery;
+    date_default_timezone_set($timezone);
+  }
+}
+
 return [
   'titulo' => (string)($config['titulo'] ?? 'Rendimiento por Proceso'),
   'filtros' => [
+    'periodo' => $periodMode,
     'anio' => $selectedYear,
     'mes' => $selectedMonth,
     'mes_nombre' => $monthNames[$selectedMonth] ?? (string)$selectedMonth,
+    'semana' => $selectedWeekValue,
+    'semana_inicio' => $selectedWeekValue,
+    'semana_fin' => $selectedWeekEndValue,
+    'fecha' => $selectedStartDate->format('Y-m-d'),
+    'fecha_inicio' => $selectedStartDate->format('Y-m-d'),
+    'fecha_fin' => $selectedEndDate->format('Y-m-d'),
+    'hoy' => $operationalToday->format('Y-m-d'),
     'anios' => $yearOptions,
     'meses' => $monthNames,
     'material' => $selectedMaterial,
@@ -617,6 +1011,8 @@ return [
   ],
   'kpis' => [
     'procesos' => count($processes),
+    'costo_kg_mensual' => $monthlyCostPerKg,
+    'costo_kg_semanal' => $weeklyCostPerKg,
     'kg_mp_filtrada' => $selectedMpKg,
     'kg_producto_terminado' => $displayPt,
     'kg_producto_rendimiento' => $totalPt,
@@ -638,11 +1034,25 @@ return [
     'proveedores' => $providerChartRows,
     'procesos' => $processChartRows,
   ],
-  'filas' => $rows,
+  'filas' => $detailRows,
+  'tabla_proveedor_material' => [
+    'grupos' => $providerMaterialComparisonGroups,
+    'error' => $providerMaterialComparisonError,
+    'anio' => $providerMaterialYear,
+    'mes' => $providerMaterialMonth,
+    'mes_nombre' => $monthNames[$providerMaterialMonth] ?? (string)$providerMaterialMonth,
+  ],
+  'tabla_inventario_entrada' => [
+    'filas' => $inventoryEntryRows,
+    'criterios' => $inventoryEntryCriteria,
+    'error' => $inventoryEntryError,
+  ],
   'meta' => [
     'generado_en' => (new DateTimeImmutable('now', $tz))->format('Y-m-d H:i:s'),
+    'periodo_label' => $periodLabel,
     'periodo_inicio' => $start->format('Y-m-d'),
     'periodo_fin' => $end->format('Y-m-d'),
+    'detalle_periodo_label' => $detailPeriodLabel,
     'hora_corte' => $horaCorte,
     'zona_horaria' => (string)($config['timezone_label'] ?? 'UTC-6'),
     'intervalo_actualizacion_ms' => (int)($config['intervalo_actualizacion_ms'] ?? 900000),

@@ -3,12 +3,17 @@
 $catalog = require __DIR__ . '/../../config/parameter_catalog.php';
 
 return [
-  'titulo' => 'Rendimiento por Proceso',
+  'titulo' => 'Procesos Rendimiento',
   'database_key' => 'prod',
   'timezone' => 'Etc/GMT+6',
   'timezone_label' => 'UTC-6',
   'hora_corte' => '07:00:00',
   'intervalo_actualizacion_ms' => 900000,
+  'incluir_todos_procesos' => true,
+  'mostrar_resumen' => false,
+  'mostrar_graficas' => false,
+  'mostrar_tabla_inventario_entrada' => true,
+  'mostrar_regresar' => false,
   'semaforo_costo_kg' => [
     'verde_menor_que' => 43.0,
     'amarillo_desde' => 43.0,

@@ -31,6 +31,13 @@ $kpis = (array)($kpis ?? []);
 $series = (array)($series ?? []);
 $tablas = (array)($tablas ?? []);
 $meta = (array)($meta ?? []);
+$periodMode = in_array((string)($filtros['periodo'] ?? 'mes'), ['mes', 'semana', 'fecha'], true) ? (string)$filtros['periodo'] : 'mes';
+$todayUrl = './?' . http_build_query([
+  'periodo' => 'fecha',
+  'fecha_inicio' => $filtros['hoy'] ?? date('Y-m-d'),
+  'fecha_fin' => $filtros['hoy'] ?? date('Y-m-d'),
+  'mt_id' => $filtros['mt_id'] ?? 'all',
+]);
 
 $e = static fn($value): string => htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
 $fmt = static fn($value, int $decimals = 1): string => is_numeric($value) ? n((float)$value, $decimals) : '-';
@@ -46,6 +53,62 @@ $materialYieldRows = (array)($tablas['rendimiento_material'] ?? []);
 $materialRows = (array)($tablas['materiales'] ?? []);
 $providerRows = (array)($tablas['proveedores'] ?? []);
 $providerMaterialRows = (array)($tablas['proveedores_material'] ?? []);
+$providerMaterialPeriodRows = (array)($tablas['proveedor_material_periodos'] ?? ['mensual' => [], 'semanal' => []]);
+$providerMaterialComparisonRows = [];
+$providerMaterialWeeklyGroups = [];
+foreach ((array)($providerMaterialPeriodRows['semanal'] ?? []) as $weeklyRow) {
+  $comparisonKey = (int)($weeklyRow['prv_id'] ?? 0) . '|' . (int)($weeklyRow['mat_id'] ?? 0);
+  $providerMaterialWeeklyGroups[$comparisonKey][] = $weeklyRow;
+}
+foreach ((array)($providerMaterialPeriodRows['mensual'] ?? []) as $monthlyRow) {
+  $comparisonKey = (int)($monthlyRow['prv_id'] ?? 0) . '|' . (int)($monthlyRow['mat_id'] ?? 0);
+  $weeklyRows = (array)($providerMaterialWeeklyGroups[$comparisonKey] ?? []);
+  if ($weeklyRows === []) {
+    $providerMaterialComparisonRows[] = ['mensual' => $monthlyRow, 'semanal' => null];
+  } else {
+    foreach ($weeklyRows as $weeklyRow) {
+      $providerMaterialComparisonRows[] = ['mensual' => $monthlyRow, 'semanal' => $weeklyRow];
+    }
+  }
+  unset($providerMaterialWeeklyGroups[$comparisonKey]);
+}
+foreach ($providerMaterialWeeklyGroups as $weeklyRows) {
+  foreach ($weeklyRows as $weeklyRow) {
+    $providerMaterialComparisonRows[] = ['mensual' => null, 'semanal' => $weeklyRow];
+  }
+}
+
+// Una sola fila por combinación proveedor/material; las semanas se apilan dentro de esa fila.
+$providerMaterialComparisonGroups = [];
+foreach ($providerMaterialComparisonRows as $comparison) {
+  $monthlyRow = is_array($comparison['mensual'] ?? null) ? $comparison['mensual'] : [];
+  $weeklyRow = is_array($comparison['semanal'] ?? null) ? $comparison['semanal'] : [];
+  $identityRow = $monthlyRow !== [] ? $monthlyRow : $weeklyRow;
+  $groupKey = (int)($identityRow['prv_id'] ?? 0) . '|' . (int)($identityRow['mat_id'] ?? 0);
+  if (!isset($providerMaterialComparisonGroups[$groupKey])) {
+    $providerMaterialComparisonGroups[$groupKey] = [
+      'identidad' => $identityRow,
+      'mensual' => $monthlyRow,
+      'semanas' => [],
+    ];
+  }
+  if ($monthlyRow !== []) {
+    $providerMaterialComparisonGroups[$groupKey]['mensual'] = $monthlyRow;
+  }
+  if ($weeklyRow !== []) {
+    $providerMaterialComparisonGroups[$groupKey]['semanas'][] = $weeklyRow;
+  }
+}
+$providerMaterialComparisonGroups = array_values(array_filter(
+  $providerMaterialComparisonGroups,
+  static fn(array $group): bool => (array)($group['semanas'] ?? []) !== []
+));
+usort($providerMaterialComparisonGroups, static function (array $left, array $right): int {
+  $leftIdentity = (array)($left['identidad'] ?? []);
+  $rightIdentity = (array)($right['identidad'] ?? []);
+  return strcasecmp((string)($leftIdentity['proveedor'] ?? ''), (string)($rightIdentity['proveedor'] ?? ''))
+    ?: strcasecmp((string)($leftIdentity['material'] ?? ''), (string)($rightIdentity['material'] ?? ''));
+});
 $enzymeProcessRows = (array)($tablas['enzima_procesos'] ?? []);
 usort($materialYieldRows, static function (array $a, array $b): int {
   $yieldCompare = ((float)($b['rendimiento'] ?? -1)) <=> ((float)($a['rendimiento'] ?? -1));
@@ -55,14 +118,23 @@ usort($materialYieldRows, static function (array $a, array $b): int {
 
   return ((float)($b['toneladas_consumidas'] ?? 0)) <=> ((float)($a['toneladas_consumidas'] ?? 0));
 });
+$recorteMaterialNames = ['DESBARBE', 'RECORTE', 'DESORILLE', 'GARRA', 'DELANTERO'];
 $dailyPalette = [
     'Carnaza'      => '#1D4ED8', // Azul
-    'Cuero Entero' => '#EA580C', // Naranja quemado
-    'Pedacera'     => '#7C3AED', // Morado
-    'Recorte'      => '#92400E', // Marrón
+    'Cuero Entero C/P (con pelo)' => '#EA580C', // Naranja quemado
+    'Cuero Entero Depilado' => '#D97706', // Ámbar
+    'Pedacera Americana S/P' => '#7C3AED',
+    'Pedacera Americana C/P' => '#6D28D9',
+    'Pedacera Americana Depilada' => '#8B5CF6',
+    'Pedacera Nacional C/P' => '#5B21B6',
+    'DESBARBE'     => '#92400E',
+    'RECORTE'      => '#92400E',
+    'DESORILLE'    => '#92400E',
+    'GARRA'        => '#92400E',
+    'DELANTERO'    => '#92400E',
     'Otros'        => '#334155', // Gris azulado
 ];
-$yieldStatusColor = static function (string $group, $value): string {
+$yieldStatusColor = static function (string $group, $value) use ($recorteMaterialNames): string {
   if (!is_numeric($value)) {
     return '#94a3b8';
   }
@@ -74,13 +146,13 @@ $yieldStatusColor = static function (string $group, $value): string {
     return '#c94436';
   }
 
-  if ($group === 'Cuero Entero') {
+  if (strpos($group, 'Cuero Entero') === 0) {
     if ($number > 18) return '#2e8b57';
     if ($number >= 17) return '#facc15';
     return '#c94436';
   }
 
-  if ($group === 'Recorte' || $group === 'Pedacera') {
+  if (stripos($group, 'Pedacera') === 0 || in_array($group, $recorteMaterialNames, true)) {
     if ($number > 14) return '#2e8b57';
     if ($number >= 13.5) return '#facc15';
     return '#c94436';
@@ -90,33 +162,75 @@ $yieldStatusColor = static function (string $group, $value): string {
   if ($number >= 16) return '#facc15';
   return '#c94436';
 };
+$yieldStatusKey = static function (string $group, $value) use ($recorteMaterialNames): string {
+  if (!is_numeric($value)) {
+    return 'gris';
+  }
+
+  $number = (float)$value;
+  if ($group === 'Carnaza') {
+    return $number > 15.5 ? 'verde' : ($number >= 15 ? 'amarillo' : 'rojo');
+  }
+  if (strpos($group, 'Cuero Entero') === 0) {
+    return $number > 18 ? 'verde' : ($number >= 17 ? 'amarillo' : 'rojo');
+  }
+  if (stripos($group, 'Pedacera') === 0 || in_array($group, $recorteMaterialNames, true)) {
+    return $number > 14 ? 'verde' : ($number >= 13.5 ? 'amarillo' : 'rojo');
+  }
+  return $number >= 17 ? 'verde' : ($number >= 16 ? 'amarillo' : 'rojo');
+};
+
 $yieldLabels = array_map(static fn(array $row): string => (string)($row['grupo'] ?? ''), $materialYieldRows);
 $yieldData = array_map(static fn(array $row): float => round((float)($row['rendimiento'] ?? 0), 2), $materialYieldRows);
 $yieldColors = array_map(static fn(array $row): string => $yieldStatusColor((string)($row['grupo'] ?? ''), $row['rendimiento'] ?? null), $materialYieldRows);
 $yieldRangeCards = [
   ['grupo' => 'Carnaza', 'verde' => '> 15.5%', 'amarillo' => '15 - 15.5%', 'rojo' => '< 15%'],
-  ['grupo' => 'Cuero Entero', 'verde' => '> 18%', 'amarillo' => '17 - 18%', 'rojo' => '< 17%'],
-  ['grupo' => 'Pedacera', 'verde' => '> 14%', 'amarillo' => '13.5 - 14%', 'rojo' => '< 13.5%'],
-  ['grupo' => 'Recorte', 'verde' => '> 14%', 'amarillo' => '13.5 - 14%', 'rojo' => '< 13.5%'],
+  ['grupo' => 'Cuero Entero C/P (con pelo)', 'verde' => '> 18%', 'amarillo' => '17 - 18%', 'rojo' => '< 17%'],
+  ['grupo' => 'Cuero Entero Depilado', 'verde' => '> 18%', 'amarillo' => '17 - 18%', 'rojo' => '< 17%'],
+  ['grupo' => 'Pedacera Americana S/P', 'verde' => '> 14%', 'amarillo' => '13.5 - 14%', 'rojo' => '< 13.5%'],
+  ['grupo' => 'Pedacera Americana C/P', 'verde' => '> 14%', 'amarillo' => '13.5 - 14%', 'rojo' => '< 13.5%'],
+  ['grupo' => 'Pedacera Americana Depilada', 'verde' => '> 14%', 'amarillo' => '13.5 - 14%', 'rojo' => '< 13.5%'],
+  ['grupo' => 'Pedacera Nacional C/P', 'verde' => '> 14%', 'amarillo' => '13.5 - 14%', 'rojo' => '< 13.5%'],
 ];
+foreach ($recorteMaterialNames as $materialName) {
+  $yieldRangeCards[] = ['grupo' => $materialName, 'verde' => '> 14%', 'amarillo' => '13.5 - 14%', 'rojo' => '< 13.5%'];
+}
 $chartGroups = array_slice($groupRows, 0, 8);
 $groupLabels = array_map(static fn(array $row): string => (string)($row['grupo'] ?? ''), $chartGroups);
 $groupData = array_map(static fn(array $row): float => round((float)($row['toneladas'] ?? 0), 2), $chartGroups);
 $groupPalette = array_map(static fn(array $row): string => $dailyPalette[(string)($row['grupo'] ?? '')] ?? '#0891b2', $chartGroups);
 $groupTotal = array_sum($groupData);
+$wholeLeatherTonnes = 0.0;
+$pedaceraTonnes = 0.0;
+foreach ($chartGroups as $row) {
+  $groupName = (string)($row['grupo'] ?? '');
+  if (strpos($groupName, 'Cuero Entero') === 0) {
+    $wholeLeatherTonnes += (float)($row['toneladas'] ?? 0);
+  }
+  if (stripos($groupName, 'Pedacera') === 0) {
+    $pedaceraTonnes += (float)($row['toneladas'] ?? 0);
+  }
+}
+$wholeLeatherParticipation = $groupTotal > 0 ? ($wholeLeatherTonnes / $groupTotal) * 100 : 0.0;
+$pedaceraParticipation = $groupTotal > 0 ? ($pedaceraTonnes / $groupTotal) * 100 : 0.0;
 $participationTargets = [
   'Carnaza' => [30.0, 35.0],
-  'Recorte' => [8.0, 10.0],
   'Pedacera' => [10.0, 15.0],
   'Cuero Entero' => [45.0, 55.0],
 ];
-$participationStatus = static function (string $group, float $value) use ($participationTargets): string {
-  if (!isset($participationTargets[$group])) {
+$participationStatus = static function (string $group, float $value) use ($participationTargets, $wholeLeatherParticipation, $pedaceraParticipation): string {
+  $targetGroup = strpos($group, 'Cuero Entero') === 0
+    ? 'Cuero Entero'
+    : (stripos($group, 'Pedacera') === 0 ? 'Pedacera' : $group);
+  $evaluatedValue = $targetGroup === 'Cuero Entero'
+    ? $wholeLeatherParticipation
+    : ($targetGroup === 'Pedacera' ? $pedaceraParticipation : $value);
+  if (!isset($participationTargets[$targetGroup])) {
     return 'mp-share-neutral';
   }
 
-  [$min, $max] = $participationTargets[$group];
-  return $value >= $min && $value <= $max ? 'mp-share-good' : 'mp-share-bad';
+  [$min, $max] = $participationTargets[$targetGroup];
+  return $evaluatedValue >= $min && $evaluatedValue <= $max ? 'mp-share-good' : 'mp-share-bad';
 };
 $participationStatusLabel = static function (string $status): string {
   if ($status === 'mp-share-good') {
@@ -130,12 +244,16 @@ $participationStatusLabel = static function (string $status): string {
   return 'Referencia';
 };
 $participationTargetLabel = static function (string $group) use ($participationTargets): string {
-  if (!isset($participationTargets[$group])) {
+  $targetGroup = strpos($group, 'Cuero Entero') === 0
+    ? 'Cuero Entero'
+    : (stripos($group, 'Pedacera') === 0 ? 'Pedacera' : $group);
+  if (!isset($participationTargets[$targetGroup])) {
     return 'sin rango';
   }
 
-  [$min, $max] = $participationTargets[$group];
-  return n($min, 0) . ' - ' . n($max, 0) . '%';
+  [$min, $max] = $participationTargets[$targetGroup];
+  $prefix = $targetGroup === 'Cuero Entero' ? 'total cuero ' : ($targetGroup === 'Pedacera' ? 'total pedacera ' : '');
+  return $prefix . n($min, 0) . ' - ' . n($max, 0) . '%';
 };
 $groupCards = array_map(static function (array $row, int $index) use ($groupTotal, $groupPalette, $participationStatus, $participationStatusLabel, $participationTargetLabel): array {
   $toneladas = (float)($row['toneladas'] ?? 0);
@@ -173,7 +291,24 @@ foreach ($providerMaterialRows as $row) {
   $providerMaterialsByProvider[$providerId][$groupName] = round((float)($row['toneladas_consumidas'] ?? 0), 1);
 }
 $providerYieldByMaterial = [];
-foreach (['Carnaza', 'Cuero Entero', 'Pedacera', 'Recorte'] as $groupName) {
+$providerYieldGroups = [
+  'Carnaza',
+  'Cuero Entero C/P (con pelo)',
+  'Cuero Entero Depilado',
+  'Pedacera Americana S/P',
+  'Pedacera Americana C/P',
+  'Pedacera Americana Depilada',
+  'Pedacera Nacional C/P',
+];
+foreach ($recorteMaterialNames as $materialName) {
+  foreach ($providerMaterialRows as $providerMaterialRow) {
+    if ((string)($providerMaterialRow['grupo'] ?? '') === $materialName) {
+      $providerYieldGroups[] = $materialName;
+      break;
+    }
+  }
+}
+foreach ($providerYieldGroups as $groupName) {
   $rows = array_values(array_filter($providerMaterialRows, static function (array $row) use ($groupName): bool {
     return (string)($row['grupo'] ?? '') === $groupName
       && (float)($row['toneladas_consumidas'] ?? 0) > 0;
@@ -339,6 +474,7 @@ if (is_numeric($producedTons)) {
     }
 
     .mp-filter-field select,
+    .mp-filter-field input,
     .mp-filter-form button {
       min-height: 40px;
       border-radius: 10px;
@@ -346,12 +482,24 @@ if (is_numeric($producedTons)) {
       font-weight: 700;
     }
 
-    .mp-filter-field select {
+    .mp-filter-field select,
+    .mp-filter-field input {
       border: 1px solid #cbd5e1;
       background: #f8fafc;
       color: #0f172a;
       padding: 0 12px;
     }
+
+    .mp-period-control { display: grid; gap: 6px; }
+    .mp-period-control > label, .mp-period-values > label { color: #64748b; font-size: .72rem; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
+    .mp-period-switch { display: flex; min-height: 40px; padding: 3px; border: 1px solid #cbd5e1; border-radius: 10px; background: #f1f5f9; }
+    .mp-filter-form .mp-period-btn { min-height: 32px; border: 0; background: transparent; color: #64748b; box-shadow: none; padding: 0 13px; }
+    .mp-filter-form .mp-period-btn.is-active { background: #0f766e; color: #fff; }
+    .mp-period-values { display: grid; gap: 6px; min-width: 330px; flex: 1 1 400px; }
+    .mp-period-panel { display: none; align-items: end; gap: 8px; }
+    .mp-period-panel.is-active { display: flex; }
+    .mp-period-panel .mp-filter-field { flex: 1; min-width: 135px; }
+    .mp-today { display: inline-flex; min-height: 40px; align-items: center; justify-content: center; gap: 6px; padding: 0 12px; border: 1px solid #b8d8d3; border-radius: 10px; background: #edf8f6; color: #0f766e; text-decoration: none; font-size: .78rem; font-weight: 800; }
 
     .mp-filter-form button {
       display: inline-flex;
@@ -503,6 +651,130 @@ if (is_numeric($producedTons)) {
     .mp-price-total {
       color: #0f172a;
       font-weight: 800;
+    }
+
+    .mp-provider-material-head > div {
+      min-width: 0;
+    }
+
+    .mp-provider-material-head > div > span {
+      display: block;
+      margin-top: 3px;
+    }
+
+    .mp-cost-formula {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      margin: 0 0 10px;
+      padding: 9px 12px;
+      border: 1px solid #b8d8d3;
+      border-radius: 10px;
+      background: #edf8f6;
+      color: #134e4a;
+      font-size: .8rem;
+      font-weight: 800;
+    }
+
+    .mp-cost-formula strong {
+      color: #0f766e;
+    }
+
+    .mp-provider-material-table-wrap {
+      max-height: 510px;
+    }
+
+    .mp-provider-material-table {
+      min-width: 1320px;
+    }
+
+    .mp-provider-material-table td {
+      vertical-align: middle;
+    }
+
+    .mp-comparison-table thead tr:nth-child(2) th {
+      top: 37px;
+    }
+
+    .mp-week-stack {
+      display: grid;
+      gap: 4px;
+    }
+
+    .mp-week-stack > span {
+      display: flex;
+      min-height: 28px;
+      align-items: center;
+      justify-content: inherit;
+      padding: 4px 6px;
+      border-bottom: 1px solid #e2e8f0;
+      white-space: nowrap;
+    }
+
+    .mp-week-stack > span:last-child {
+      border-bottom: 0;
+    }
+
+    .mp-period-group {
+      padding: 10px !important;
+      color: #ffffff !important;
+      text-align: center !important;
+      font-size: .8rem !important;
+      letter-spacing: .05em !important;
+    }
+
+    .mp-period-group small {
+      margin-left: 6px;
+      color: inherit;
+      font-size: .65rem;
+      opacity: .9;
+    }
+
+    .mp-period-group-monthly {
+      background: #0f766e !important;
+    }
+
+    .mp-period-group-weekly {
+      background: #31516f !important;
+    }
+
+    .mp-period-start {
+      border-left: 3px solid #cbd5e1 !important;
+    }
+
+    .mp-week-label {
+      min-width: 185px;
+      color: #31516f !important;
+      font-size: .75rem;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    .mp-yield-cell {
+      color: #ffffff !important;
+      font-weight: 900;
+    }
+
+    .mp-yield-verde {
+      background: #2e8b57 !important;
+    }
+
+    .mp-yield-amarillo {
+      background: #facc15 !important;
+      color: #111827 !important;
+    }
+
+    .mp-yield-rojo {
+      background: #c94436 !important;
+    }
+
+    .mp-yield-gris {
+      background: #94a3b8 !important;
+    }
+
+    .mp-cost-cell {
+      color: #174d6b !important;
+      font-weight: 900;
     }
 
     .mp-provider-chart-card {
@@ -895,11 +1167,10 @@ if (is_numeric($producedTons)) {
     }
 
     .mp-exec-row strong {
-      overflow: hidden;
       color: #0f172a;
       font-size: 1rem;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      line-height: 1.15;
+      white-space: normal;
     }
 
     .mp-exec-row span,
@@ -1241,6 +1512,12 @@ if (is_numeric($producedTons)) {
       .mp-modal-grid {
         grid-template-columns: 1fr;
       }
+
+      .mp-provider-material-head {
+        align-items: stretch;
+        flex-direction: column;
+      }
+
     }
   </style>
 </head>
@@ -1253,26 +1530,49 @@ if (is_numeric($producedTons)) {
       </div>
       <div class="mp-title">
         <h1><?= $e($titulo ?? 'Materia Prima') ?></h1>
-        <p><?= $e(($filtros['mes_nombre'] ?? '') . ' ' . ($filtros['anio'] ?? '')) ?> · <?= $e($meta['periodo_inicio'] ?? '') ?> al <?= $e($meta['periodo_fin'] ?? '') ?></p>
+        <p><?= $e($meta['periodo_label'] ?? (($filtros['mes_nombre'] ?? '') . ' ' . ($filtros['anio'] ?? ''))) ?> · <?= $e($meta['periodo_inicio'] ?? '') ?> al <?= $e($meta['periodo_fin'] ?? '') ?></p>
       </div>
     </header>
 
     <form class="mp-filter-form" method="get">
-      <div class="mp-filter-field">
-        <label for="anio">Año</label>
-        <select id="anio" name="anio">
-          <?php foreach ((array)($filtros['anios'] ?? []) as $anio): ?>
-            <option value="<?= (int)$anio ?>" <?= (int)$anio === (int)($filtros['anio'] ?? 0) ? 'selected' : '' ?>><?= (int)$anio ?></option>
-          <?php endforeach; ?>
-        </select>
+      <input type="hidden" id="periodo" name="periodo" value="<?= $e($periodMode) ?>">
+      <div class="mp-period-control">
+        <label>Periodo</label>
+        <div class="mp-period-switch" role="group" aria-label="Seleccionar periodo">
+          <button class="mp-period-btn <?= $periodMode === 'mes' ? 'is-active' : '' ?>" type="button" data-period-mode="mes">Mes</button>
+          <button class="mp-period-btn <?= $periodMode === 'semana' ? 'is-active' : '' ?>" type="button" data-period-mode="semana">Semana</button>
+          <button class="mp-period-btn <?= $periodMode === 'fecha' ? 'is-active' : '' ?>" type="button" data-period-mode="fecha">Fecha</button>
+        </div>
       </div>
-      <div class="mp-filter-field">
-        <label for="mes">Mes</label>
-        <select id="mes" name="mes">
-          <?php foreach ((array)($filtros['meses'] ?? []) as $monthNumber => $monthName): ?>
-            <option value="<?= (int)$monthNumber ?>" <?= (int)$monthNumber === (int)($filtros['mes'] ?? 0) ? 'selected' : '' ?>><?= $e($monthName) ?></option>
-          <?php endforeach; ?>
-        </select>
+      <div class="mp-period-values">
+        <label>Selección</label>
+        <div class="mp-period-panel <?= $periodMode === 'mes' ? 'is-active' : '' ?>" data-period-panel="mes">
+          <div class="mp-filter-field">
+            <label for="anio">Año</label>
+            <select id="anio" name="anio" data-period-input="mes">
+              <?php foreach ((array)($filtros['anios'] ?? []) as $anio): ?>
+                <option value="<?= (int)$anio ?>" <?= (int)$anio === (int)($filtros['anio'] ?? 0) ? 'selected' : '' ?>><?= (int)$anio ?></option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+          <div class="mp-filter-field">
+            <label for="mes">Mes</label>
+            <select id="mes" name="mes" data-period-input="mes">
+              <?php foreach ((array)($filtros['meses'] ?? []) as $monthNumber => $monthName): ?>
+                <option value="<?= (int)$monthNumber ?>" <?= (int)$monthNumber === (int)($filtros['mes'] ?? 0) ? 'selected' : '' ?>><?= $e($monthName) ?></option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+        </div>
+        <div class="mp-period-panel <?= $periodMode === 'semana' ? 'is-active' : '' ?>" data-period-panel="semana">
+          <div class="mp-filter-field"><label for="semana_inicio">Semana inicio</label><input id="semana_inicio" name="semana_inicio" type="week" value="<?= $e($filtros['semana_inicio'] ?? $filtros['semana'] ?? '') ?>" data-period-input="semana"></div>
+          <div class="mp-filter-field"><label for="semana_fin">Semana fin</label><input id="semana_fin" name="semana_fin" type="week" value="<?= $e($filtros['semana_fin'] ?? $filtros['semana'] ?? '') ?>" data-period-input="semana"></div>
+        </div>
+        <div class="mp-period-panel <?= $periodMode === 'fecha' ? 'is-active' : '' ?>" data-period-panel="fecha">
+          <a class="mp-today" href="<?= $e($todayUrl) ?>"><i class="fas fa-bullseye"></i> Hoy</a>
+          <div class="mp-filter-field"><label for="fecha_inicio">Inicio</label><input id="fecha_inicio" name="fecha_inicio" type="date" value="<?= $e($filtros['fecha_inicio'] ?? $filtros['fecha'] ?? '') ?>" data-period-input="fecha"></div>
+          <div class="mp-filter-field"><label for="fecha_fin">Fin</label><input id="fecha_fin" name="fecha_fin" type="date" value="<?= $e($filtros['fecha_fin'] ?? $filtros['fecha'] ?? '') ?>" data-period-input="fecha"></div>
+        </div>
       </div>
       <div class="mp-filter-field wide">
         <label for="mt_id">Grupo material</label>
@@ -1316,7 +1616,7 @@ if (is_numeric($producedTons)) {
         <article class="mp-kpi">
           <span>Materiales</span>
           <strong><?= $fmtInt($kpis['materiales'] ?? null) ?></strong>
-          <small>agrupados por familia</small>
+          <small>materiales y familias</small>
         </article>
         <article class="mp-kpi">
           <span>Precio total</span>
@@ -1327,7 +1627,7 @@ if (is_numeric($producedTons)) {
       
       <section class="mp-card mp-side-card">
         <div class="mp-section-title">
-          <h2>Consumo por grupo</h2>
+          <h2>Consumo por material</h2>
           <span>Participación de MP</span>
         </div>
         <div class="mp-pie-board">
@@ -1389,34 +1689,78 @@ if (is_numeric($producedTons)) {
       </section>
 
       <section class="mp-card mp-material-price-card">
-        <div class="mp-section-title">
-          <h2>Precio por grupo</h2>
-          <span>Valor de compra del periodo</span>
+        <div class="mp-section-title mp-provider-material-head">
+          <div>
+            <h2>Proveedor por material</h2>
+            <span><?= $periodMode !== 'mes' ? 'Comparación del periodo contra su última semana' : 'Comparación mensual contra la última semana del periodo' ?></span>
+          </div>
+          <span><?= $fmtInt(count($providerMaterialComparisonGroups)) ?> combinaciones</span>
         </div>
-        <div class="mp-table-wrap">
-          <table class="mp-table">
+
+        <div class="mp-cost-formula">
+          <i class="fas fa-calculator" aria-hidden="true"></i>
+          <span><strong>Fórmula del costo:</strong> Precio ajustado de cuero (MXN/kg) ÷ rendimiento (en decimal) · C/P o Con pelo + $1.50 · Depilado/a + $0.50</span>
+        </div>
+
+        <div class="mp-table-wrap mp-provider-material-table-wrap">
+          <table class="mp-table mp-provider-material-table mp-comparison-table">
             <thead>
               <tr>
-                <th>Grupo</th>
-                <th class="mp-num">Compra</th>
+                <th rowspan="2">Proveedor</th>
+                <th rowspan="2">Material</th>
+                <th colspan="3" class="mp-period-group mp-period-group-monthly"><?= $periodMode !== 'mes' ? 'Periodo' : 'Mensual' ?> <small><?= $e($meta['periodo_label'] ?? (ucfirst((string)($filtros['mes_nombre'] ?? '')) . ' ' . (string)($filtros['anio'] ?? ''))) ?></small></th>
+                <th colspan="4" class="mp-period-group mp-period-group-weekly">Semanal</th>
+              </tr>
+              <tr>
+                <th class="mp-num mp-period-start">Precio</th>
+                <th class="mp-num">Rendimiento</th>
+                <th class="mp-num">Costo / kg prod.</th>
+                <th class="mp-period-start">Semana</th>
                 <th class="mp-num">Precio</th>
-                <th class="mp-num">Maquila</th>
-                <th class="mp-num">Prom. total</th>
+                <th class="mp-num">Rendimiento</th>
+                <th class="mp-num">Costo / kg prod.</th>
               </tr>
             </thead>
             <tbody>
-              <?php foreach ($priceGroupRows as $row): ?>
-                <tr>
-                  <td>
-                    <strong><?= $e($row['grupo'] ?? '') ?></strong>
-                    <div class="mp-muted"><?= $fmtInt($row['proveedores'] ?? null) ?> prov. · <?= $fmtInt($row['compras'] ?? null) ?> compras</div>
-                  </td>
-                  <td class="mp-num"><?= $fmt($row['toneladas'] ?? null, 1) ?> t</td>
-                  <td class="mp-num"><?= $fmtMoney($row['precio_promedio'] ?? null) ?></td>
-                  <td class="mp-num"><?= $fmtMoney($row['precio_maquila'] ?? null) ?></td>
-                  <td class="mp-num mp-price-total"><?= $fmtMoney($row['precio_total'] ?? null) ?></td>
-                </tr>
-              <?php endforeach; ?>
+              <?php if ($providerMaterialComparisonGroups === []): ?>
+                <tr><td class="mp-empty" colspan="9">Sin información para el periodo seleccionado.</td></tr>
+              <?php else: ?>
+                <?php foreach ($providerMaterialComparisonGroups as $comparisonGroup): ?>
+                  <?php
+                    $identityRow = (array)($comparisonGroup['identidad'] ?? []);
+                    $monthlyRow = (array)($comparisonGroup['mensual'] ?? []);
+                    $weeklyRows = (array)($comparisonGroup['semanas'] ?? []);
+                    $monthlyYieldKey = $yieldStatusKey((string)($monthlyRow['grupo'] ?? ''), $monthlyRow['rendimiento'] ?? null);
+                  ?>
+                  <tr>
+                    <td><strong><?= $e($identityRow['proveedor'] ?? 'Sin proveedor') ?></strong></td>
+                    <td><strong><?= $e($identityRow['material'] ?? 'Sin material') ?></strong></td>
+                    <td class="mp-num mp-price-total mp-period-start"><?= $fmtMoney($monthlyRow['precio_proveedor'] ?? null) ?></td>
+                    <td class="mp-num mp-yield-cell mp-yield-<?= $e($monthlyYieldKey) ?>"><?= $fmtPct($monthlyRow['rendimiento'] ?? null, 2) ?></td>
+                    <td class="mp-num mp-cost-cell"><?= $fmtMoney($monthlyRow['costo_cuero_kg_produccion'] ?? null) ?></td>
+                    <td class="mp-week-label mp-period-start"><div class="mp-week-stack">
+                      <?php if ($weeklyRows === []): ?><span>Sin semana</span><?php else: ?>
+                        <?php foreach ($weeklyRows as $weeklyRow): ?><span><?= $e($weeklyRow['periodo_etiqueta'] ?? 'Sin semana') ?></span><?php endforeach; ?>
+                      <?php endif; ?>
+                    </div></td>
+                    <td class="mp-num mp-price-total"><div class="mp-week-stack">
+                      <?php if ($weeklyRows === []): ?><span>-</span><?php else: ?>
+                        <?php foreach ($weeklyRows as $weeklyRow): ?><span><?= $fmtMoney($weeklyRow['precio_proveedor'] ?? null) ?></span><?php endforeach; ?>
+                      <?php endif; ?>
+                    </div></td>
+                    <td class="mp-num"><div class="mp-week-stack">
+                      <?php if ($weeklyRows === []): ?><span>-</span><?php else: ?>
+                        <?php foreach ($weeklyRows as $weeklyRow): $weeklyYieldKey = $yieldStatusKey((string)($weeklyRow['grupo'] ?? ''), $weeklyRow['rendimiento'] ?? null); ?><span class="mp-yield-cell mp-yield-<?= $e($weeklyYieldKey) ?>"><?= $fmtPct($weeklyRow['rendimiento'] ?? null, 2) ?></span><?php endforeach; ?>
+                      <?php endif; ?>
+                    </div></td>
+                    <td class="mp-num mp-cost-cell"><div class="mp-week-stack">
+                      <?php if ($weeklyRows === []): ?><span>-</span><?php else: ?>
+                        <?php foreach ($weeklyRows as $weeklyRow): ?><span><?= $fmtMoney($weeklyRow['costo_cuero_kg_produccion'] ?? null) ?></span><?php endforeach; ?>
+                      <?php endif; ?>
+                    </div></td>
+                  </tr>
+                <?php endforeach; ?>
+              <?php endif; ?>
             </tbody>
           </table>
         </div>
@@ -1882,10 +2226,27 @@ if (is_numeric($producedTons)) {
     const filterForm = document.querySelector('.mp-filter-form');
     if (filterForm) {
       const submitButton = filterForm.querySelector('button[type="submit"]');
+      const periodInput = document.getElementById('periodo');
       let filterTimer = null;
+
+      filterForm.querySelectorAll('[data-period-mode]').forEach((button) => {
+        button.addEventListener('click', () => {
+          const mode = button.dataset.periodMode;
+          if (!mode || !periodInput) return;
+          periodInput.value = mode;
+          filterForm.querySelectorAll('[data-period-mode]').forEach((item) => item.classList.toggle('is-active', item === button));
+          filterForm.querySelectorAll('[data-period-panel]').forEach((panel) => panel.classList.toggle('is-active', panel.dataset.periodPanel === mode));
+          if (mode === 'mes') filterForm.requestSubmit();
+          if (mode === 'semana') document.getElementById('semana_inicio')?.focus();
+          if (mode === 'fecha') document.getElementById('fecha_inicio')?.focus();
+        });
+      });
 
       filterForm.querySelectorAll('select').forEach((select) => {
         select.addEventListener('change', () => {
+          if (select.hasAttribute('data-period-input') && periodInput) {
+            periodInput.value = select.dataset.periodInput || 'mes';
+          }
           window.clearTimeout(filterTimer);
           filterTimer = window.setTimeout(() => {
             filterForm.classList.add('is-applying');
@@ -1894,6 +2255,22 @@ if (is_numeric($producedTons)) {
             }
             filterForm.requestSubmit();
           }, 180);
+        });
+      });
+
+      filterForm.querySelectorAll('input[type="date"],input[type="week"]').forEach((input) => {
+        input.addEventListener('change', () => {
+          const mode = input.dataset.periodInput || 'fecha';
+          if (periodInput) periodInput.value = mode;
+          if (mode === 'semana') {
+            const start = document.getElementById('semana_inicio')?.value;
+            const end = document.getElementById('semana_fin')?.value;
+            if (start && end) filterForm.requestSubmit();
+            return;
+          }
+          const start = document.getElementById('fecha_inicio')?.value;
+          const end = document.getElementById('fecha_fin')?.value;
+          if (start && end) filterForm.requestSubmit();
         });
       });
     }
