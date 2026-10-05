@@ -213,7 +213,7 @@ $concentratorConfig = [
       ],
       'metricas_extra' => [
         'corriente_concentrador' => [
-          'label' => 'Corriente',
+          'label' => 'Corriente motor principal',
           'source' => 'sqlserver',
           'field' => 'CORRIENTE_CONCENTRADOR_3',
           'unit' => 'A',
@@ -262,10 +262,17 @@ $concentratorConfig = [
           'decimals' => 2,
         ],
         'temperatura_interna' => [
-          'label' => 'Temperatura interna',
+          'label' => 'Temperatura de vacío',
           'source' => 'sqlserver',
           'field' => 'TEMPERATURA_INTERNA_CONCENTRADOR_3',
           'unit' => 'C',
+          'decimals' => 2,
+        ],
+        'nivel_tanque_condensados' => [
+          'label' => 'Nivel tanque de condensados',
+          'source' => 'sqlserver',
+          'field' => 'NIVEL_TANQUE_CONDENSADOS_CONCENTRADOR_4',
+          'unit' => '%',
           'decimals' => 2,
         ],
         'flujo_salida' => [
@@ -295,7 +302,7 @@ $concentratorConfig = [
       ],
       'metricas_extra' => [
         'corriente_concentrador' => [
-          'label' => 'Corriente',
+          'label' => 'Corriente motor principal',
           'source' => 'sqlserver',
           'field' => 'CORRIENTE_CONCENTRADOR_4',
           'unit' => 'A',
@@ -344,7 +351,7 @@ $concentratorConfig = [
           'decimals' => 2,
         ],
         'temperatura_interna' => [
-          'label' => 'Temperatura interna',
+          'label' => 'Temperatura de vacío',
           'source' => 'sqlserver',
           'field' => 'TEMPERATURA_INTERNA_CONCENTRADOR_4',
           'unit' => 'C',

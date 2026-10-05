@@ -109,6 +109,8 @@ $camposBaseVotator = [
   'amperaje_reductor' => $crearCampoBase('Amp reductor', 'A'),
   'temperatura_tanque_caldo' => $crearCampoBase('Temp. tanque caldo', '°C'),
   'temperatura_entrada_tanque' => $crearCampoBase('Temp. entrada tanque', '°C'),
+  'flujo_entrada_glicol' => $crearCampoBase('Flujo entrada glicol'),
+  'temperatura_entrada_glicol' => $crearCampoBase('Temp. entrada glicol', '°C'),
 ];
 
 $crearSensorVotator = static function (string $campoKey, string $sqlField, array $extra = []) use ($crearSensor, $camposBaseVotator): array {
@@ -145,6 +147,12 @@ $camposSqlVotator = [
         'history' => false,
       ]),
       'temperatura_nariz' => $crearSensor('Temp. nariz', 'TEMPERATURA_NARIZ_VOTATOR_1', '°C', [
+        'history' => false,
+      ]),
+      'flujo_entrada_glicol' => $crearSensor('Flujo entrada glicol', 'FLUJO_ENTRADA_GLICOL_VOTATOR_1', '', [
+        'history' => false,
+      ]),
+      'temperatura_entrada_glicol' => $crearSensor('Temp. entrada glicol', 'TEMPERATURA_ENTRADA__GLICOL_VOTATOR_1', '°C', [
         'history' => false,
       ]),
       'amperaje_bomba' => $crearSensorVotator('amperaje_bomba', 'CORRIENTE_DE_EXTRUSOR_V1_SA'),

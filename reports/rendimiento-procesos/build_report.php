@@ -787,7 +787,9 @@ try {
     $_GET = $query;
     $config = require __DIR__ . '/../materia-prima/config.php';
     $config['proveedor_material_todas_semanas'] = true;
-    $config['proveedor_material_usar_consumo_proceso'] = true;
+    // En este reporte el comparativo proveedor/material parte de los kilos
+    // comprados del ticket, no de los kilos consumidos por el proceso.
+    $config['proveedor_material_usar_consumo_proceso'] = false;
     $appConfig = require __DIR__ . '/../../config/app.php';
     $dbConfig = require __DIR__ . '/../../config/database.php';
     return require __DIR__ . '/../materia-prima/build_report.php';

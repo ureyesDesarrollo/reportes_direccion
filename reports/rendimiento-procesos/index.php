@@ -104,15 +104,11 @@ $graficas = (array)$report['graficas'];
 $filas = (array)$report['filas'];
 $providerMaterialTable = (array)($report['tabla_proveedor_material'] ?? []);
 $providerMaterialGroups = (array)($providerMaterialTable['grupos'] ?? []);
-$inventoryEntryTable = (array)($report['tabla_inventario_entrada'] ?? []);
-$inventoryEntryRows = (array)($inventoryEntryTable['filas'] ?? []);
-$inventoryEntryCriteria = (array)($inventoryEntryTable['criterios'] ?? []);
 $meta = (array)$report['meta'];
 $version = (int)$report['version'];
 $capture = isset($_GET['capture']) && (string)$_GET['capture'] === '1';
 $showSummary = !array_key_exists('mostrar_resumen', $config) || !empty($config['mostrar_resumen']);
 $showCharts = !array_key_exists('mostrar_graficas', $config) || !empty($config['mostrar_graficas']);
-$showInventoryEntryTable = !empty($config['mostrar_tabla_inventario_entrada']);
 $periodMode = in_array((string)($filtros['periodo'] ?? 'mes'), ['mes', 'semana', 'fecha'], true)
   ? (string)$filtros['periodo']
   : 'mes';
@@ -235,7 +231,7 @@ $chartPalette = ['#0f766e', '#2563eb', '#7c3aed', '#d97706', '#dc2626', '#0891b2
     .rp-cost-band-gris { background: #94a3b8 !important; color: #fff !important; }
     .rp-provider-material-table td.rp-yield-cell,
     .rp-provider-material-table td.rp-cost-cell,
-    .rp-week-state-cell .rp-week-stack > span { font-size: .90rem; font-weight: 900; }
+    .rp-week-state-cell .rp-week-stack > span { font-size: .9rem; font-weight: 900; }
     .rp-week-state-cell { position: relative; padding: 0 !important; overflow: hidden; }
     .rp-week-state-cell .rp-week-stack {
       position: absolute;
@@ -270,15 +266,6 @@ $chartPalette = ['#0f766e', '#2563eb', '#7c3aed', '#d97706', '#dc2626', '#0891b2
     .rp-yield-rojo { background: #c94436 !important; color: #fff !important; }
     .rp-yield-gris { background: #94a3b8 !important; color: #fff !important; }
     .rp-table-panel { overflow: hidden; }
-    .rp-inventory-panel { margin-bottom: 14px; }
-    .rp-inventory-wrap { max-height: 430px; overflow: auto; }
-    .rp-inventory-table { width: 100%; min-width: 1450px; font-size: .7rem; }
-    .rp-inventory-table th, .rp-inventory-table td { padding: 8px 7px; }
-    .rp-inventory-table td:nth-child(5), .rp-inventory-table td:nth-child(6),
-    .rp-inventory-table td:last-child { text-align: left; }
-    .rp-inventory-table td:last-child { max-width: 250px; overflow: hidden; text-overflow: ellipsis; }
-    .rp-entry-status { display: inline-flex; align-items: center; gap: 6px; padding: 5px 8px; border-radius: 999px; font-size: .63rem; font-weight: 900; }
-    .rp-entry-status::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: currentColor; opacity: .82; }
     .rp-table-head { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 14px 16px 10px; border-bottom: 1px solid #e4ebf3; }
     .rp-count { background: #e7f3f1; color: #0f766e; border-radius: 999px; padding: 5px 10px; font-size: .72rem; font-weight: 800; }
     .rp-table-tools, .rp-lab-legend, .rp-lab-legend span { display: flex; align-items: center; }
@@ -492,7 +479,7 @@ $chartPalette = ['#0f766e', '#2563eb', '#7c3aed', '#d97706', '#dc2626', '#0891b2
         <div><h2>Proveedor por material</h2><p><?= (($filtros['material'] ?? 'all') !== 'all' || !empty($filtros['proveedor'])) ? 'Mes completo y todas sus semanas para el filtro seleccionado.' : 'Mes completo y semana seleccionada.' ?> Ordenado por costo/kg mensual.</p></div>
         <span class="rp-provider-material-count"><?= count($providerMaterialGroups) ?> combinaciones</span>
       </div>
-      <div class="rp-cost-formula"><strong>Base:</strong> kg consumidos en proceso · <strong>Precio compra:</strong> precio base · <strong>Precio granja:</strong> compra + $1.50 para C/P o Con pelo, + $0.50 para Depilado/a · <strong>Costo/kg:</strong> precio granja ÷ rendimiento</div>
+      <div class="rp-cost-formula"><strong>Precio compra:</strong> precio base · <strong>Precio granja:</strong> compra + $1.50 para C/P o Con pelo, + $0.50 para Depilado/a · <strong>Costo/kg:</strong> precio granja ÷ rendimiento</div>
       <?php if (!empty($providerMaterialTable['error'])): ?>
         <div class="rp-empty"><?= $e($providerMaterialTable['error']) ?></div>
       <?php elseif ($providerMaterialGroups === []): ?>
@@ -542,62 +529,6 @@ $chartPalette = ['#0f766e', '#2563eb', '#7c3aed', '#d97706', '#dc2626', '#0891b2
         </div>
       <?php endif; ?>
     </article>
-  </section>
-  <?php endif; ?>
-
-  <?php if ($showInventoryEntryTable): ?>
-  <section class="rp-panel rp-table-panel rp-inventory-panel">
-    <div class="rp-table-head">
-      <div><h2>Resultados de entrada</h2><p>Una fila por registro de inventario dentro del periodo seleccionado.</p></div>
-      <div class="rp-table-tools">
-        <div class="rp-lab-legend" aria-label="Semáforo LAB"><span><i class="rp-lab-dot verde"></i>Objetivo</span><span><i class="rp-lab-dot amarillo"></i>Alerta</span><span><i class="rp-lab-dot rojo"></i>Fuera</span><span><i class="rp-lab-dot gris"></i>Sin dato</span></div>
-        <span class="rp-count"><?= count($inventoryEntryRows) ?> registros</span>
-      </div>
-    </div>
-    <div class="rp-inventory-wrap">
-      <?php if (!empty($inventoryEntryTable['error'])): ?>
-        <div class="rp-empty"><?= $e($inventoryEntryTable['error']) ?></div>
-      <?php elseif ($inventoryEntryRows === []): ?>
-        <div class="rp-empty">No hay entradas de inventario para los filtros seleccionados.</div>
-      <?php else: ?>
-        <table class="rp-inventory-table">
-          <thead><tr>
-            <th>No.</th><th>Ticket</th><th>Fecha</th><th>Kilos</th><th>Tipo de material</th><th>Proveedor</th>
-            <th>Humedad<small><?= $e($inventoryEntryCriteria['humedad']['leyenda'] ?? '') ?></small></th>
-            <th>Conductividad<small>Objetivo según material · máx. 20</small></th>
-            <th>pH<small><?= $e($inventoryEntryCriteria['ph']['leyenda'] ?? '') ?></small></th>
-            <th>Sólidos<small><?= $e($inventoryEntryCriteria['solidos']['leyenda'] ?? '') ?></small></th>
-            <th>Extractibilidad<small><?= $e($inventoryEntryCriteria['extractibilidad']['leyenda'] ?? '') ?></small></th>
-            <th>Rendimiento<small><?= $e($inventoryEntryCriteria['rendimiento']['leyenda'] ?? '') ?></small></th>
-            <th>Semáforo</th><th>Observaciones</th>
-          </tr></thead>
-          <tbody>
-          <?php foreach ($inventoryEntryRows as $inventoryEntry):
-            $entryMetrics = (array)($inventoryEntry['metricas'] ?? []);
-            $entryStatus = (array)($inventoryEntry['semaforo'] ?? []);
-            $entryStatusKey = in_array((string)($entryStatus['key'] ?? ''), ['verde', 'amarillo', 'rojo'], true) ? (string)$entryStatus['key'] : 'gris';
-          ?>
-            <tr>
-              <td><?= (int)($inventoryEntry['numero'] ?? 0) ?></td>
-              <td><strong><?= (int)($inventoryEntry['ticket'] ?? 0) ?></strong></td>
-              <td><?= $e($inventoryEntry['fecha'] ?? '—') ?></td>
-              <td><strong><?= $fmt($inventoryEntry['kilos'] ?? null) ?></strong></td>
-              <td><?= $e($inventoryEntry['material'] ?? '—') ?></td>
-              <td><?= $e($inventoryEntry['proveedor'] ?? '—') ?></td>
-              <?= $labCell($entryMetrics['humedad']['value'] ?? null, (array)($entryMetrics['humedad']['status'] ?? [])) ?>
-              <?= $labCell($entryMetrics['conductividad']['value'] ?? null, (array)($entryMetrics['conductividad']['status'] ?? [])) ?>
-              <?= $labCell($entryMetrics['ph']['value'] ?? null, (array)($entryMetrics['ph']['status'] ?? [])) ?>
-              <?= $labCell($entryMetrics['solidos']['value'] ?? null, (array)($entryMetrics['solidos']['status'] ?? [])) ?>
-              <?= $labCell($entryMetrics['extractibilidad']['value'] ?? null, (array)($entryMetrics['extractibilidad']['status'] ?? [])) ?>
-              <?= $labCell($entryMetrics['rendimiento']['value'] ?? null, (array)($entryMetrics['rendimiento']['status'] ?? [])) ?>
-              <td><span class="rp-entry-status rp-state-<?= $e($entryStatusKey) ?>"><?= $e($entryStatus['label'] ?? 'Pendiente') ?></span></td>
-              <td title="<?= $e($inventoryEntry['observaciones'] ?? '') ?>"><?= $e(($inventoryEntry['observaciones'] ?? '') !== '' ? $inventoryEntry['observaciones'] : '—') ?></td>
-            </tr>
-          <?php endforeach; ?>
-          </tbody>
-        </table>
-      <?php endif; ?>
-    </div>
   </section>
   <?php endif; ?>
 
