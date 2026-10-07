@@ -395,7 +395,7 @@ d6 AS (
 ),
 mp_total AS (
   SELECT pm.pro_id,
-         SUM(i.inv_kilos) kg_mp_total,
+         SUM(i.inv_kg_totales) kg_mp_total,
          MAX(m.mat_id = 1) es_carnaza
   FROM procesos_materiales pm
   INNER JOIN scope s ON s.pro_id = pm.pro_id
@@ -457,23 +457,23 @@ rend_proceso AS (
 ),
 maq_proceso_ticket AS (
   SELECT vinc.pro_id, i.inv_no_ticket,
-         SUM(i.inv_kilos) kg_enviados,
-         SUM(i.inv_kg_totales) kg_recibidos,
-         (SUM(i.inv_kg_totales) / NULLIF(SUM(i.inv_kilos), 0) - 1) * 100 rendimiento_granja
+         SUM(i.inv_kg_totales) kg_enviados,
+         SUM(i.inv_kg_entrada_maq) kg_recibidos,
+         (SUM(i.inv_kg_entrada_maq) / NULLIF(SUM(i.inv_kg_totales), 0) - 1) * 100 rendimiento_granja
   FROM (
     SELECT DISTINCT pm.pro_id, pm.inv_id
     FROM procesos_materiales pm
     INNER JOIN scope s ON s.pro_id = pm.pro_id
   ) vinc
   INNER JOIN inventario i ON i.inv_id = vinc.inv_id
-  WHERE i.prv_recibe = 126 AND i.inv_enviado = 2
+  WHERE i.inv_enviado = 2
   GROUP BY vinc.pro_id, i.inv_no_ticket
 ),
 material_rows AS (
   SELECT s.pro_id, s.pt_id, s.pro_fe_carga, i.inv_no_ticket,
          {$materialFamilySql} material, m.mat_id,
          i.prv_id, prv.prv_nombre proveedor,
-         i.inv_kilos kg_mp,
+         i.inv_kg_totales kg_mp,
          i.inv_humedad, i.inv_extrac, i.inv_solidos, i.inv_ph, i.inv_rendimiento, i.inv_riesgo
   FROM scope s
   INNER JOIN procesos_materiales pm ON pm.pro_id = s.pro_id
