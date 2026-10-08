@@ -399,6 +399,22 @@ $configuracionSecadores = [
   'temperaturas_limite' => 0,
   'tuneles_placeholder' => [],
   'metricas' => $camposSecadores,
+  'metricas_overlay' => [
+    'tunel_1' => [
+      'humedad_suministro_aire' => [
+        'group' => 'Humedades',
+        'label' => 'Aire suministro',
+        'source' => 'sqlserver',
+        'field' => 'HUMEDAD_ENTRADA_SECADOR_1',
+        'unit' => '',
+        'available' => true,
+        'hidden' => false,
+        'empty_label' => 'Sin dato',
+        'semaforo' => [],
+        'leyenda' => 'Lectura actual | Rango pendiente de definir',
+      ],
+    ],
+  ],
   'votator_campos' => array_merge(array_keys($camposBaseVotator), ['temperatura_nariz', 'tiempo_fuera', 'corriente_votator']),
   'votators_placeholder' => [
     'votator_5' => 'Votator 5',

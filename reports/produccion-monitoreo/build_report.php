@@ -9,6 +9,7 @@ $secadoresConfig = (static function (): array {
   return require __DIR__ . '/../secadores/config.php';
 })();
 $secadoresConfig = array_replace_recursive($secadoresConfig, [
+  'metricas_por_tunel' => (array)($config['secadores']['metricas_overlay'] ?? []),
   'votators_por_tunel' => (array)($config['secadores']['votator_campos_overlay'] ?? []),
 ]);
 $secadoresReport = (static function () use ($secadoresConfig): array {

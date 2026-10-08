@@ -146,7 +146,7 @@ $pairBucketSql = $periodMode === 'fecha'
   : ($periodMode === 'semana'
     ? 'DATE_SUB(op_dia, INTERVAL WEEKDAY(op_dia) DAY)'
     : "DATE_FORMAT(op_dia, '%Y-%m-01')");
-$pairSelectionSql = "pair_periods AS (
+$pairSelectionSql = $periodMode === 'mes' ? "pair_periods AS (
     SELECT pro_id, pro_id_2, {$pairBucketSql} periodo,
            COUNT(*) tarimas, SUM(tar_kilos) kilos
     FROM eligible_tarimas
@@ -162,7 +162,14 @@ $pairSelectionSql = "pair_periods AS (
   )
   SELECT pro_id, pro_id_2, periodo
   FROM ranked_pairs
-  WHERE rn = 1 AND periodo >= ? AND periodo < ?";
+  WHERE rn = 1 AND periodo >= ? AND periodo < ?" : "selected_pairs AS (
+    SELECT pro_id, pro_id_2, MIN(op_dia) periodo
+    FROM eligible_tarimas
+    WHERE op_dia >= ? AND op_dia < ?
+    GROUP BY pro_id, pro_id_2
+  )
+  SELECT pro_id, pro_id_2, periodo
+  FROM selected_pairs";
 
 if ($includeAllProcesses) {
   $selectedPairsStmt = $pdo->prepare("
@@ -259,6 +266,10 @@ $scopeProcessSql = $scopeIds === []
       static fn(int $processId): string => 'SELECT ' . $processId . ' pro_id',
       array_keys($scopeIds)
     ));
+$tarGroupPeriodSql = $periodMode === 'mes'
+  ? ''
+  : " AND {$operationDateSql} >= '" . $start->format('Y-m-d') . "'"
+    . " AND {$operationDateSql} < '" . $endExclusive->format('Y-m-d') . "'";
 
 // Los catálogos de filtro no dependen del periodo ni se limitan entre sí.
 // Se incluyen todas las opciones que realmente han sido usadas en procesos.
@@ -395,7 +406,10 @@ d6 AS (
 ),
 mp_total AS (
   SELECT pm.pro_id,
-         SUM(i.inv_kg_totales) kg_mp_total,
+         SUM(CASE
+           WHEN i.inv_enviado = 2 THEN i.inv_kilos
+           ELSE i.inv_kg_totales
+         END) kg_mp_total,
          MAX(m.mat_id = 1) es_carnaza
   FROM procesos_materiales pm
   INNER JOIN scope s ON s.pro_id = pm.pro_id
@@ -415,6 +429,7 @@ tar_grupo AS (
      ELSE 0
    END
   WHERE t.tar_count_etiquetado > 0
+    {$tarGroupPeriodSql}
   GROUP BY t.pro_id
 ),
 rend_grupo AS (
@@ -457,9 +472,9 @@ rend_proceso AS (
 ),
 maq_proceso_ticket AS (
   SELECT vinc.pro_id, i.inv_no_ticket,
-         SUM(i.inv_kg_totales) kg_enviados,
-         SUM(i.inv_kg_entrada_maq) kg_recibidos,
-         (SUM(i.inv_kg_entrada_maq) / NULLIF(SUM(i.inv_kg_totales), 0) - 1) * 100 rendimiento_granja
+         SUM(COALESCE(i.inv_kilos, 0)) kg_enviados,
+         SUM(COALESCE(i.inv_kg_totales, 0)) kg_recibidos,
+         (SUM(COALESCE(i.inv_kg_totales, 0)) / NULLIF(SUM(COALESCE(i.inv_kilos, 0)), 0) - 1) * 100 rendimiento_granja
   FROM (
     SELECT DISTINCT pm.pro_id, pm.inv_id
     FROM procesos_materiales pm
@@ -473,7 +488,11 @@ material_rows AS (
   SELECT s.pro_id, s.pt_id, s.pro_fe_carga, i.inv_no_ticket,
          {$materialFamilySql} material, m.mat_id,
          i.prv_id, prv.prv_nombre proveedor,
-         i.inv_kg_totales kg_mp,
+         i.inv_kilos kg_mp,
+         CASE
+           WHEN i.inv_enviado = 2 THEN i.inv_kilos
+           ELSE i.inv_kg_totales
+         END kg_mp_rendimiento,
          i.inv_humedad, i.inv_extrac, i.inv_solidos, i.inv_ph, i.inv_rendimiento, i.inv_riesgo
   FROM scope s
   INNER JOIN procesos_materiales pm ON pm.pro_id = s.pro_id
@@ -488,6 +507,7 @@ SELECT
   MIN(mr.prv_id) prv_id,
   GROUP_CONCAT(DISTINCT mr.proveedor ORDER BY mr.proveedor SEPARATOR ' / ') proveedor,
   SUM(mr.kg_mp) kg_mp_filtrada,
+  SUM(mr.kg_mp_rendimiento) kg_mp_rendimiento_filtrada,
   AVG(mr.inv_humedad) inv_humedad, AVG(mr.inv_extrac) inv_extractibilidad,
   AVG(mr.inv_solidos) inv_solidos, AVG(mr.inv_ph) inv_ph,
   AVG(mr.inv_rendimiento) inv_rendimiento,
@@ -495,7 +515,7 @@ SELECT
   SUM(mr.inv_riesgo LIKE 'ALTO%') riesgo_alto,
   eq.ep_descripcion equipo_inicial,
   rp.grupo_pro_id, rp.tarimas, rp.grupo_kg_producto_terminado, rp.kg_mp_grupo,
-  rp.kg_producto_proceso * (SUM(mr.kg_mp) / NULLIF(rp.kg_mp_proceso, 0)) kg_producto_terminado,
+  rp.kg_producto_proceso * (SUM(mr.kg_mp_rendimiento) / NULLIF(rp.kg_mp_proceso, 0)) kg_producto_terminado,
   rp.rendimiento_pt, rp.bloom_promedio, rp.viscosidad_promedio,
   el.extractibilidad extractibilidad_enzima_2b,
   enz.pfg2_enzima enzima_kg, enz.pfg2_hr_totales horas_enzima,
@@ -587,6 +607,7 @@ $materialChart = [];
 $providerChart = [];
 $riskHigh = 0;
 $selectedMpKg = 0.0;
+$selectedMpRendimientoKg = 0.0;
 
 foreach ($rows as &$row) {
   $processId = (int)$row['pro_id'];
@@ -595,7 +616,7 @@ foreach ($rows as &$row) {
   $row['prv_id'] = (int)$row['prv_id'];
   $row['riesgo_alto'] = (int)$row['riesgo_alto'];
   foreach ([
-    'kg_mp_filtrada', 'inv_humedad', 'inv_extractibilidad', 'inv_solidos', 'inv_ph',
+    'kg_mp_filtrada', 'kg_mp_rendimiento_filtrada', 'inv_humedad', 'inv_extractibilidad', 'inv_solidos', 'inv_ph',
     'inv_rendimiento', 'kg_producto_terminado', 'grupo_kg_producto_terminado', 'kg_mp_grupo', 'rendimiento_pt',
     'bloom_promedio', 'viscosidad_promedio', 'extractibilidad_enzima_2b', 'enzima_kg',
     'horas_enzima', 'acido_litros', 'acido_normalidad', 'cocimiento_ph', 'cocimiento_ce',
@@ -651,6 +672,7 @@ foreach ($rows as &$row) {
 
   $processes[$processId] = true;
   $selectedMpKg += (float)$row['kg_mp_filtrada'];
+  $selectedMpRendimientoKg += (float)$row['kg_mp_rendimiento_filtrada'];
   $riskHigh += (int)$row['riesgo_alto'];
 
   if ($groupId > 0 && !isset($productionGroups[$groupId])) {
@@ -664,7 +686,7 @@ foreach ($rows as &$row) {
   }
 
   $material = (string)$row['material'];
-  $materialChart[$material] = ($materialChart[$material] ?? 0) + (float)$row['kg_mp_filtrada'];
+  $materialChart[$material] = ($materialChart[$material] ?? 0) + (float)$row['kg_mp_rendimiento_filtrada'];
 
   $providerId = (int)$row['prv_id'];
   if (!isset($providerChart[$providerId])) {
@@ -674,7 +696,7 @@ foreach ($rows as &$row) {
       'kg_pt' => 0.0,
     ];
   }
-  $providerChart[$providerId]['kg'] += (float)$row['kg_mp_filtrada'];
+  $providerChart[$providerId]['kg'] += (float)$row['kg_mp_rendimiento_filtrada'];
   $providerChart[$providerId]['kg_pt'] += (float)($row['kg_producto_terminado'] ?? 0);
 }
 unset($row);
@@ -710,11 +732,13 @@ if ($hasParticipationFilter) {
     static fn(array $row): float => (float)($row['kg_producto_terminado'] ?? 0),
     $rows
   ));
-  $totalGroupMp = $selectedMpKg;
+  $totalGroupMp = $selectedMpRendimientoKg;
 }
+$closedPtForYield = $totalPt;
 
 $barreduraTarimas = (int)($barredura['tarimas'] ?? 0);
 $barreduraKg = (float)($barredura['kg_producto_terminado'] ?? 0);
+$yieldPt = $closedPtForYield + ($hasParticipationFilter ? 0.0 : $barreduraKg);
 $barreduraBloom = is_numeric($barredura['bloom_promedio'] ?? null) ? (float)$barredura['bloom_promedio'] : null;
 $barreduraViscosidad = is_numeric($barredura['viscosidad_promedio'] ?? null) ? (float)$barredura['viscosidad_promedio'] : null;
 if (!$hasParticipationFilter) {
@@ -1016,9 +1040,10 @@ return [
     'costo_kg_mensual' => $monthlyCostPerKg,
     'costo_kg_semanal' => $weeklyCostPerKg,
     'kg_mp_filtrada' => $selectedMpKg,
+    'kg_mp_rendimiento' => $totalGroupMp,
     'kg_producto_terminado' => $displayPt,
-    'kg_producto_rendimiento' => $totalPt,
-    'rendimiento_pt' => $totalGroupMp > 0 ? ($totalPt / $totalGroupMp) * 100 : null,
+    'kg_producto_rendimiento' => $yieldPt,
+    'rendimiento_pt' => $totalGroupMp > 0 ? round(($yieldPt / $totalGroupMp) * 100, 2) : null,
     'tarimas' => $displayTarimas,
     'bloom' => $displayBloom,
     'viscosidad' => $displayViscosidad,
@@ -1058,6 +1083,10 @@ return [
     'hora_corte' => $horaCorte,
     'zona_horaria' => (string)($config['timezone_label'] ?? 'UTC-6'),
     'intervalo_actualizacion_ms' => (int)($config['intervalo_actualizacion_ms'] ?? 900000),
+    'rendimiento_pt_todas_etiquetadas' => false,
+    'rendimiento_pt_solo_procesos_cerrados' => true,
+    'rendimiento_mp_solo_procesos_cerrados' => true,
+    'rendimiento_incluye_barredura' => true,
   ],
   'version' => time(),
 ];

@@ -65,6 +65,15 @@ return [
     'tarimas_amarillo_min_diario' => 21.0,
     'objetivo_turno_tarimas' => 12.0,
     'tarimas_amarillo_min_turno' => 11.0,
+    'rendimiento_global' => [
+      'modo' => 'bandas',
+      'leyenda' => 'Verde >17 · Amarillo 16–17 · Rojo <16',
+      'bandas' => [
+        ['max' => 15.999999, 'estado' => 'rojo', 'leyenda' => '<16'],
+        ['min' => 16, 'max' => 17, 'estado' => 'amarillo', 'leyenda' => '16–17'],
+        ['min' => 17.000001, 'estado' => 'verde', 'leyenda' => '>17'],
+      ],
+    ],
     'kg_hora' => [
       'modo' => 'bandas',
       'bandas' => [

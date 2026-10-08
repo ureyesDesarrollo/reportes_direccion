@@ -293,7 +293,8 @@ if ($americanMaterialIds !== []) {
 
   $purchaseStmt = $pdo->prepare("
     SELECT MIN(i.inv_id) inv_id, MAX(i.inv_fecha) inv_fecha, i.inv_no_ticket,
-           SUM(COALESCE(i.inv_kg_totales, 0)) inv_kg_totales, MAX(i.inv_enviado) inv_enviado,
+           SUM(COALESCE(i.inv_kilos, 0)) inv_kilos_compra,
+           MAX(i.inv_enviado) inv_enviado,
            AVG(i.inv_humedad_origen) inv_humedad_origen,
            GROUP_CONCAT(DISTINCT i.inv_observaciones ORDER BY i.inv_id SEPARATOR ' / ') inv_observaciones,
            MIN(i.mat_id) mat_id,
@@ -316,7 +317,8 @@ if ($americanMaterialIds !== []) {
   if ($tickets !== []) {
     $deliveryStmt = $pdo->prepare("
       SELECT i.inv_id, i.inv_no_ticket, i.inv_fecha, i.inv_fe_recibe,
-             i.inv_kg_entrada_maq, i.inv_humedad, i.inv_ce, i.inv_ph,
+             i.inv_kg_entrada_maq, i.inv_desc_ag, i.inv_kg_totales,
+             i.inv_humedad, i.inv_ce, i.inv_ph,
              i.inv_solidos, i.inv_extrac, i.inv_rendimiento
       FROM inventario i
       WHERE i.inv_no_ticket IN (" . implode(',', array_fill(0, count($tickets), '?')) . ")
@@ -353,10 +355,10 @@ if ($americanMaterialIds !== []) {
     $deliveryKilos = 0.0;
     $deliveryDetails = [];
     foreach ($deliveryRows as $delivery) {
-      $deliveryKilos += is_numeric($delivery['inv_kg_entrada_maq'] ?? null) ? (float)$delivery['inv_kg_entrada_maq'] : 0.0;
+      $deliveryKilos += is_numeric($delivery['inv_kg_totales'] ?? null) ? (float)$delivery['inv_kg_totales'] : 0.0;
       $deliveryDetails[] = [
         'fecha' => (new DateTimeImmutable((string)$delivery['inv_fe_recibe'], $tz))->format('d/m/Y H:i'),
-        'kilos' => $delivery['inv_kg_entrada_maq'],
+        'kilos' => $delivery['inv_kg_totales'],
         'humedad' => $delivery['inv_humedad'],
         'conductividad' => $delivery['inv_ce'],
         'ph' => $delivery['inv_ph'],
@@ -365,9 +367,10 @@ if ($americanMaterialIds !== []) {
         'rendimiento' => $delivery['inv_rendimiento'],
       ];
     }
-    // Total comprado: suma de inv_kg_totales de los registros con inv_fecha, agrupados por ticket.
+    // Compra: suma de inv_kilos. Recepción neta: inv_kg_totales, que ya descuenta
+    // inv_desc_ag de inv_kg_entrada_maq, agrupado por ticket.
     // inv_fe_recibe sólo determina qué recepciones de Pelambre entran en el periodo.
-    $purchaseKilos = (float)$purchase['inv_kg_totales'];
+    $purchaseKilos = (float)$purchase['inv_kilos_compra'];
     $averageValues = [
       'humedad' => $average($deliveryRows, 'inv_humedad'),
       'conductividad' => $average($deliveryRows, 'inv_ce'),

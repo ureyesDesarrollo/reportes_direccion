@@ -16,6 +16,7 @@ return [
     'rojo_mayor_que' => 50.0,
     'leyenda' => 'Verde < $43 · Amarillo $43–$50 · Rojo > $50',
   ],
+  'semaforo_rendimiento' => (array)($catalog['produccion']['rendimiento_global'] ?? []),
   'parametros_lab' => (array)($catalog['materia_prima']['inventario'] ?? []),
   'parametros_proceso' => (array)($catalog['materia_prima']['rendimiento_procesos'] ?? []),
 ];

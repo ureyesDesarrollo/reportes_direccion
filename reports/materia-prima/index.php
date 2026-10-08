@@ -1601,7 +1601,7 @@ if (is_numeric($producedTons)) {
         <article class="mp-kpi <?= $e($rendClass) ?>">
           <span>Rendimiento</span>
           <strong><?= $fmtPct($kpis['rendimiento'] ?? null, 2) ?></strong>
-          <small>base <?= $fmt($kpis['toneladas_producidas_rendimiento'] ?? null, 1) ?> t cerradas + barredura</small>
+          <small>PT cerrado + barredura / MP cerrada</small>
         </article>
         <article class="mp-kpi">
           <span>Procesos</span>

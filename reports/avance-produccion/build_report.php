@@ -151,8 +151,8 @@ if ($selectedWeek !== 'all') {
       ->setISODate((int)$weekMatches[1], (int)$weekMatches[2], 1)
       ->setTime(0, 0, 0);
     $weekEnd = $weekStart->modify('+7 days');
-    $periodStart = $weekStart > $monthStart ? $weekStart : $monthStart;
-    $periodEnd = $weekEnd < $monthEnd ? $weekEnd : $monthEnd;
+    $periodStart = $weekStart;
+    $periodEnd = $weekEnd;
   }
 }
 
@@ -243,7 +243,10 @@ $processStmt = $pdo->prepare("
   LEFT JOIN (
     SELECT
       pm.pro_id,
-      SUM(i.inv_kilos) AS mp_kilos
+      SUM(CASE
+        WHEN i.inv_enviado = 2 THEN i.inv_kilos
+        ELSE i.inv_kg_totales
+      END) AS mp_kilos
     FROM procesos_materiales pm
     INNER JOIN inventario i ON i.inv_id = pm.inv_id
     GROUP BY pm.pro_id
@@ -251,7 +254,10 @@ $processStmt = $pdo->prepare("
   LEFT JOIN (
     SELECT
       pm.pro_id,
-      SUM(i.inv_kilos) AS mp_kilos
+      SUM(CASE
+        WHEN i.inv_enviado = 2 THEN i.inv_kilos
+        ELSE i.inv_kg_totales
+      END) AS mp_kilos
     FROM procesos_materiales pm
     INNER JOIN inventario i ON i.inv_id = pm.inv_id
     GROUP BY pm.pro_id
@@ -405,14 +411,19 @@ foreach ($processDataRows as $row) {
   $proId2 = isset($row['pro_id_2']) ? (int)$row['pro_id_2'] : null;
   $pairKey = $processPairKey($proId1, $proId2);
   $pairProduction = (array)($productionByPair[$pairKey] ?? []);
-  if (($pairProduction['periodo_dominante'] ?? null) !== $selectedYieldPeriod) {
-    continue;
+  if ($selectedWeek === 'all') {
+    if (($pairProduction['periodo_dominante'] ?? null) !== $selectedYieldPeriod) {
+      continue;
+    }
+    $kilos = (float)($pairProduction['kilos'] ?? 0);
+    $tarimas = (int)($pairProduction['tarimas'] ?? 0);
+    $tarimasFinos = (int)($pairProduction['tarimas_finos'] ?? 0);
+  } else {
+    $kilos = (float)($row['kilos'] ?? 0);
+    $tarimas = (int)($row['tarimas'] ?? 0);
+    $tarimasFinos = (int)($row['tarimas_finos'] ?? 0);
   }
-
-  $kilos = (float)($pairProduction['kilos'] ?? 0);
   $toneladas = $kilos / 1000;
-  $tarimas = (int)($pairProduction['tarimas'] ?? 0);
-  $tarimasFinos = (int)($pairProduction['tarimas_finos'] ?? 0);
   $mp1 = is_numeric($row['mp_1'] ?? null) ? (float)$row['mp_1'] : 0.0;
   $hasSecondProcess = $proId2 !== null && $proId2 > 0 && $proId2 !== $proId1;
   $mp2 = $hasSecondProcess && is_numeric($row['mp_2'] ?? null) ? (float)$row['mp_2'] : 0.0;
@@ -454,7 +465,7 @@ $totalToneladasCerradas = array_sum(array_map(
 $porcentajeFinos = $totalTarimas > 0 ? ($totalTarimasFinos / $totalTarimas) * 100 : 0.0;
 $totalRendimientoKilos = $totalProcessKilos + $totalBarreduraKilos;
 $rendimientoProcesos = $totalMpKilos > 0 ? ($totalProcessKilos / $totalMpKilos) * 100 : 0.0;
-$rendimientoGlobal = $totalMpKilos > 0 ? ($totalRendimientoKilos / $totalMpKilos) * 100 : 0.0;
+$rendimientoGlobal = $totalMpKilos > 0 ? round(($totalRendimientoKilos / $totalMpKilos) * 100, 2) : 0.0;
 
 $daysInRange = max(1, (int)$periodStart->diff($periodEnd)->days);
 $objetivoTarimasPeriodo = $objetivoDiarioTarimas * $daysInRange;
@@ -564,6 +575,10 @@ return [
     'rendimiento_procesos_solo_cerrados' => true,
     'rendimiento_asignado_periodo_mayor_tarimas' => true,
     'rendimiento_general_incluye_barredura' => true,
+    'rendimiento_pt_todas_etiquetadas' => false,
+    'rendimiento_pt_solo_procesos_cerrados' => true,
+    'rendimiento_mp_solo_procesos_cerrados' => true,
+    'rendimiento_incluye_barredura' => true,
   ],
   'version' => max(
     @filemtime(__FILE__) ?: time(),

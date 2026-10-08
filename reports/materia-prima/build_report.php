@@ -135,6 +135,8 @@ $periodLabel = $periodMode === 'fecha'
       : 'Semanas ' . $periodStart->format('W') . ' a ' . $selectedWeekEnd->format('W')) . ' · ' . $periodStart->format('d/m/Y') . ' al ' . $periodEnd->modify('-1 day')->format('d/m/Y')
     : ucfirst($monthNames[$selectedMonth] ?? (string)$selectedMonth) . ' ' . $selectedYear);
 $operationDateSql = "DATE(CASE WHEN TIME(t.tar_fecha) < '{$horaCorte}' THEN DATE_SUB(t.tar_fecha, INTERVAL 1 DAY) ELSE t.tar_fecha END)";
+$yieldInputKgSql = "CASE WHEN i.inv_enviado = 2 THEN i.inv_kilos ELSE i.inv_kg_totales END";
+$yieldTotalInputKgSql = "CASE WHEN i_total.inv_enviado = 2 THEN i_total.inv_kilos ELSE i_total.inv_kg_totales END";
 $primaryProcessIsCarnazaSql = "EXISTS (
   SELECT 1
   FROM procesos_materiales pm_carnaza_primary
@@ -412,7 +414,7 @@ $summaryStmt = $pdo->prepare("
     COUNT(*) AS partidas,
     COUNT(DISTINCT i.prv_id) AS proveedores,
     COUNT(DISTINCT m.mat_id) AS materiales,
-    SUM(i.inv_kilos) AS kilos_consumidos
+    SUM({$yieldInputKgSql}) AS kilos_consumidos
   {$consumptionBaseSql}
 ");
 $summaryStmt->execute($baseParams);
@@ -500,7 +502,7 @@ $dailyStmt = $pdo->prepare("
     SELECT
       pm.pro_id,
       {$materialFamilySql} AS grupo,
-      SUM(i.inv_kilos) AS kilos_consumidos
+      SUM({$yieldInputKgSql}) AS kilos_consumidos
     FROM procesos_materiales pm
     INNER JOIN ({$periodProcessSql}) period_processes ON period_processes.pro_id = pm.pro_id
     INNER JOIN inventario i ON i.inv_id = pm.inv_id
@@ -609,7 +611,7 @@ for ($cursor = $periodStart; $cursor < $periodEnd; $cursor = $cursor->modify('+1
 $materialGroupStmt = $pdo->prepare("
   SELECT
     {$materialFamilySql} AS grupo,
-    SUM(i.inv_kilos) AS kilos,
+    SUM({$yieldInputKgSql}) AS kilos,
     SUM(CASE WHEN i.inv_costo > 0 THEN i.inv_costo * i.inv_kilos ELSE 0 END)
       / NULLIF(SUM(CASE WHEN i.inv_costo > 0 THEN i.inv_kilos ELSE 0 END), 0) AS precio_promedio,
     SUM(CASE WHEN i.inv_costo_mql > 0 THEN i.inv_costo_mql * i.inv_kilos ELSE 0 END)
@@ -688,15 +690,15 @@ $materialYieldStmt = $pdo->prepare("
       {$materialFamilySql} AS grupo,
       pm.pro_id,
       m.mat_id,
-      SUM(i.inv_kilos) AS kilos_consumidos,
-      COALESCE(po.kilos_producidos, 0) * (SUM(i.inv_kilos) / NULLIF(pt.kilos_proceso, 0)) AS kilos_producidos_asignados
+      SUM({$yieldInputKgSql}) AS kilos_consumidos,
+      COALESCE(po.kilos_producidos, 0) * (SUM({$yieldInputKgSql}) / NULLIF(pt.kilos_proceso, 0)) AS kilos_producidos_asignados
     FROM procesos_materiales pm
     INNER JOIN ({$periodProcessSql}) period_processes ON period_processes.pro_id = pm.pro_id
     INNER JOIN inventario i ON i.inv_id = pm.inv_id
     INNER JOIN materiales m ON m.mat_id = pm.mat_id
     LEFT JOIN materiales_tipo mt ON mt.mt_id = m.mt_id
     LEFT JOIN (
-      SELECT pm_total.pro_id, SUM(i_total.inv_kilos) AS kilos_proceso
+      SELECT pm_total.pro_id, SUM({$yieldTotalInputKgSql}) AS kilos_proceso
       FROM procesos_materiales pm_total
       INNER JOIN inventario i_total ON i_total.inv_id = pm_total.inv_id
       GROUP BY pm_total.pro_id
@@ -734,7 +736,7 @@ $materialStmt = $pdo->prepare("
     m.mat_id,
     m.mat_nombre,
     {$materialFamilySql} AS grupo,
-    SUM(i.inv_kilos) AS kilos,
+    SUM({$yieldInputKgSql}) AS kilos,
     SUM(CASE WHEN i.inv_costo > 0 THEN i.inv_costo * i.inv_kilos ELSE 0 END)
       / NULLIF(SUM(CASE WHEN i.inv_costo > 0 THEN i.inv_kilos ELSE 0 END), 0) AS precio_promedio,
     SUM(CASE WHEN i.inv_costo_mql > 0 THEN i.inv_costo_mql * i.inv_kilos ELSE 0 END)
@@ -780,8 +782,8 @@ $providerStmt = $pdo->prepare("
       COALESCE(NULLIF(p.prv_nom_comercial, ''), NULLIF(p.prv_nombre, ''), 'Sin proveedor') AS proveedor,
       pm.pro_id,
       m.mat_id,
-      SUM(i.inv_kilos) AS kilos_consumidos,
-      COALESCE(po.kilos_producidos, 0) * (SUM(i.inv_kilos) / NULLIF(pt.kilos_proceso, 0)) AS kilos_producidos_asignados
+      SUM({$yieldInputKgSql}) AS kilos_consumidos,
+      COALESCE(po.kilos_producidos, 0) * (SUM({$yieldInputKgSql}) / NULLIF(pt.kilos_proceso, 0)) AS kilos_producidos_asignados
     FROM procesos_materiales pm
     INNER JOIN ({$periodProcessSql}) period_processes ON period_processes.pro_id = pm.pro_id
     INNER JOIN inventario i ON i.inv_id = pm.inv_id
@@ -789,7 +791,7 @@ $providerStmt = $pdo->prepare("
     LEFT JOIN materiales_tipo mt ON mt.mt_id = m.mt_id
     LEFT JOIN proveedores p ON p.prv_id = i.prv_id
     LEFT JOIN (
-      SELECT pm_total.pro_id, SUM(i_total.inv_kilos) AS kilos_proceso
+      SELECT pm_total.pro_id, SUM({$yieldTotalInputKgSql}) AS kilos_proceso
       FROM procesos_materiales pm_total
       INNER JOIN inventario i_total ON i_total.inv_id = pm_total.inv_id
       GROUP BY pm_total.pro_id
@@ -840,8 +842,8 @@ $providerMaterialStmt = $pdo->prepare("
       {$materialFamilySql} AS grupo,
       pm.pro_id,
       m.mat_id,
-      SUM(i.inv_kilos) AS kilos_consumidos,
-      COALESCE(po.kilos_producidos, 0) * (SUM(i.inv_kilos) / NULLIF(pt.kilos_proceso, 0)) AS kilos_producidos_asignados
+      SUM({$yieldInputKgSql}) AS kilos_consumidos,
+      COALESCE(po.kilos_producidos, 0) * (SUM({$yieldInputKgSql}) / NULLIF(pt.kilos_proceso, 0)) AS kilos_producidos_asignados
     FROM procesos_materiales pm
     INNER JOIN ({$periodProcessSql}) period_processes ON period_processes.pro_id = pm.pro_id
     INNER JOIN inventario i ON i.inv_id = pm.inv_id
@@ -849,7 +851,7 @@ $providerMaterialStmt = $pdo->prepare("
     LEFT JOIN materiales_tipo mt ON mt.mt_id = m.mt_id
     LEFT JOIN proveedores p ON p.prv_id = i.prv_id
     LEFT JOIN (
-      SELECT pm_total.pro_id, SUM(i_total.inv_kilos) AS kilos_proceso
+      SELECT pm_total.pro_id, SUM({$yieldTotalInputKgSql}) AS kilos_proceso
       FROM procesos_materiales pm_total
       INNER JOIN inventario i_total ON i_total.inv_id = pm_total.inv_id
       GROUP BY pm_total.pro_id
@@ -893,7 +895,7 @@ $providerMaterials = array_map(static function (array $row): array {
  */
 $providerMaterialKgSql = !empty($config['proveedor_material_usar_consumo_proceso'])
   ? 'COALESCE(pm.pma_kg, 0)'
-  : 'COALESCE(i.inv_kilos, 0)';
+  : 'COALESCE(' . $yieldInputKgSql . ', 0)';
 $providerMaterialInputStmt = $pdo->prepare("
   SELECT
     pm.pro_id,
@@ -1206,9 +1208,9 @@ $enzymeProcesses = array_map(static function (array $row): array {
 $kilosConsumidos = (float)($summary['kilos_consumidos'] ?? 0);
 $kilosProcesosCerrados = (float)($production['kilos_producidos'] ?? 0);
 $kilosBarredura = (float)($barredura['kilos'] ?? 0);
-$kilosProduccionRendimiento = $kilosProcesosCerrados + $kilosBarredura;
 $kilosProduccionPeriodo = (float)($periodProduction['kilos'] ?? 0);
-$rendimiento = $kilosConsumidos > 0 ? ($kilosProduccionRendimiento / $kilosConsumidos) * 100 : null;
+$kilosProduccionRendimiento = $kilosProcesosCerrados + $kilosBarredura;
+$rendimiento = $kilosConsumidos > 0 ? round(($kilosProduccionRendimiento / $kilosConsumidos) * 100, 2) : null;
 $precioPromedioTotal = is_numeric($purchaseSummary['precio_promedio'] ?? null) ? (float)$purchaseSummary['precio_promedio'] : null;
 $precioMaquilaTotal = is_numeric($purchaseSummary['precio_maquila'] ?? null) ? (float)$purchaseSummary['precio_maquila'] : null;
 $precioTotalPromedio = is_numeric($purchaseSummary['precio_total'] ?? null) ? (float)$purchaseSummary['precio_total'] : null;
@@ -1275,13 +1277,15 @@ return [
     'periodo_fin' => $periodEnd->modify('-1 day')->format('Y-m-d'),
     'intervaloActualizacion' => (int)($config['intervalo_actualizacion_ms'] ?? ($appConfig['intervalo_actualizacion'] ?? 300000)),
     'agrupador_materiales' => (string)($config['agrupador_materiales'] ?? 'tipo'),
-    'nota_rendimiento' => $periodMode !== 'mes'
-      ? 'La producción visible incluye las tarimas etiquetadas del periodo operativo. El rendimiento usa los procesos cerrados con producción dentro del rango, más barredura.'
-      : 'La producción visible incluye todas las tarimas etiquetadas del mes operativo. El rendimiento usa procesos cerrados asignados al mes con más tarimas, más barredura.',
-    'rendimiento_solo_procesos_cerrados' => false,
+    'nota_rendimiento' => 'El rendimiento usa PT de procesos cerrados más barredura sobre la MP de procesos cerrados.',
+    'rendimiento_solo_procesos_cerrados' => true,
     'rendimiento_procesos_solo_cerrados' => true,
-    'rendimiento_asignado_mes_mayor_tarimas' => true,
+    'rendimiento_asignado_mes_mayor_tarimas' => false,
     'rendimiento_general_incluye_barredura' => true,
+    'rendimiento_pt_todas_etiquetadas' => false,
+    'rendimiento_pt_solo_procesos_cerrados' => true,
+    'rendimiento_mp_solo_procesos_cerrados' => true,
+    'rendimiento_incluye_barredura' => true,
   ],
   'version' => max(
     @filemtime(__FILE__) ?: time(),

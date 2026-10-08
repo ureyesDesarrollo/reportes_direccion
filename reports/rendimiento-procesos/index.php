@@ -50,6 +50,21 @@ $costStatusKey = static function ($value) use ($costSemaforo): string {
   return 'rojo';
 };
 $costRangeLabel = (string)($costSemaforo['leyenda'] ?? 'Verde < $43 · Amarillo $43–$50 · Rojo > $50');
+$yieldKpiSemaforo = (array)($config['semaforo_rendimiento'] ?? []);
+$yieldKpiStatusKey = static function ($value) use ($yieldKpiSemaforo): string {
+  if (!is_numeric($value)) return 'gris';
+  $number = (float)$value;
+  foreach ((array)($yieldKpiSemaforo['bandas'] ?? []) as $band) {
+    $minOk = !array_key_exists('min', $band) || $number >= (float)$band['min'];
+    $maxOk = !array_key_exists('max', $band) || $number <= (float)$band['max'];
+    if ($minOk && $maxOk) {
+      $status = (string)($band['estado'] ?? 'gris');
+      return in_array($status, ['verde', 'amarillo', 'rojo'], true) ? $status : 'gris';
+    }
+  }
+  return 'gris';
+};
+$yieldKpiRangeLabel = (string)($yieldKpiSemaforo['leyenda'] ?? 'Verde >17 · Amarillo 16–17 · Rojo <16');
 $labParams = (array)($config['parametros_lab'] ?? []);
 $processParams = (array)($config['parametros_proceso'] ?? []);
 $recorteMaterialNames = ['DESBARBE', 'RECORTE', 'DESORILLE', 'GARRA', 'DELANTERO'];
@@ -180,7 +195,7 @@ $inventoryRange = static fn(string $key): string => (string)($inventoryEntryCrit
     .rp-btn-primary { background: #0f766e; color: #fff; }
     .rp-btn-light { background: #edf3f8; color: #31516f; }
     .rp-alert { padding: 14px 16px; margin-bottom: 14px; border-radius: 12px; background: #fff1f2; border: 1px solid #fecdd3; color: #9f1239; font-weight: 700; }
-    .rp-kpis { display: grid; grid-template-columns: repeat(8, minmax(130px, 1fr)); gap: 10px; margin-bottom: 14px; }
+    .rp-kpis { display: grid; grid-template-columns: repeat(7, minmax(130px, 1fr)); gap: 10px; margin-bottom: 14px; }
     .rp-kpi { padding: 13px 14px; min-height: 92px; position: relative; overflow: hidden; }
     .rp-kpi::before { content: ''; position: absolute; inset: 0 auto 0 0; width: 4px; background: #0f766e; }
     .rp-kpi-label { color: #64748b; font-size: .7rem; font-weight: 800; text-transform: uppercase; letter-spacing: .035em; }
@@ -197,6 +212,14 @@ $inventoryRange = static fn(string $key): string => (string)($inventoryEntryCrit
     .rp-kpi-cost .rp-kpi-label,
     .rp-kpi-cost .rp-kpi-value,
     .rp-kpi-cost .rp-kpi-note { color: inherit; }
+    .rp-kpi-yield.rp-yield-state-verde { background: #2e8b57; color: #fff; border-color: #2e8b57; }
+    .rp-kpi-yield.rp-yield-state-amarillo { background: #facc15; color: #111827; border-color: #facc15; }
+    .rp-kpi-yield.rp-yield-state-rojo { background: #c94436; color: #fff; border-color: #c94436; }
+    .rp-kpi-yield.rp-yield-state-gris { background: #94a3b8; color: #fff; border-color: #94a3b8; }
+    .rp-kpi-yield::before { background: currentColor; opacity: .22; }
+    .rp-kpi-yield .rp-kpi-label,
+    .rp-kpi-yield .rp-kpi-value,
+    .rp-kpi-yield .rp-kpi-note { color: inherit; }
     .rp-charts { display: grid; grid-template-columns: minmax(0, .75fr) minmax(0, 1fr) minmax(0, 1.65fr); gap: 12px; margin-bottom: 14px; align-items: stretch; }
     .rp-chart { min-width: 0; height: 315px; padding: 14px; overflow: hidden; }
     .rp-chart h2, .rp-table-head h2 { margin: 0; color: #17324d; font-size: 1rem; }
@@ -470,10 +493,9 @@ $inventoryRange = static fn(string $key): string => (string)($inventoryEntryCrit
   <section class="rp-kpis">
     <article class="rp-panel rp-kpi rp-kpi-cost rp-cost-state-<?= $e($costStatusKey($kpis['costo_kg_semanal'] ?? null)) ?>" title="<?= $e($costRangeLabel) ?>"><div class="rp-kpi-label">Costo kg semanal</div><div class="rp-kpi-value"><?= $fmtMoney($kpis['costo_kg_semanal'] ?? null) ?></div><div class="rp-kpi-note"><?= $e($costRangeLabel) ?></div></article>
     <article class="rp-panel rp-kpi rp-kpi-cost rp-cost-state-<?= $e($costStatusKey($kpis['costo_kg_mensual'] ?? null)) ?>" title="<?= $e($costRangeLabel) ?>"><div class="rp-kpi-label">Costo kg mensual</div><div class="rp-kpi-value"><?= $fmtMoney($kpis['costo_kg_mensual'] ?? null) ?></div><div class="rp-kpi-note"><?= $e($costRangeLabel) ?></div></article>
-    <article class="rp-panel rp-kpi"><div class="rp-kpi-label">Materia prima</div><div class="rp-kpi-value"><?= $fmtKg($kpis['kg_mp_filtrada'] ?? null) ?></div><div class="rp-kpi-note">Material seleccionado</div></article>
+    <article class="rp-panel rp-kpi"><div class="rp-kpi-label">MP para rendimiento</div><div class="rp-kpi-value"><?= $fmtKg($kpis['kg_mp_rendimiento'] ?? null) ?></div><div class="rp-kpi-note">Solo procesos cerrados</div></article>
     <article class="rp-panel rp-kpi"><div class="rp-kpi-label">Tarimas etiquetadas</div><div class="rp-kpi-value"><?= $fmtKg($kpis['kg_producto_terminado'] ?? null) ?></div><div class="rp-kpi-note">Suma de tar_kilos</div></article>
-    <article class="rp-panel rp-kpi"><div class="rp-kpi-label">PT para rendimiento</div><div class="rp-kpi-value"><?= $fmtKg($kpis['kg_producto_rendimiento'] ?? null) ?></div><div class="rp-kpi-note"><?= !empty($kpis['participacion_filtrada']) ? 'Asignado por participación MP' : 'Procesos cerrados + barredura' ?></div></article>
-    <article class="rp-panel rp-kpi"><div class="rp-kpi-label">Rendimiento PT</div><div class="rp-kpi-value"><?= $fmtPct($kpis['rendimiento_pt'] ?? null) ?></div><div class="rp-kpi-note"><?= !empty($kpis['participacion_filtrada']) ? 'Kg PT asignados / kg MP' : 'Base ' . $fmtKg($kpis['kg_producto_rendimiento'] ?? null) . ' cerradas + barredura' ?></div></article>
+    <article class="rp-panel rp-kpi rp-kpi-yield rp-yield-state-<?= $e($yieldKpiStatusKey($kpis['rendimiento_pt'] ?? null)) ?>" title="<?= $e($yieldKpiRangeLabel) ?>"><div class="rp-kpi-label">Rendimiento PT</div><div class="rp-kpi-value"><?= $fmtPct($kpis['rendimiento_pt'] ?? null) ?></div><div class="rp-kpi-note">PT cerrado + barredura / MP cerrada</div></article>
     <article class="rp-panel rp-kpi"><div class="rp-kpi-label">Bloom promedio</div><div class="rp-kpi-value"><?= $fmt($kpis['bloom'] ?? null, 1) ?></div><div class="rp-kpi-note">Ponderado por tarimas</div></article>
     <article class="rp-panel rp-kpi"><div class="rp-kpi-label">Viscosidad promedio</div><div class="rp-kpi-value"><?= $fmt($kpis['viscosidad'] ?? null, 1) ?></div><div class="rp-kpi-note">Ponderada por tarimas</div></article>
   </section>
