@@ -34,6 +34,13 @@ $fmtTablePct = static fn($value): string => is_numeric($value)
   ? n((float)$value, 2) . '<span class="rp-percent-sign">&#37;</span>'
   : '—';
 $fmtMoney = static fn($value): string => is_numeric($value) ? '$ ' . n((float)$value, 2) : '-';
+$anticipatedYieldPercentLabel = n((float)($config['factor_rendimiento_anticipado'] ?? 0.85) * 100, 0) . '%';
+$fmtProcessMoment = static function ($value) use ($e, $config): string {
+  if (!is_string($value) || $value === '') return '—';
+  $moment = DateTimeImmutable::createFromFormat('!Y-m-d H:i:s', $value, new DateTimeZone((string)($config['timezone'] ?? 'Etc/GMT+6')));
+  if (!$moment instanceof DateTimeImmutable || $moment->format('Y-m-d H:i:s') !== $value) return '—';
+  return '<strong>' . $e($moment->format('H:i')) . '</strong><small>' . $e($moment->format('d/m/Y')) . '</small>';
+};
 $compactWeekLabel = static function ($value): array {
   $label = trim((string)$value);
   if (preg_match('/^Semana\s+(\d+)\s*(?:·|-)\s*(.+)$/u', $label, $matches) === 1) {
@@ -302,6 +309,11 @@ $inventoryRange = static fn(string $key): string => (string)($inventoryEntryCrit
     .rp-yield-rojo { background: #c94436 !important; color: #fff !important; }
     .rp-yield-gris { background: #94a3b8 !important; color: #fff !important; }
     .rp-table-panel { overflow: hidden; }
+    .rp-anticipated-warning { color: #9a3412; font-weight: 700; }
+    .rp-process-moment { text-align: center; font-variant-numeric: tabular-nums; }
+    .rp-process-moment strong, .rp-process-moment small { display: block; }
+    .rp-process-moment small { margin-top: 2px; color: #64748b; font-size: .62rem; }
+    .rp-grenetina-value { color: #0f766e; font-variant-numeric: tabular-nums; font-weight: 800; }
     .rp-inventory-panel { margin-bottom: 14px; }
     .rp-inventory-wrap { min-height: 0; max-height: 390px; }
     .rp-inventory-table { min-width: 1450px; font-size: .7rem; }
@@ -648,6 +660,9 @@ $inventoryRange = static fn(string $key): string => (string)($inventoryEntryCrit
             Los datos de proceso se repiten cuando un proceso tiene más de una combinación de material y proveedor.
           <?php endif; ?>
         </p>
+        <?php if (!empty($report['rendimiento_anticipado_error'])): ?>
+          <p class="rp-anticipated-warning"><?= $e($report['rendimiento_anticipado_error']) ?></p>
+        <?php endif; ?>
       </div>
       <div class="rp-table-tools">
         <div class="rp-lab-legend" aria-label="Semáforo LAB">
@@ -669,13 +684,14 @@ $inventoryRange = static fn(string $key): string => (string)($inventoryEntryCrit
               <th class="rp-group-sticky rp-group-process" colspan="2">Proceso</th>
               <th class="rp-group-sticky rp-group-purchase" colspan="3">Compra</th>
               <th colspan="8">Granja y laboratorio</th><th colspan="1">Preparadores</th>
-              <th colspan="8">Etapas y liberación</th><th colspan="5">Producto terminado</th>
+              <th colspan="8">Etapas y liberación</th><th id="rendimiento-anticipado" colspan="8">Rendimiento anticipado</th><th colspan="5">Producto terminado</th>
             </tr>
             <tr class="rp-column-row">
               <th>Proceso</th><th>Fecha carga</th>
               <th>Material</th><th>Proveedor</th><th>Kg compra</th><th>Kilos granja</th><th>Rend. Granja</th><th>Rend. MP LAB<small><?= $e($labRange('rendimiento')) ?></small></th><th>Hum. MP LAB<small><?= $e($labRange('humedad')) ?></small></th><th>Extrac. MP LAB<small><?= $e($labRange('extractibilidad')) ?></small></th><th>Sólidos MP LAB<small><?= $e($labRange('solidos')) ?></small></th><th>pH MP LAB<small><?= $e($labRange('ph')) ?></small></th><th>Riesgo MP LAB</th>
               <th>Equipo inicial</th>
               <th title="<?= $e($enzymeRangeTitle) ?>">Extrac. enzima<small>Rango según material</small></th><th>Enzima kg</th><th>Horas enzima</th><th>Ácido lts</th><th>Normalidad</th><th>pH cocimiento</th><th>CE cocimiento</th><th>Extrac. final</th>
+              <th>Inicio</th><th>Fin</th><th title="Promedio de sólidos de cocedores activos">Prom. sólidos</th><th title="Promedio de flujo del clarificador activo × 60">Prom. flujo</th><th>Horas proceso</th><th title="Por combinación: (prom. sólidos ÷ 100) × prom. flujo × horas. Si hay varios procesos, se reparte según sus Kg compra.">Kg Grenetina</th><th title="Kg Grenetina asignados × <?= $e($anticipatedYieldPercentLabel) ?>">Rend anticipado</th><th title="Rend anticipado del proceso ÷ suma de Kg compra del proceso × 100">Rend cocedores</th>
               <th>Tarimas</th><th>Kg PT asign.</th><th title="<?= $e($rendimientoPtRangeTitle) ?>">Rend. PT<small>Rango según material</small></th><th>Bloom</th><th>Viscosidad</th>
             </tr>
           </thead>
@@ -702,6 +718,11 @@ $inventoryRange = static fn(string $key): string => (string)($inventoryEntryCrit
               <?= $optionalLabCell($row['extractibilidad_enzima_2b'] ?? null, $row['semaforos_proceso']['extractibilidad_enzima'] ?? null) ?><td><?= $fmt($row['enzima_kg'] ?? null) ?></td><td><?= $fmt($row['horas_enzima'] ?? null) ?></td>
               <td><?= $fmt($row['acido_litros'] ?? null) ?></td><td><?= $fmt($row['acido_normalidad'] ?? null) ?></td>
               <td><?= $fmt($row['cocimiento_ph'] ?? null) ?></td><td><?= $fmt($row['cocimiento_ce'] ?? null) ?></td><td><?= $fmt($row['extractibilidad_final'] ?? null) ?></td>
+              <td class="rp-process-moment"><?= $fmtProcessMoment($row['rendimiento_anticipado']['inicio_proceso'] ?? null) ?></td><td class="rp-process-moment"><?= $fmtProcessMoment($row['rendimiento_anticipado']['fin_proceso'] ?? null) ?></td>
+              <td><?= $fmt($row['rendimiento_anticipado']['promedio_solidos'] ?? null) ?></td><td><?= $fmt($row['rendimiento_anticipado']['promedio_flujo'] ?? null) ?></td><td><?= $fmt($row['rendimiento_anticipado']['horas_proceso'] ?? null, 0) ?></td>
+              <td class="rp-grenetina-value"><?= $fmt($row['rendimiento_anticipado']['kg_grenetina'] ?? null, 0) ?></td>
+              <td class="rp-grenetina-value"><?= $fmt($row['rendimiento_anticipado']['rendimiento_anticipado_kg'] ?? null, 0) ?></td>
+              <td title="Kg compra del proceso: <?= $e($fmtKg($row['kg_compra_proceso'] ?? null)) ?>"><?= $fmtPct($row['rend_cocedores'] ?? null) ?></td>
               <td><?= $fmt($row['tarimas'] ?? null, 0) ?></td><td><?= $fmt($row['kg_producto_terminado'] ?? null, 0) ?></td>
               <?= $optionalPctCell($row['rendimiento_pt'] ?? null, $row['semaforos_proceso']['rendimiento_pt'] ?? null) ?>
               <td><?= $fmt($row['bloom_promedio'] ?? null, 1) ?></td><td><?= $fmt($row['viscosidad_promedio'] ?? null, 1) ?></td>

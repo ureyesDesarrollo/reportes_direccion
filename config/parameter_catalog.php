@@ -211,6 +211,7 @@ return [
     ],
   ],
   'secadores' => [
+    'humedad_aire' => $range(11, 12.3, 10, 13),
     'indicadores_superiores' => [
       'viscosidad_churro' => [
         'modo' => 'bandas',
@@ -292,7 +293,6 @@ return [
         ],
       ],
       'presion_vapor' => $range(3.0, 3.2, 2.8, 2.999999),
-      'humedad_suministro_aire' => [],
       'verificacion_altura_galleta' => $range(6.5, 7.5, 6.0, 6.499999),
       'verificacion_hum_penultima' => $maximum(12, 15),
       'verificacion_hum_ultima' => $maximum(12, 15),

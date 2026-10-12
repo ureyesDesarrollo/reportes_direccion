@@ -1512,6 +1512,19 @@ $secadoresTableOrder = array_merge(
   ['Hum Aire'],
   array_map(static fn(int $room): string => 'Temp R' . $room, range(1, 9))
 );
+$secadoresTable = $buildCardTable($secadoresSummary, $secadoresTableOrder);
+foreach ($secadoresTable as &$row) {
+  if ($row['key'] === 'hum aire') {
+    $row['sectionBefore'] = 'Deshumificador';
+  }
+  if ($row['key'] === 'hum aire' || $row['key'] === 'temp r1') {
+    $row['sectionGroup'] = 'deshumificador';
+  }
+  if ($row['key'] === 'temp r1') {
+    $row['sectionEnd'] = true;
+  }
+}
+unset($row);
 
 $votatorsSummary = $buildVotatorSummary((array)($secadoresReport['tuneles'] ?? []), $secadoresSummaryConfig);
 $votatorItems = [];
@@ -1589,7 +1602,7 @@ return [
       'titulo' => 'Secadores',
       'icon' => 'fa-fan',
       'tuneles' => $secadoresSummary,
-      'tabla' => $buildCardTable($secadoresSummary, $secadoresTableOrder),
+      'tabla' => $secadoresTable,
       'statusLabel' => (string)($secadoresReport['global']['statusLabel'] ?? 'Referencia'),
       'statusKey' => (string)($secadoresReport['global']['statusKey'] ?? 'gris'),
       'statusColor' => (string)($secadoresReport['global']['statusColor'] ?? '#94a3b8'),

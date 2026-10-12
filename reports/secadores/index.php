@@ -22,11 +22,12 @@ try {
   exit;
 }
 
-extract($report, EXTR_SKIP);
-
-$version = $version ?? time();
+$titulo = (string)($report['titulo'] ?? 'Secadores');
+$meta = (array)($report['meta'] ?? []);
+$warnings = (array)($report['warnings'] ?? []);
+$version = (int)($report['version'] ?? time());
 $secadorCaptura = isset($_GET['secador']) ? (string)$_GET['secador'] : '';
-$secadoresValidos = array_keys((array)($tuneles ?? []));
+$secadoresValidos = array_keys((array)($report['tuneles'] ?? []));
 $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresValidos, true);
 ?>
 <!DOCTYPE html>
@@ -2856,7 +2857,7 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
             return;
           }
           const room = extractRoomNumber(metricKey, metric);
-          if (room !== null) {
+          if (room !== null && room !== 1) {
             humidityByRoom.set(room, [metricKey, metric]);
           }
         });
@@ -2882,6 +2883,16 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
               ${rooms.map((room) => {
                 const humidityEntry = humidityByRoom.get(room);
                 const temperature = temperatureByRoom.get(room);
+                const airHumidity = room === 1 ? metrics?.humedad_suministro_aire : null;
+                const airHumidityCard = airHumidity
+                  ? renderInlineMetric(
+                    'Humedades',
+                    'humedad_suministro_aire',
+                    { ...airHumidity, label: 'Hum Aire' },
+                    tunnelKey,
+                    compactMetricRangeRows(airHumidity)
+                  )
+                  : '';
                 const humidityCard = humidityEntry
                   ? renderInlineMetric(
                     'Humedades',
@@ -2890,7 +2901,7 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
                     tunnelKey,
                     compactMetricRangeRows(humidityEntry[1])
                   )
-                  : '<div class="secadores-exec-inline-metric is-placeholder" aria-hidden="true"></div>';
+                  : room === 1 ? '' : '<div class="secadores-exec-inline-metric is-placeholder" aria-hidden="true"></div>';
                 const temperatureCard = temperature
                   ? renderZone(
                     { ...temperature, label: 'Temperatura' },
@@ -2930,8 +2941,10 @@ $modoCaptura = isset($_GET['capture']) && in_array($secadorCaptura, $secadoresVa
                   <section class="secadores-exec-room-climate">
                     <h3 class="secadores-exec-room-climate-title">REC ${room}</h3>
                     <div class="secadores-exec-room-climate-cards">
+                      ${airHumidityCard}
+                      ${room === 1 ? temperatureCard : ''}
                       ${humidityCard}
-                      ${temperatureCard}
+                      ${room !== 1 ? temperatureCard : ''}
                       ${cookieHumidityCard}
                       ${penultimateCookieHumidityCard}
                       ${relativeHumidityCard}

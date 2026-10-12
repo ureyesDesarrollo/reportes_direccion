@@ -1,10 +1,13 @@
 <?php
 
 $catalog = require __DIR__ . '/../../config/parameter_catalog.php';
+$processSourceConfig = require __DIR__ . '/../avance-produccion-hora/config.php';
 
 return [
   'titulo' => 'Rendimiento por Proceso',
   'database_key' => 'prod',
+  'procesos_database' => (array)($processSourceConfig['clarificador_database'] ?? []),
+  'factor_rendimiento_anticipado' => 0.85,
   'timezone' => 'Etc/GMT+6',
   'timezone_label' => 'UTC-6',
   'hora_corte' => '07:00:00',
@@ -19,4 +22,5 @@ return [
   'semaforo_rendimiento' => (array)($catalog['produccion']['rendimiento_global'] ?? []),
   'parametros_lab' => (array)($catalog['materia_prima']['inventario'] ?? []),
   'parametros_proceso' => (array)($catalog['materia_prima']['rendimiento_procesos'] ?? []),
+  'materiales_rendimiento_pt_carnaza' => [3, 10, 11, 13],
 ];

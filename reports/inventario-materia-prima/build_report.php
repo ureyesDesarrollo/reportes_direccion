@@ -295,7 +295,7 @@ if ($americanMaterialIds !== []) {
     SELECT MIN(i.inv_id) inv_id, MAX(i.inv_fecha) inv_fecha, i.inv_no_ticket,
            SUM(COALESCE(i.inv_kilos, 0)) inv_kilos_compra,
            MAX(i.inv_enviado) inv_enviado,
-           AVG(i.inv_humedad_origen) inv_humedad_origen,
+           AVG(NULLIF(i.inv_humedad_origen, 0)) inv_humedad_origen,
            GROUP_CONCAT(DISTINCT i.inv_observaciones ORDER BY i.inv_id SEPARATOR ' / ') inv_observaciones,
            MIN(i.mat_id) mat_id,
            GROUP_CONCAT(DISTINCT m.mat_nombre ORDER BY m.mat_nombre SEPARATOR ' / ') mat_nombre,

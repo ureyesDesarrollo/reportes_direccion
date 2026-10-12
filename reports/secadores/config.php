@@ -93,6 +93,16 @@ $config = array_replace_recursive($detailConfig, [
   ],
   'metricas_por_tunel' => [
     'tunel_1' => [
+      'humedad_suministro_aire' => [
+        'group' => 'Humedades',
+        'label' => 'Aire suministro',
+        'field' => 'HUMEDAD_ENTRADA_SECADOR_1',
+        'unit' => '% rH',
+        'available' => true,
+        'empty_label' => 'Sin dato',
+        'semaforo' => (array)($masterSecadores['humedad_aire'] ?? []),
+        'leyenda' => 'Verde 11–12.3 | Amarillo 10–<11 y >12.3–13 | Rojo <10 o >13',
+      ],
       'velocidad_banda' => [
         'group' => 'Banda',
         'label' => 'Velocidad banda',
@@ -178,15 +188,6 @@ $config = array_replace_recursive($detailConfig, [
           'amarillo_max' => 2.99,
         ],
         'leyenda' => 'Ideal 3.1 bar(a) | Verde 3.0-3.2 | Atención 2.8-2.9 | Crítico <2.8',
-      ],
-      'humedad_zona_1_inferior' => [
-        'group' => 'Humedades',
-        'label' => 'REC 1',
-        'field' => 'SECADOR_AS_HUMEDAD_ZONA_1_INFERIOR',
-        'unit' => '%',
-        'available' => true,
-        'empty_label' => 'Sin dato',
-        'leyenda' => 'Lectura actual | Rango pendiente de definir',
       ],
       'humedad_zona_2_inferior' => [
         'group' => 'Humedades',
@@ -528,15 +529,6 @@ $config = array_replace_recursive($detailConfig, [
         ],
         'leyenda' => 'Ideal 3.1 bar(a) | Verde 3.0-3.2 | Atención 2.8-2.9 | Crítico <2.8',
       ],
-      'humedad_recamara_1' => [
-        'group' => 'Humedades',
-        'label' => 'REC 1',
-        'field' => '',
-        'unit' => '%',
-        'available' => true,
-        'empty_label' => '-',
-        'leyenda' => 'Rango pendiente de definir',
-      ],
       'humedad_recamara_2' => [
         'group' => 'Humedades',
         'label' => 'REC 2',
@@ -613,16 +605,11 @@ $config = array_replace_recursive($detailConfig, [
         'group' => 'Humedades',
         'label' => 'Aire suministro',
         'field' => 'T5HHVACZ1PV',
-        'unit' => 'g/kg',
+        'unit' => '% rH',
         'available' => true,
-        'hidden' => true,
         'empty_label' => 'Sin dato',
-        'semaforo' => [
-          'modo' => 'maximo',
-          'verde_max' => 7.5,
-          'amarillo_max' => 8.5,
-        ],
-        'leyenda' => 'Ideal ≤ 7.5 g/kg | Verde ≤ 7.5 | Atención 7.6-8.5 | Crítico > 8.5',
+        'semaforo' => (array)($masterSecadores['humedad_aire'] ?? []),
+        'leyenda' => 'Verde 11–12.3 | Amarillo 10–<11 y >12.3–13 | Rojo <10 o >13',
       ],
       'verificacion_altura_galleta' => [
         'group' => 'Verificación de secado',

@@ -395,6 +395,9 @@ $configuracionExtraccion = [
   'indicadores' => $camposExtraccion,
 ];
 
+$reglaHumedadAireSecadores = (array)($parameterCatalog['secadores']['humedad_aire'] ?? []);
+$leyendaHumedadAireSecadores = 'Verde 11–12.3 | Amarillo 10–<11 y >12.3–13 | Rojo <10 o >13';
+
 $configuracionSecadores = [
   'temperaturas_limite' => 0,
   'tuneles_placeholder' => [],
@@ -406,12 +409,20 @@ $configuracionSecadores = [
         'label' => 'Aire suministro',
         'source' => 'sqlserver',
         'field' => 'HUMEDAD_ENTRADA_SECADOR_1',
-        'unit' => '',
+        'unit' => '% rH',
         'available' => true,
         'hidden' => false,
         'empty_label' => 'Sin dato',
-        'semaforo' => [],
-        'leyenda' => 'Lectura actual | Rango pendiente de definir',
+        'semaforo' => $reglaHumedadAireSecadores,
+        'leyenda' => $leyendaHumedadAireSecadores,
+      ],
+    ],
+    'tunel_2' => [
+      'humedad_suministro_aire' => [
+        'unit' => '% rH',
+        'hidden' => false,
+        'semaforo' => $reglaHumedadAireSecadores,
+        'leyenda' => $leyendaHumedadAireSecadores,
       ],
     ],
   ],

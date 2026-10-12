@@ -524,6 +524,27 @@ $invertidoMetricGroups = [
       font-weight: 900;
     }
 
+    .monitor-table .monitor-section-divider td {
+      padding: 5px 8px;
+      border-top: 2px solid #b8d4ed;
+      border-bottom: 1px solid #b8d4ed;
+      color: #17456e;
+      background: #eaf4fc;
+      font-size: 11px;
+      font-weight: 900;
+      letter-spacing: 0.04em;
+      text-align: left;
+      text-transform: uppercase;
+    }
+
+    .monitor-table .monitor-section-group td {
+      background: #f8fbff;
+    }
+
+    .monitor-table .monitor-section-end td {
+      border-bottom: 2px solid #b8d4ed;
+    }
+
     .monitor-param {
       display: flex;
       flex-direction: column;
@@ -950,7 +971,171 @@ $invertidoMetricGroups = [
       font-weight: 800;
     }
 
-    @media (max-width: 760px) {}
+    @media screen and (max-width: 760px) {
+      .monitor-card-metrics-strip {
+        flex-wrap: wrap;
+      }
+
+      .monitor-card[data-card="cocedores"] .monitor-head-metric {
+        box-sizing: border-box;
+        width: 100%;
+        min-width: 0;
+      }
+
+      .monitor-table-wrap {
+        -webkit-overflow-scrolling: touch;
+      }
+
+      .monitor-card[data-card="votators"] .monitor-table {
+        min-width: 645px;
+      }
+
+      .monitor-card[data-card="concentradores"] .monitor-table {
+        min-width: 505px;
+      }
+
+      .monitor-card[data-card="cocedores"] .monitor-table {
+        min-width: 850px;
+      }
+
+      .monitor-card[data-card="votators"] .monitor-table col:first-child,
+      .monitor-card[data-card="concentradores"] .monitor-table col:first-child,
+      .monitor-card[data-card="cocedores"] .monitor-table col:first-child {
+        width: 165px !important;
+      }
+
+      .monitor-card[data-card="votators"] .monitor-table col:not(:first-child) {
+        width: 80px !important;
+      }
+
+      .monitor-card[data-card="concentradores"] .monitor-table col:not(:first-child) {
+        width: 85px !important;
+      }
+
+      .monitor-card[data-card="cocedores"] .monitor-table col:not(:first-child) {
+        width: 76px !important;
+      }
+
+      .monitor-card[data-card="votators"] .monitor-table th:first-child,
+      .monitor-card[data-card="concentradores"] .monitor-table th:first-child,
+      .monitor-card[data-card="cocedores"] .monitor-table th:first-child,
+      .monitor-card[data-card="votators"] .monitor-table tbody tr:not(.monitor-section-divider) > td:first-child,
+      .monitor-card[data-card="concentradores"] .monitor-table tbody tr:not(.monitor-section-divider) > td:first-child,
+      .monitor-card[data-card="cocedores"] .monitor-table tbody tr:not(.monitor-section-divider) > td:first-child {
+        position: sticky;
+        left: 0;
+        z-index: 1;
+        background: #ffffff;
+        box-shadow: 2px 0 4px rgba(15, 23, 42, 0.1);
+      }
+
+      .monitor-card[data-card="votators"] .monitor-table th:first-child,
+      .monitor-card[data-card="concentradores"] .monitor-table th:first-child,
+      .monitor-card[data-card="cocedores"] .monitor-table th:first-child {
+        background: #f4f7fb;
+      }
+
+      .monitor-card[data-card="votators"] .monitor-table .monitor-section-group > td:first-child,
+      .monitor-card[data-card="concentradores"] .monitor-table .monitor-section-group > td:first-child,
+      .monitor-card[data-card="cocedores"] .monitor-table .monitor-section-group > td:first-child {
+        background: #f8fbff;
+      }
+
+      .monitor-invertido-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .monitor-trend-modal {
+        box-sizing: border-box;
+        padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+      }
+
+      .monitor-trend-dialog {
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+        max-height: 100%;
+      }
+
+      .monitor-trend-head {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+        padding: 12px;
+      }
+
+      .monitor-trend-head h2 {
+        font-size: 17px;
+        overflow-wrap: anywhere;
+      }
+
+      .monitor-trend-head p {
+        font-size: 11px;
+        overflow-wrap: anywhere;
+      }
+
+      .monitor-trend-actions {
+        width: 100%;
+        gap: 6px;
+        margin-left: 0;
+      }
+
+      .monitor-trend-range {
+        flex: 1 1 0;
+        min-width: 0;
+        min-height: 40px;
+        padding: 8px 4px;
+      }
+
+      .monitor-trend-close {
+        flex: 0 0 40px;
+        width: 40px;
+        height: 40px;
+      }
+
+      .monitor-trend-body {
+        min-height: 0;
+        overflow-y: auto;
+        padding: 10px 10px 14px;
+        -webkit-overflow-scrolling: touch;
+      }
+
+      .monitor-trend-chart {
+        height: 320px;
+        height: clamp(220px, 46dvh, 390px);
+        min-width: 0;
+      }
+    }
+
+    @media screen and (max-height: 500px) {
+      .monitor-trend-modal {
+        box-sizing: border-box;
+        padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+      }
+
+      .monitor-trend-dialog {
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+        max-height: 100%;
+      }
+
+      .monitor-trend-head {
+        flex: 0 0 auto;
+        padding: 10px 12px;
+      }
+
+      .monitor-trend-body {
+        min-height: 0;
+        overflow-y: auto;
+        padding: 8px 12px 12px;
+        -webkit-overflow-scrolling: touch;
+      }
+
+      .monitor-trend-chart {
+        height: 240px;
+      }
+    }
 
     @media (max-width: 1280px) {
       .monitor-grid {
@@ -1171,7 +1356,10 @@ $invertidoMetricGroups = [
               </thead>
               <tbody>
                 <?php foreach ((array)($card['tabla'] ?? []) as $row): ?>
-                  <tr>
+                  <?php if (!empty($row['sectionBefore'])): ?>
+                    <tr class="monitor-section-divider"><td colspan="<?= $e((string)($tunnelCount + 1)) ?>"><?= $e($row['sectionBefore']) ?></td></tr>
+                  <?php endif; ?>
+                  <tr class="<?= !empty($row['sectionGroup']) ? 'monitor-section-group' : '' ?> <?= !empty($row['sectionEnd']) ? 'monitor-section-end' : '' ?>">
                     <td>
                       <div class="monitor-param">
                         <button class="monitor-param-button" type="button" data-trend-card="<?= $e($card['key'] ?? '') ?>" data-trend-row="<?= $e($row['key'] ?? '') ?>">
@@ -1667,7 +1855,8 @@ $invertidoMetricGroups = [
             </thead>
             <tbody>
               ${(card.tabla || []).map((row) => `
-                <tr>
+                ${row.sectionBefore ? `<tr class="monitor-section-divider"><td colspan="${tunnelCount + 1}">${escapeHtml(row.sectionBefore)}</td></tr>` : ''}
+                <tr class="${row.sectionGroup ? 'monitor-section-group' : ''} ${row.sectionEnd ? 'monitor-section-end' : ''}">
                   <td>
                     <div class="monitor-param">
                       <button class="monitor-param-button" type="button" data-trend-card="${escapeHtml(card.key || '')}" data-trend-row="${escapeHtml(row.key || '')}">
@@ -1967,6 +2156,8 @@ $invertidoMetricGroups = [
         monitorState.trendChart.destroy();
       }
 
+      const compactTrendAxis = window.matchMedia('(max-width: 760px), (max-height: 500px)').matches;
+      const narrowTrendAxis = window.matchMedia('(max-width: 600px)').matches;
       monitorState.trendChart = new Chart(canvas, {
         type: 'line',
         data: { labels, datasets },
@@ -1974,15 +2165,41 @@ $invertidoMetricGroups = [
           responsive: true,
           maintainAspectRatio: false,
           animation: false,
+          interaction: { mode: 'index', intersect: false },
           plugins: {
             monitorBands: bands,
             legend: {
               position: 'bottom',
-              labels: { boxWidth: 10, usePointStyle: true },
+              labels: {
+                boxWidth: 10,
+                usePointStyle: true,
+                font: { size: compactTrendAxis ? 10 : 12 },
+                padding: compactTrendAxis ? 8 : 10,
+              },
             },
           },
           scales: {
-            x: { ticks: { maxRotation: 0 } },
+            x: {
+              ticks: {
+                color: '#334155',
+                font: { size: narrowTrendAxis ? 12 : (compactTrendAxis ? 11 : 12), weight: 'bold' },
+                padding: narrowTrendAxis ? 10 : (compactTrendAxis ? 6 : 8),
+                maxRotation: 0,
+                minRotation: 0,
+                autoSkip: true,
+                maxTicksLimit: narrowTrendAxis
+                  ? 4
+                  : (compactTrendAxis
+                    ? (monitorState.trendRange === '24h' ? 6 : 7)
+                    : (monitorState.trendRange === '24h' ? 24 : 8)),
+                callback(value) {
+                  const label = this.getLabelForValue(value);
+                  if (monitorState.trendRange !== '24h') return label;
+                  const match = label.match(/^(\d{2}\/\d{2}) (\d{2}:\d{2})$/);
+                  return match ? [match[2], match[1]] : label;
+                },
+              },
+            },
             y: { beginAtZero: false },
           },
         },

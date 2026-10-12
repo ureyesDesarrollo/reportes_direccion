@@ -558,6 +558,199 @@ ORDER BY mr.pro_id DESC, mr.inv_no_ticket DESC
 $detailStmt = $pdo->prepare($sql);
 $detailStmt->execute($detailParams);
 $rows = $detailStmt->fetchAll() ?: [];
+$processIds = array_values(array_unique(array_map(
+  static fn(array $row): int => (int)$row['pro_id'],
+  $rows
+)));
+$processPlaceholders = implode(', ', array_fill(0, count($processIds), '?'));
+
+$anticipatedYieldByProcess = [];
+$anticipatedYieldError = null;
+$anticipatedYieldFactor = (float)($config['factor_rendimiento_anticipado'] ?? 0.85);
+$allocationProcessIds = array_fill_keys($processIds, true);
+$cookerReadingsByGroup = [];
+$flowReadingsByGroup = [];
+if ($rows !== []) {
+  try {
+    $processDatabase = (array)($config['procesos_database'] ?? []);
+    foreach (['host', 'dbname', 'user', 'pass', 'charset'] as $requiredField) {
+      if (!array_key_exists($requiredField, $processDatabase)) {
+        throw new RuntimeException('Configuración incompleta de progel_procesos.');
+      }
+    }
+    $processPdo = conectar($processDatabase);
+    $processIdSet = array_fill_keys($processIds, true);
+    $processNumberPattern = '(^|[^0-9])(' . implode('|', $processIds) . ')([^0-9]|$)';
+    $processIdsInLabel = static function ($label): array {
+      preg_match_all('/[0-9]+/', (string)$label, $matches);
+      $ids = array_values(array_unique(array_filter(array_map('intval', $matches[0]))));
+      sort($ids, SORT_NUMERIC);
+      return $ids;
+    };
+    // La jornada nocturna puede terminar al día siguiente. La duración es el
+    // tiempo transcurrido entre la primera y la última hora activa.
+    $cookerProcessSql = "COALESCE(NULLIF(TRIM(dc.proc_cc_cocedor), ''), NULLIF(TRIM(rm.proc_cc), ''))";
+    $anticipatedStmt = $processPdo->prepare("
+      SELECT {$cookerProcessSql} procesos,
+             DATE_ADD(
+               CAST(CONCAT(rm.fecha, ' ', dh.hora) AS DATETIME),
+               INTERVAL CASE
+                 WHEN rm.turno = 'Segundo' AND CAST(SUBSTRING(dh.hora, 1, 2) AS UNSIGNED) < 19 THEN 1
+                 ELSE 0
+               END DAY
+             ) fecha_hora,
+             dc.solidos
+      FROM registro_maestro rm
+      INNER JOIN datos_hora dh ON dh.id_maestro = rm.id
+      INNER JOIN datos_cocedores dc ON dc.id_datos_hora = dh.id
+      WHERE dc.numero_cocedor BETWEEN 1 AND 9
+        AND dc.estado_fo = 0
+        AND {$cookerProcessSql} REGEXP ?
+    ");
+    $anticipatedStmt->execute([$processNumberPattern]);
+    $cookerReadingsByProcess = [];
+    foreach ($anticipatedStmt->fetchAll() ?: [] as $anticipatedRow) {
+      $memberIds = $processIdsInLabel($anticipatedRow['procesos']);
+      if ($memberIds === []) continue;
+      $groupKey = implode(',', $memberIds);
+      if (!isset($cookerReadingsByGroup[$groupKey])) {
+        $cookerReadingsByGroup[$groupKey] = [
+          'miembros' => $memberIds,
+          'solidos_suma' => 0.0, 'solidos_cantidad' => 0,
+          'inicio' => $anticipatedRow['fecha_hora'], 'fin' => $anticipatedRow['fecha_hora'],
+        ];
+      }
+      $groupReading = &$cookerReadingsByGroup[$groupKey];
+      if ($anticipatedRow['solidos'] !== null) {
+        $groupReading['solidos_suma'] += (float)$anticipatedRow['solidos'];
+        $groupReading['solidos_cantidad']++;
+      }
+      if ($anticipatedRow['fecha_hora'] < $groupReading['inicio']) $groupReading['inicio'] = $anticipatedRow['fecha_hora'];
+      if ($anticipatedRow['fecha_hora'] > $groupReading['fin']) $groupReading['fin'] = $anticipatedRow['fecha_hora'];
+      unset($groupReading);
+      foreach ($memberIds as $processId) {
+        $allocationProcessIds[$processId] = true;
+        if (!isset($processIdSet[$processId])) continue;
+        if (!isset($cookerReadingsByProcess[$processId])) {
+          $cookerReadingsByProcess[$processId] = [
+            'solidos_suma' => 0.0, 'solidos_cantidad' => 0,
+            'inicio' => $anticipatedRow['fecha_hora'], 'fin' => $anticipatedRow['fecha_hora'],
+          ];
+        }
+        $reading = &$cookerReadingsByProcess[$processId];
+        if ($anticipatedRow['solidos'] !== null) {
+          $reading['solidos_suma'] += (float)$anticipatedRow['solidos'];
+          $reading['solidos_cantidad']++;
+        }
+        if ($anticipatedRow['fecha_hora'] < $reading['inicio']) $reading['inicio'] = $anticipatedRow['fecha_hora'];
+        if ($anticipatedRow['fecha_hora'] > $reading['fin']) $reading['fin'] = $anticipatedRow['fecha_hora'];
+        unset($reading);
+      }
+    }
+    foreach ($cookerReadingsByProcess as $processId => $reading) {
+      $processHours = intdiv(
+        (new DateTimeImmutable((string)$reading['fin'], $tz))->getTimestamp()
+          - (new DateTimeImmutable((string)$reading['inicio'], $tz))->getTimestamp(),
+        3600
+      );
+      $anticipatedYieldByProcess[$processId] = [
+        'promedio_solidos' => $reading['solidos_cantidad'] > 0
+          ? $reading['solidos_suma'] / $reading['solidos_cantidad'] : null,
+        'promedio_flujo' => null,
+        'inicio_proceso' => $reading['inicio'],
+        'fin_proceso' => $reading['fin'],
+        'horas_proceso' => $processHours,
+        'kg_grenetina' => null,
+        'rendimiento_anticipado_kg' => null,
+      ];
+    }
+    $clarifierProcessSql = "COALESCE(NULLIF(TRIM(dc.proc_cc_clarif), ''), NULLIF(TRIM(rm.proc_cc), ''))";
+    $clarifierStmt = $processPdo->prepare("
+      SELECT {$clarifierProcessSql} procesos, dc.flujo
+      FROM registro_maestro rm
+      INNER JOIN datos_hora dh ON dh.id_maestro = rm.id
+      INNER JOIN datos_clarificador dc ON dc.id_datos_hora = dh.id
+      WHERE dc.estado_fo = 0
+        AND {$clarifierProcessSql} REGEXP ?
+    ");
+    $clarifierStmt->execute([$processNumberPattern]);
+    $flowReadingsByProcess = [];
+    foreach ($clarifierStmt->fetchAll() ?: [] as $clarifierRow) {
+      if ($clarifierRow['flujo'] === null) continue;
+      $memberIds = $processIdsInLabel($clarifierRow['procesos']);
+      if ($memberIds === []) continue;
+      $groupKey = implode(',', $memberIds);
+      $flowReadingsByGroup[$groupKey]['suma'] = ($flowReadingsByGroup[$groupKey]['suma'] ?? 0.0) + (float)$clarifierRow['flujo'];
+      $flowReadingsByGroup[$groupKey]['cantidad'] = ($flowReadingsByGroup[$groupKey]['cantidad'] ?? 0) + 1;
+      foreach ($memberIds as $processId) {
+        $allocationProcessIds[$processId] = true;
+        if (!isset($processIdSet[$processId])) continue;
+        $flowReadingsByProcess[$processId]['suma'] = ($flowReadingsByProcess[$processId]['suma'] ?? 0.0) + (float)$clarifierRow['flujo'];
+        $flowReadingsByProcess[$processId]['cantidad'] = ($flowReadingsByProcess[$processId]['cantidad'] ?? 0) + 1;
+      }
+    }
+    foreach ($flowReadingsByProcess as $processId => $flowReading) {
+      if (!isset($anticipatedYieldByProcess[$processId])) continue;
+      $averageFlow = $flowReading['suma'] / $flowReading['cantidad'] * 60;
+      $anticipatedYieldByProcess[$processId]['promedio_flujo'] = $averageFlow;
+    }
+  } catch (Throwable $anticipatedYieldException) {
+    $anticipatedYieldError = 'No fue posible cargar el rendimiento anticipado desde progel_procesos.';
+  }
+}
+
+$kgCompraByProcess = [];
+if ($allocationProcessIds !== []) {
+  try {
+    $purchaseProcessIds = array_keys($allocationProcessIds);
+    $purchasePlaceholders = implode(', ', array_fill(0, count($purchaseProcessIds), '?'));
+    $purchaseStmt = $pdo->prepare("
+      SELECT pm.pro_id, SUM(i.inv_kilos) kg_compra_proceso
+      FROM procesos_materiales pm
+      INNER JOIN inventario i ON i.inv_id = pm.inv_id
+      INNER JOIN materiales m ON m.mat_id = pm.mat_id
+      INNER JOIN proveedores prv ON prv.prv_id = i.prv_id
+      WHERE pm.pro_id IN ({$purchasePlaceholders})
+      GROUP BY pm.pro_id
+    ");
+    $purchaseStmt->execute($purchaseProcessIds);
+    foreach ($purchaseStmt->fetchAll() ?: [] as $purchaseRow) {
+      $kgCompraByProcess[(int)$purchaseRow['pro_id']] = (float)$purchaseRow['kg_compra_proceso'];
+    }
+  } catch (Throwable $purchaseException) {
+    $anticipatedYieldError = trim(($anticipatedYieldError ?? '') . ' No fue posible calcular los kilos de compra por proceso.');
+  }
+}
+
+// Cada combinación aporta sus kg una sola vez; se reparten entre sus procesos
+// en proporción a los kg de compra completos de cada uno.
+foreach ($cookerReadingsByGroup as $groupKey => $groupReading) {
+  $flowReading = $flowReadingsByGroup[$groupKey] ?? null;
+  if ($groupReading['solidos_cantidad'] === 0 || !is_array($flowReading) || $flowReading['cantidad'] === 0) continue;
+  $groupPurchaseKg = 0.0;
+  foreach ($groupReading['miembros'] as $memberId) {
+    $groupPurchaseKg += max(0.0, (float)($kgCompraByProcess[$memberId] ?? 0));
+  }
+  if ($groupPurchaseKg <= 0) continue;
+  $groupHours = intdiv(
+    (new DateTimeImmutable((string)$groupReading['fin'], $tz))->getTimestamp()
+      - (new DateTimeImmutable((string)$groupReading['inicio'], $tz))->getTimestamp(),
+    3600
+  );
+  $groupKgGrenetina = ($groupReading['solidos_suma'] / $groupReading['solidos_cantidad'] / 100)
+    * ($flowReading['suma'] / $flowReading['cantidad'] * 60) * $groupHours;
+  foreach ($groupReading['miembros'] as $memberId) {
+    if (!isset($anticipatedYieldByProcess[$memberId])) continue;
+    $purchaseKg = max(0.0, (float)($kgCompraByProcess[$memberId] ?? 0));
+    if ($purchaseKg <= 0) continue;
+    $allocatedKg = $groupKgGrenetina * $purchaseKg / $groupPurchaseKg;
+    $anticipatedYieldByProcess[$memberId]['kg_grenetina'] =
+      ($anticipatedYieldByProcess[$memberId]['kg_grenetina'] ?? 0.0) + $allocatedKg;
+    $anticipatedYieldByProcess[$memberId]['rendimiento_anticipado_kg'] =
+      ($anticipatedYieldByProcess[$memberId]['rendimiento_anticipado_kg'] ?? 0.0)
+        + $allocatedKg * $anticipatedYieldFactor;
+  }
+}
 
 $periodProductionStmt = $pdo->prepare("
   SELECT COUNT(*) tarimas, COALESCE(SUM(d.tar_kilos), 0) kg_producto_terminado,
@@ -613,6 +806,7 @@ foreach ($rows as &$row) {
   $processId = (int)$row['pro_id'];
   $groupId = (int)($row['grupo_pro_id'] ?? 0);
   $row['pro_id'] = $processId;
+  $row['rendimiento_anticipado'] = $anticipatedYieldByProcess[$processId] ?? null;
   $row['prv_id'] = (int)$row['prv_id'];
   $row['riesgo_alto'] = (int)$row['riesgo_alto'];
   foreach ([
@@ -624,6 +818,11 @@ foreach ($rows as &$row) {
   ] as $field) {
     $row[$field] = $row[$field] === null ? null : (float)$row[$field];
   }
+  $kgAnticipados = $row['rendimiento_anticipado']['rendimiento_anticipado_kg'] ?? null;
+  $row['kg_compra_proceso'] = $kgCompraByProcess[$processId] ?? null;
+  $row['rend_cocedores'] = $kgAnticipados !== null && $row['kg_compra_proceso'] !== null && $row['kg_compra_proceso'] > 0
+    ? (float)$kgAnticipados / $row['kg_compra_proceso'] * 100
+    : null;
   $row['semaforos_lab'] = [
     'rendimiento' => $evaluateLabBands($row['inv_rendimiento'], (array)($labParams['rendimiento'] ?? [])),
     'humedad' => $evaluateLabBands($row['inv_humedad'], (array)($labParams['humedad'] ?? [])),
@@ -649,6 +848,9 @@ foreach ($rows as &$row) {
     }
   }
   $rendimientoPtRuleKeys = $materialNames;
+  if (array_intersect($materialIds, (array)($config['materiales_rendimiento_pt_carnaza'] ?? [])) !== []) {
+    $rendimientoPtRuleKeys[] = 'CARNAZA';
+  }
   if (array_intersect($materialIds, [5, 7, 9, 12]) !== []) $rendimientoPtRuleKeys[] = 'CUERO_ENTERO';
   if (array_intersect($materialIds, [2, 6, 8, 14]) !== []) $rendimientoPtRuleKeys[] = 'PEDACERA';
   $rendimientoPtRuleKeys = array_values(array_unique($rendimientoPtRuleKeys));
@@ -1062,6 +1264,7 @@ return [
     'procesos' => $processChartRows,
   ],
   'filas' => $detailRows,
+  'rendimiento_anticipado_error' => $anticipatedYieldError,
   'tabla_proveedor_material' => [
     'grupos' => $providerMaterialComparisonGroups,
     'error' => $providerMaterialComparisonError,
