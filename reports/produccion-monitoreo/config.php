@@ -187,6 +187,9 @@ $camposSqlVotator = [
       'corriente_votator' => $crearSensor('Corriente', 'CORRIENTE_VOTATOR_3', 'A', [
         'history' => false,
       ]),
+      'tiempo_fuera' => $crearSensor('Tiempo fuera', 'TIEMPO_FUERA_VOTATOR_3', '', [
+        'history' => false,
+      ]),
     ]),
     'votator_4' => $crearEquipoVotator('', [
       'temperatura_entrada_tanque' => $crearSensor('Temp. entrada tanque', 'TEMPERATURA_ENTRADA_TANQUE_ALIMENTACION_VOTATORS_3_Y_4', '°C', [
@@ -197,6 +200,9 @@ $camposSqlVotator = [
       ]),
       'solidos' => $sensorSolidosVotator,
       'corriente_votator' => $crearSensor('Corriente', 'CORRIENTE_VOTATOR_4', 'A', [
+        'history' => false,
+      ]),
+      'tiempo_fuera' => $crearSensor('Tiempo fuera', 'TIEMPO_FUERA_VOTATOR_4', '', [
         'history' => false,
       ]),
     ]),
