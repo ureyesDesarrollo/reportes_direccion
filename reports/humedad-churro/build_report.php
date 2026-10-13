@@ -13,6 +13,13 @@ $periodosValidos = ['dia', 'semana', 'mes'];
 $periodo = isset($_GET['periodo']) && in_array((string)$_GET['periodo'], $periodosValidos, true) ? (string)$_GET['periodo'] : 'dia';
 $fechaSeleccionada = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($_GET['fecha'] ?? '')) === 1 ? (string)$_GET['fecha'] : $now->format('Y-m-d');
 $semanaSeleccionada = preg_match('/^(\d{4})-W(\d{2})$/', (string)($_GET['semana'] ?? ''), $weekMatch) === 1 ? (string)$_GET['semana'] : $now->format('o-\WW');
+$semanaFecha = (string)($_GET['semana_fecha'] ?? '');
+$semanaFechaSeleccionada = null;
+if (preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $semanaFecha, $dateParts) === 1
+    && checkdate((int)$dateParts[2], (int)$dateParts[3], (int)$dateParts[1])) {
+  $semanaSeleccionada = (new DateTimeImmutable($semanaFecha, $timezone))->format('o-\WW');
+  $semanaFechaSeleccionada = $semanaFecha;
+}
 $mesSeleccionado = preg_match('/^\d{4}-\d{2}$/', (string)($_GET['mes'] ?? '')) === 1 ? (string)$_GET['mes'] : $now->format('Y-m');
 
 if ($periodo === 'semana') {
@@ -98,13 +105,13 @@ try {
 
     $validValues = [];
     $series = [];
-    if ($periodo === 'dia') {
+    if ($periodo === 'dia' || $periodo === 'semana') {
       foreach ($rows as $row) {
         if (((int)($row["estado_fo"] ?? 0)) === 1 || !is_numeric($row["hum_ultima"] ?? null) || (float)$row["hum_ultima"] < 0) continue;
         $pointDate = new DateTimeImmutable((string)$row['creado_en'], $timezone);
         $pointValue = (float)$row['hum_ultima'];
         $validValues[] = $pointValue;
-        $series[] = ['label' => $pointDate->format('H:i'), 'valor' => $pointValue];
+        $series[] = ['label' => $pointDate->format($periodo === 'semana' ? 'd/m H:i' : 'H:i'), 'valor' => $pointValue];
       }
     } else {
       $buckets = [];
@@ -116,7 +123,11 @@ try {
         $validValues[] = (float)$row['hum_ultima'];
       }
       foreach ($buckets as $bucket => $values) {
-        $series[] = ['label' => (new DateTimeImmutable($bucket, $timezone))->format('d/m'), 'valor' => array_sum($values) / count($values)];
+        $pointDate = new DateTimeImmutable($bucket, $timezone);
+        $series[] = [
+          'label' => $pointDate->format('d/m'),
+          'valor' => array_sum($values) / count($values),
+        ];
       }
     }
 
@@ -148,6 +159,7 @@ return [
   'periodo_label' => $periodoLabel,
   'fecha_seleccionada' => $fechaSeleccionada,
   'semana_seleccionada' => $semanaSeleccionada,
+  'semana_fecha' => $semanaFechaSeleccionada ?? ($periodo === 'semana' ? $inicio->format('Y-m-d') : $now->modify('monday this week')->format('Y-m-d')),
   'mes_seleccionado' => $mesSeleccionado,
   'intervalo_actualizacion_ms' => max(10000, (int)($config['intervalo_actualizacion_ms'] ?? 120000)),
 ];

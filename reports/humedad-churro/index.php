@@ -106,7 +106,7 @@ foreach ($report['tarjetas'] as $card) {
           <label><input type="radio" name="periodo" value="mes" <?= $report['periodo'] === 'mes' ? 'checked' : '' ?>><span>Mes</span></label>
         </span></label>
         <label class="field" data-period="dia"><span>Fecha</span><input class="date-input" type="date" name="fecha" value="<?= $e($report['fecha_seleccionada']) ?>"></label>
-        <label class="field" data-period="semana"><span>Semana</span><input class="date-input" type="week" name="semana" value="<?= $e($report['semana_seleccionada']) ?>"></label>
+        <label class="field" data-period="semana"><span>Elige un día de la semana</span><input class="date-input" type="date" name="semana_fecha" value="<?= $e($report['semana_fecha']) ?>"></label>
         <label class="field" data-period="mes"><span>Mes</span><input class="date-input" type="month" name="mes" value="<?= $e($report['mes_seleccionado']) ?>"></label>
         <strong class="period-label"><?= $e($report['periodo_label']) ?></strong>
       </form>
@@ -149,10 +149,12 @@ foreach ($report['tarjetas'] as $card) {
         if (!item.serie.length) return;
         const canvas = document.getElementById(`humidityChart${item.secador}`);
         const lastIndex = item.serie.length - 1;
+        const manyPoints = activePeriod === 'semana' && item.serie.length > 40;
+        const multipleDays = activePeriod === 'semana' && new Set(item.serie.map((point) => point.label.split(' ')[0])).size > 1;
         new Chart(canvas, {
           type: 'line',
-          data: { labels: item.serie.map((point) => point.label), datasets: [{ data: item.serie.map((point) => point.valor), borderColor: "#0f766e", backgroundColor: "rgba(15,118,110,.12)", pointBackgroundColor: item.serie.map((point) => point.valor >= <?= (float)$verdeMin ?> ? "#2e8b57" : (point.valor >= <?= (float)$amarilloMin ?> ? "#facc15" : "#c94436")), pointBorderColor: item.serie.map((point, index) => index === lastIndex ? "#0f2b3d" : "#fff"), pointBorderWidth: item.serie.map((point, index) => index === lastIndex ? 3 : 1.5), pointRadius: item.serie.map((point, index) => index === lastIndex ? 7 : 3.5), pointHoverRadius: item.serie.map((point, index) => index === lastIndex ? 8 : 5), fill: true, tension: .28 }] },
-          options: { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: (context) => `${context.dataIndex === lastIndex ? "Última captura: " : ""}${Number(context.raw).toFixed(2)} %` } } }, scales: { x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 10, color: '#cbd8e2' } }, y: { suggestedMin: 8, suggestedMax: 16, ticks: { callback: (value) => `${value}%`, color: '#cbd8e2' }, grid: { color: 'rgba(203,216,226,.14)' } } } }
+          data: { labels: item.serie.map((point) => point.label), datasets: [{ data: item.serie.map((point) => point.valor), borderColor: "#0f766e", backgroundColor: "rgba(15,118,110,.12)", pointBackgroundColor: item.serie.map((point) => point.valor >= <?= (float)$verdeMin ?> ? "#2e8b57" : (point.valor >= <?= (float)$amarilloMin ?> ? "#facc15" : "#c94436")), pointBorderColor: item.serie.map((point, index) => index === lastIndex ? "#0f2b3d" : "#fff"), pointBorderWidth: item.serie.map((point, index) => index === lastIndex ? 3 : (manyPoints ? 0 : 1.5)), pointRadius: item.serie.map((point, index) => index === lastIndex ? 7 : (manyPoints ? 1.5 : 3.5)), pointHoverRadius: item.serie.map((point, index) => index === lastIndex ? 8 : 5), fill: true, tension: .28 }] },
+          options: { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: (context) => `${context.dataIndex === lastIndex ? "Última captura: " : ""}${Number(context.raw).toFixed(2)} %` } } }, scales: { x: { grid: { display: false }, ticks: { minRotation: multipleDays ? 45 : 0, maxRotation: multipleDays ? 45 : 0, autoSkip: !multipleDays, maxTicksLimit: activePeriod === 'semana' ? 7 : 10, callback: function(value) { const label = this.getLabelForValue(value); if (multipleDays) { const day = label.split(' ')[0]; const previousDay = value > 0 ? this.getLabelForValue(value - 1).split(' ')[0] : null; return day === previousDay ? '' : day; } return activePeriod === 'semana' ? label.split(' ') : label; }, color: '#cbd8e2' } }, y: { suggestedMin: 8, suggestedMax: 16, ticks: { callback: (value) => `${value}%`, color: '#cbd8e2' }, grid: { color: 'rgba(203,216,226,.14)' } } } }
         });
       });
       window.setTimeout(() => window.location.reload(), <?= (int)$report['intervalo_actualizacion_ms'] ?>);
